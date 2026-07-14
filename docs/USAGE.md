@@ -77,6 +77,22 @@ class User implements UserInterface, AccountStatusInterface, LastActivityInterfa
 
 Customize field names via configuration (`account_status.field`, `last_activity.field`) when not using the default trait property names.
 
+## Translation overrides (REQ-I18N-001)
+
+Domain: **`NowoUserKitBundle`**
+
+The bundle ships `de`, `en`, `es`, `fr`, `it`, `nl`, and `pt` in `src/Resources/translations/`.
+
+### Override in the application
+
+```yaml
+# translations/NowoUserKitBundle.es.yaml
+account:
+    disabled: 'Tu cuenta no está disponible. Contacta con soporte.'
+```
+
+Symfony uses app translations first; missing keys fall back to the bundle.
+
 ## AuthKit coexistence
 
 ```

@@ -52,6 +52,11 @@
 | --- | --- | --- | --- |
 | `Resources/translations/NowoUserKitBundle.en.yaml` | i18n | FR-I18N-001 | Mapped |
 | `Resources/translations/NowoUserKitBundle.es.yaml` | i18n | FR-I18N-001 | Mapped |
+| `Resources/translations/NowoUserKitBundle.it.yaml` | i18n | FR-I18N-001 | Mapped |
+| `Resources/translations/NowoUserKitBundle.fr.yaml` | i18n | FR-I18N-001 | Mapped |
+| `Resources/translations/NowoUserKitBundle.pt.yaml` | i18n | FR-I18N-001 | Mapped |
+| `Resources/translations/NowoUserKitBundle.de.yaml` | i18n | FR-I18N-001 | Mapped |
+| `Resources/translations/NowoUserKitBundle.nl.yaml` | i18n | FR-I18N-001 | Mapped |
 
 ## Coverage summary
 
@@ -62,5 +67,5 @@
 | Security & presence | 6 | 6 |
 | Twig | 1 | 1 |
 | Symfony config | 2 | 2 |
-| Translations | 2 | 2 |
-| **Total production sources** | **18** | **18** |
+| Translations | 7 | 7 |
+| **Total production sources** | **23** | **23** |

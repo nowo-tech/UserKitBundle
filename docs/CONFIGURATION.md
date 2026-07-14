@@ -79,3 +79,11 @@ nowo_user_kit:
 If `nowo_auth_kit.user_class` is set and `nowo_user_kit.user_class` is omitted, UserKit inherits the AuthKit user class automatically.
 
 Use the same entity for both bundles so the `UserChecker` applies to login flows provided by AuthKit.
+
+## Translations
+
+Domain: **`NowoUserKitBundle`**
+
+Supported bundle locales: `de`, `en`, `es`, `fr`, `it`, `nl`, `pt`.
+
+Override keys in the application under `translations/NowoUserKitBundle.<locale>.yaml`. See [USAGE.md](USAGE.md#translation-overrides-req-i18n-001).

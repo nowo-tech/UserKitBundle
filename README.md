@@ -1,5 +1,9 @@
 # User Kit Bundle
 
+[![CI](https://github.com/nowo-tech/UserKitBundle/actions/workflows/ci.yml/badge.svg)](https://github.com/nowo-tech/UserKitBundle/actions/workflows/ci.yml) [![Packagist Version](https://img.shields.io/packagist/v/nowo-tech/user-kit-bundle.svg?style=flat)](https://packagist.org/packages/nowo-tech/user-kit-bundle) [![Packagist Downloads](https://img.shields.io/packagist/dt/nowo-tech/user-kit-bundle.svg)](https://packagist.org/packages/nowo-tech/user-kit-bundle) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php)](https://php.net) [![Symfony](https://img.shields.io/badge/Symfony-7.4%20%7C%208.0%20%7C%208.1%2B-000000?logo=symfony)](https://symfony.com) [![GitHub stars](https://img.shields.io/github/stars/nowo-tech/user-kit-bundle.svg?style=social&label=Star)](https://github.com/nowo-tech/UserKitBundle) [![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen)](#tests-and-coverage)
+
+> ⭐ **Found this useful?** Install from [Packagist](https://packagist.org/packages/nowo-tech/user-kit-bundle) and give the repo a star on GitHub.
+
 Symfony bundle for **user account lifecycle and presence**: enable/disable accounts (`UserChecker`), throttled `lastActivityAt` updates, and configurable online detection.
 
 Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tech/AuthKitBundle) without a hard Composer dependency.
@@ -11,6 +15,7 @@ Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tec
 - **`online_threshold`** — `UserPresenceResolver::isOnline()` and optional Twig `user_is_online()`
 - **Session invalidation hook** — optional listener when an account is disabled
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
+- **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 
 ## Requirements
 
@@ -42,27 +47,23 @@ Login (AuthKit) → form_login → UserProvider → UserChecker (UserKit) → OK
 
 Use the same `user_class` in both bundles. UserKit may inherit `user_class` from `nowo_auth_kit.user_class` when that parameter exists.
 
-## Documentation
-
-| Document | Purpose |
-| -------- | ------- |
-| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Install and enable |
-| [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Configuration reference |
-| [`docs/USAGE.md`](docs/USAGE.md) | Traits, checker, presence |
-| [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Release history |
-| [`docs/UPGRADING.md`](docs/UPGRADING.md) | Upgrade guide |
-| [`docs/RELEASE.md`](docs/RELEASE.md) | Release process |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Security policy |
-| [`specs/001-baseline/spec.md`](specs/001-baseline/spec.md) | Product spec |
-| [`specs/001-baseline/code-inventory.md`](specs/001-baseline/code-inventory.md) | Source traceability |
-
 ## Development
 
 ```bash
 make up
-make test-coverage
+make test-coverage-100
 make phpstan
 ```
+
+## Demo
+
+```bash
+make -C demo up-symfony7        # Symfony 7.4 — http://localhost:8022
+make -C demo up-symfony8        # Symfony 8.1 — http://localhost:8023
+make -C demo up-symfony8-php85  # Symfony 8.1 + PHP 8.5 — http://localhost:8024
+```
+
+Login with `demo@user-kit.test` / `demo`. Demos run under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
 
 ## Tests and coverage
 
@@ -74,6 +75,22 @@ make phpstan
 - **Composer:** `nowo-tech/user-kit-bundle`
 - **Config root:** `nowo_user_kit`
 
-## Found this useful?
+## Documentation
 
-If this bundle helps your project, consider starring the repository on GitHub.
+- [Installation](docs/INSTALLATION.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Usage](docs/USAGE.md)
+- [Contributing](docs/CONTRIBUTING.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Upgrading](docs/UPGRADING.md)
+- [Release](docs/RELEASE.md)
+- [Security](docs/SECURITY.md)
+- [Engram](docs/ENGRAM.md)
+- [Spec-driven development](docs/SPEC-DRIVEN-DEVELOPMENT.md)
+- [GitHub Spec Kit](docs/SPEC-KIT.md)
+
+### Additional documentation
+
+- [Demo with FrankenPHP](docs/DEMO-FRANKENPHP.md)
+- [Baseline product spec](specs/001-baseline/spec.md)
+- [Code inventory](specs/001-baseline/code-inventory.md)

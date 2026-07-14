@@ -1,0 +1,31 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Login{% endblock %}
+
+{% block body %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h1 class="h4 mb-3">Demo login</h1>
+                {% if error %}
+                    <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+                {% endif %}
+                <form method="post" action="{{ path('demo_login') }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="username" name="_username" value="{{ last_username ?? 'demo@user-kit.test' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="_password" value="demo" required>
+                    </div>
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                    <button type="submit" class="btn btn-primary w-100">Sign in</button>
+                </form>
+                <p class="text-muted small mt-3 mb-0">Demo credentials: <code>demo@user-kit.test</code> / <code>demo</code></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

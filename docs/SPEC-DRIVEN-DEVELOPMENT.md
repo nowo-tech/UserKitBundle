@@ -1,12 +1,12 @@
 # Spec-driven development — UserKitBundle
 
-**Status:** Specification phase (2026-07-14)
+**Status:** Implemented (baseline audited 2026-07-14)
 
 This repository follows the Nowo bundle **spec-driven development** model in three layers:
 
 1. **Baseline spec** — [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md) and [`code-inventory.md`](../specs/001-baseline/code-inventory.md).
-2. **Integrator docs** — `docs/INSTALLATION.md`, `CONFIGURATION.md`, `USAGE.md` (to be added at implementation).
-3. **Mechanical proof** — PHPUnit 100% coverage, PHPStan, CI (to be added at implementation).
+2. **Integrator docs** — `docs/INSTALLATION.md`, `CONFIGURATION.md`, `USAGE.md`.
+3. **Mechanical proof** — PHPUnit 100% coverage, PHPStan, CI.
 
 ---
 
@@ -23,61 +23,41 @@ This repository follows the Nowo bundle **spec-driven development** model in thr
 - Optional session invalidation when disabling an account.
 - Traits and interfaces for application entities.
 - Coexistence documentation with **AuthKitBundle** (same `user_class`, no hard dependency).
+- Translation domain `NowoUserKitBundle` with seven required locales.
 
 ### Explicit non-goals
 
 - Login/register/reset UI or routes → **AuthKitBundle**.
 - Login rate limiting → **LoginThrottleBundle**.
-- `createdAt`, `updatedAt`, `createdBy`, `updatedBy` on arbitrary entities → **AuditKitBundle**.
-- Admin CRUD for users.
-- WebSocket / real-time presence.
+- User CRUD admin UI.
 
 ---
 
-## User stories (backlog)
+## Workflow
 
-| ID | Story |
-| --- | --- |
-| US-01 | **As a** site admin, **I want** disabled users to be rejected at login **so that** revoked access is enforced immediately. |
-| US-02 | **As an** integrator, **I want** a configurable enabled field **so that** I am not forced to rename my entity property. |
-| US-03 | **As a** product owner, **I want** last-activity tracking **so that** I can show “online” status in admin UIs. |
-| US-04 | **As an** integrator using AuthKit, **I want** UserKit to plug in via UserChecker only **so that** I do not duplicate auth flows. |
-| US-05 | **As a** security engineer, **I want** optional session invalidation on disable **so that** active sessions cannot continue after ban. |
+| Phase | Artifact | Command / location |
+| ----- | -------- | ------------------ |
+| Baseline | `specs/001-baseline/spec.md` | Product requirements |
+| Inventory | `specs/001-baseline/code-inventory.md` | Traceability matrix |
+| Implement | `src/` + tests | `make test-coverage-100` |
+| Release | `docs/CHANGELOG.md`, `docs/UPGRADING.md` | `make release-check` |
 
-Full acceptance criteria: [`spec.md`](../specs/001-baseline/spec.md).
+New features should add a numbered folder under `specs/` (e.g. `002-feature-name/`) with `spec.md`, optional `plan.md` and `tasks.md`, following [docs/SPEC-KIT.md](SPEC-KIT.md).
 
 ---
 
-## Ecosystem placement
+## Validation commands
 
-```mermaid
-flowchart LR
-  AuthKit[AuthKitBundle<br/>login / register / reset]
-  UserKit[UserKitBundle<br/>enabled / lastActivity]
-  AuditKit[AuditKitBundle<br/>createdAt / updatedAt / createdBy / updatedBy]
-  Security[Symfony Security<br/>form_login + UserChecker]
-
-  AuthKit --> Security
-  UserKit --> Security
-  AuditKit -.->|references User entity| UserKit
+```bash
+make test-coverage-100
+make phpstan
+make validate-translations
+make release-check
 ```
 
 ---
 
-## Validating the spec (when implemented)
+## Reference anchors
 
-- `make test-coverage-100` / `composer qa`
-- Demo with AuthKit: login blocked when `enabled: false`
-- Inventory: every file under `src/` mapped in `code-inventory.md`
-
----
-
-## Version roadmap
-
-See **Version roadmap** section in [`spec.md`](../specs/001-baseline/spec.md).
-
-**MVP (v1.0.0):** US-01, US-02, US-03, US-04, US-06 (account status + checker + traits + i18n).
-
-**v1.1.0:** Last activity + online threshold.
-
-**v1.2.0:** Session invalidation + Twig helper.
+- [REQ-SPECKIT-001](https://github.com/nowo-tech/bundles/blob/main/BUNDLES_FULL_SPECS_DETAILS.md#REQ-SPECKIT-001) — baseline spec + code inventory
+- [REQ-DOCS-013](https://github.com/nowo-tech/bundles/blob/main/BUNDLES_FULL_SPECS_DETAILS.md#REQ-DOCS-013) — spec-driven development pattern

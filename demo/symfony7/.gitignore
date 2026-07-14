@@ -1,23 +1,39 @@
-# Local environment files (do not commit local secrets)
-/.env
-/.env.dev
+# Dependencies
+/vendor
+
+# Environment (do not commit secrets; use .env.example as template)
+.env
+.env.local
+.env.*.local
+.env.dev
+
+# Symfony / runtime
+/var/cache/*
+/var/log/*
+!/var/cache/.gitkeep
+!/var/log/.gitkeep
+
+# PHPUnit
+.phpunit.cache
+.phpunit.result.cache
+/coverage
+coverage.xml
+
+# IDE / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+
+###> symfony/framework-bundle ###
 /.env.local
 /.env.local.php
 /.env.*.local
-
-# Symfony secrets generated for local/prod environments
 /config/secrets/prod/prod.decrypt.private.php
-
-# Dependencies and build output
-/vendor/
 /public/bundles/
-/public/assets/
-/assets/vendor/
-
-# Runtime caches and temporary files
 /var/
-/phpunit.xml
-/.phpunit.cache/
+/vendor/
+###< symfony/framework-bundle ###
 
 # Archives / compressed
 *.zip
@@ -26,3 +42,8 @@
 *.tgz
 *.rar
 *.7z
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###

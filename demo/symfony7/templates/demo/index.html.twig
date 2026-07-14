@@ -1,31 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Wallet QR Bundle Demo</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
-        .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; text-align: center; }
-        img { max-width: 240px; height: auto; }
-        code { word-break: break-all; font-size: 0.85rem; }
-    </style>
-</head>
-<body>
-    <h1>Wallet QR Bundle Demo</h1>
-    <p>Sample QR codes for Android (Google Wallet) and iOS (Apple Wallet) save/download links.</p>
+{% extends 'base.html.twig' %}
 
-    <div class="grid">
-        <div class="card">
-            <h2>Android · Google Wallet</h2>
-            <img src="{{ wallet_qr_data_uri(androidQr) }}" alt="Google Wallet QR">
-            <p><code>{{ androidQr.link.url }}</code></p>
-        </div>
-        <div class="card">
-            <h2>iOS · Apple Wallet</h2>
-            <img src="{{ wallet_qr_data_uri(iosQr) }}" alt="Apple Wallet QR">
-            <p><code>{{ iosQr.link.url }}</code></p>
+{% block title %}User Kit Demo{% endblock %}
+
+{% block body %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h1 class="h3 mb-3">Account status &amp; presence</h1>
+                {% if app.user %}
+                    <ul class="list-unstyled mb-0">
+                        <li><strong>Email:</strong> {{ user.email }}</li>
+                        <li><strong>Enabled:</strong> {{ user.enabled ? 'yes' : 'no' }}</li>
+                        <li><strong>Last activity:</strong> {{ user.lastActivityAt ? user.lastActivityAt|date('Y-m-d H:i:s') : 'never' }}</li>
+                        <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
+                        <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
+                    </ul>
+                    <p class="text-muted small mt-3 mb-0">
+                        Reload this page to see throttled <code>lastActivityAt</code> updates.
+                        Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
+                    </p>
+                {% else %}
+                    <p class="mb-0">Not authenticated. <a href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
+                {% endif %}
+            </div>
         </div>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}
