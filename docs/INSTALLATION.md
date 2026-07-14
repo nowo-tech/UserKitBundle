@@ -5,6 +5,7 @@
 - PHP 8.2 or higher (< 8.6)
 - Symfony **7.4+** or **8.x** (minimum supported minors: 7.4, 8.0, 8.1)
 - Doctrine ORM (user entity persistence)
+- `doctrine/doctrine-bundle` **^2.10** (PHP 8.2–8.3) or **^3.0** (PHP 8.4+)
 - `symfony/security-bundle`
 
 Optional:

@@ -4,6 +4,16 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.1.1
+
+From **1.1.0** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration, entity, or template changes required. This release fixes the CI dependency matrix only (`doctrine/doctrine-bundle` ^2.10 on PHP 8.2–8.3, ^3.0 on PHP 8.4+).
+
 ### 1.1.0
 
 From **1.0.3**, **1.0.2**, **1.0.1**, or **1.0.0** — backward compatible for single-entity setups.

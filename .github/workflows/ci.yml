@@ -59,6 +59,12 @@ jobs:
       - name: Install dependencies with Symfony ${{ matrix.symfony }}
         run: |
           echo "📦 Installing dependencies for Symfony ${{ matrix.symfony }}..."
+          # doctrine/doctrine-bundle 3.x requires PHP ^8.4; use 2.x on PHP 8.2/8.3
+          if [[ "${{ matrix.php }}" == "8.4" || "${{ matrix.php }}" == "8.5" ]]; then
+            DOCTRINE_BUNDLE="^3.0"
+          else
+            DOCTRINE_BUNDLE="^2.10"
+          fi
           composer require \
             symfony/framework-bundle:^${{ matrix.symfony }} \
             symfony/security-bundle:^${{ matrix.symfony }} \
@@ -70,7 +76,7 @@ jobs:
             symfony/twig-bundle:^${{ matrix.symfony }} \
             symfony/yaml:^${{ matrix.symfony }} \
             doctrine/orm:^3.0 \
-            doctrine/doctrine-bundle:^3.0 \
+            doctrine/doctrine-bundle:${DOCTRINE_BUNDLE} \
             --no-interaction --no-update
           composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
 
