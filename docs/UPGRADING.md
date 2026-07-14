@@ -4,6 +4,16 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.0.1
+
+From **1.0.0** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration, entity, or template changes required. Documentation and GitHub metadata only.
+
 ### 1.0.0
 
 First stable release.

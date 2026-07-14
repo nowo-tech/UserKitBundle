@@ -1,4 +1,4 @@
-# Makefile for Wallet QR Bundle
+# Makefile for User Kit Bundle
 # Simplifies Docker commands for development.
 # All dev targets use the root docker-compose.yml (single file).
 
