@@ -49,6 +49,10 @@ Use the same `user_class` in both bundles. UserKit may inherit `user_class` from
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Install and enable |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Configuration reference |
 | [`docs/USAGE.md`](docs/USAGE.md) | Traits, checker, presence |
+| [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Release history |
+| [`docs/UPGRADING.md`](docs/UPGRADING.md) | Upgrade guide |
+| [`docs/RELEASE.md`](docs/RELEASE.md) | Release process |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Security policy |
 | [`specs/001-baseline/spec.md`](specs/001-baseline/spec.md) | Product spec |
 | [`specs/001-baseline/code-inventory.md`](specs/001-baseline/code-inventory.md) | Source traceability |
 
@@ -60,11 +64,10 @@ make test-coverage
 make phpstan
 ```
 
-## Tests
+## Tests and coverage
 
-PHPUnit tests target **100% line coverage** on `src/` (verified via `make test-coverage-100`).
-
-**Compatibility:** PHP 8.2+ · Symfony 7.4 / 8.x (CI matrix).
+- **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)
+- **Compatibility:** PHP 8.2+ · Symfony 7.4 / 8.x (CI matrix)
 
 ## Package
 
