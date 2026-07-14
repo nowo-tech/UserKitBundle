@@ -1,25 +1,14 @@
-.PHONY: help up-symfony7 down-symfony7 test-symfony7 \
-	up-symfony8 down-symfony8 test-symfony8 test-coverage-symfony8 \
-	up-symfony8-php85 down-symfony8-php85 test-symfony8-php85 \
-	up down test test-coverage release-check
+DEMOS := symfony8
+
+.PHONY: help up down test test-coverage release-check up-symfony8 down-symfony8 test-symfony8 test-coverage-symfony8
 
 help:
-	@echo "User Kit Bundle — Demos"
+	@echo "User Kit Bundle — Symfony 8 demo"
 	@echo ""
-	@echo "Symfony 7.4 (port 8022): up-symfony7 down-symfony7 test-symfony7"
-	@echo "Symfony 8.1   (port 8023): up-symfony8 down-symfony8 test-symfony8"
-	@echo "Symfony 8.1 + PHP 8.5 (8024): up-symfony8-php85 down-symfony8-php85 test-symfony8-php85"
-	@echo ""
-	@echo "  release-check  Run demo smoke tests (symfony8)"
-
-up-symfony7:
-	@$(MAKE) -C symfony7 up
-
-down-symfony7:
-	@$(MAKE) -C symfony7 down
-
-test-symfony7:
-	@$(MAKE) -C symfony7 test
+	@echo "  up / up-symfony8     Start demo (http://localhost:8023)"
+	@echo "  down / down-symfony8 Stop demo"
+	@echo "  test / test-symfony8 Run demo tests"
+	@echo "  release-check        Demo smoke tests"
 
 up-symfony8:
 	@$(MAKE) -C symfony8 up
@@ -32,15 +21,6 @@ test-symfony8:
 
 test-coverage-symfony8:
 	@$(MAKE) -C symfony8 test-coverage
-
-up-symfony8-php85:
-	@$(MAKE) -C symfony8-php85 up
-
-down-symfony8-php85:
-	@$(MAKE) -C symfony8-php85 down
-
-test-symfony8-php85:
-	@$(MAKE) -C symfony8-php85 test
 
 up: up-symfony8
 

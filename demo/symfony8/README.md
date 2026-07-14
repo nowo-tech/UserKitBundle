@@ -28,6 +28,6 @@ Open **http://localhost:8023** (default). Login with `demo@user-kit.test` / `dem
 
 ## Stack
 
-- PHP 8.4 · FrankenPHP · Symfony 8.1
+- PHP 8.2+ · FrankenPHP · Symfony 8.1
 - SQLite (`var/data/demo.db`)
 - Path repository: `../../` mounted at `/var/user-kit-bundle`

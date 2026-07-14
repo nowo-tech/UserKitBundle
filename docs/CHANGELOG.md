@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-14
+
+### Changed
+
+- Demos reduced to a single Symfony 8 application (`demo/symfony8` only). Removed `demo/symfony7` and `demo/symfony8-php85`.
+- Demo `composer.json` and documentation aligned with bundle minimum **PHP 8.2+** (FrankenPHP image remains PHP 8.4 for Symfony 8).
+- English comments added to bundle configuration YAML (`Resources/config/packages/nowo_user_kit.yaml`, `Resources/config/services.yaml`) and the Symfony Flex recipe.
+- `docs/INSTALLATION.md`, `docs/DEMO-FRANKENPHP.md`, and `docs/CONTRIBUTING.md` updated for the single-demo layout.
+- `phpstan.neon.dist` comment aligned with PHP 8.2+.
+
 ## [1.0.2] - 2026-07-14
 
 ### Added
@@ -63,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.0.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.3
 [1.0.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.0

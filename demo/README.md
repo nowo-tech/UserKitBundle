@@ -1,22 +1,16 @@
-# User Kit Bundle — Demos
+# User Kit Bundle — Symfony 8 demo
 
-Three FrankenPHP demos exercise the bundle against different Symfony / PHP stacks.
-
-| Demo | Symfony | PHP | Default port |
-| ---- | ------- | --- | ------------ |
-| [symfony7](symfony7/) | 7.4 | 8.2 | 8022 |
-| [symfony8](symfony8/) | 8.1 | 8.4 | 8023 |
-| [symfony8-php85](symfony8-php85/) | 8.1 | 8.5 | 8024 |
+FrankenPHP demo for account status (`UserChecker`), throttled `lastActivityAt`, and online detection.
 
 ## Quick start
 
 ```bash
-make -C demo up-symfony8
+make -C demo up
 # or
 cd demo/symfony8 && make up
 ```
 
-Login: `demo@user-kit.test` / `demo`
+Open **http://localhost:8023**. Login: `demo@user-kit.test` / `demo`
 
 ## What to try
 
@@ -24,23 +18,19 @@ Login: `demo@user-kit.test` / `demo`
 2. Set `enabled = 0` for the demo user in SQLite — login is blocked by `AccountStatusUserChecker`.
 3. Compare online status via `UserPresenceResolver` and Twig `user_is_online()`.
 
-## Commands (aggregator)
+## Commands
 
-```bash
-cd demo
-make up-symfony7
-make up-symfony8
-make up-symfony8-php85
-make test-symfony8
-make release-check
-```
+| Command | Description |
+| ------- | ----------- |
+| `make up` | Build, install deps, sync bundle |
+| `make down` | Stop containers |
+| `make test` | Run demo PHPUnit smoke tests |
+| `make link-bundle` | Symlink `/var/user-kit-bundle` (in `demo/symfony8`) |
 
-Each demo has its own `Makefile` with `up`, `down`, `test`, and `link-bundle` (symlink `/var/user-kit-bundle`).
+See [docs/DEMO-FRANKENPHP.md](../docs/DEMO-FRANKENPHP.md) for FrankenPHP dev vs production (worker mode).
 
-## FrankenPHP
+## Stack
 
-Demos use FrankenPHP in Docker (development Caddyfile without worker; production Caddyfile with worker mode). See [docs/DEMO-FRANKENPHP.md](../docs/DEMO-FRANKENPHP.md).
-
-## Port configuration
-
-Set `PORT` in each demo's `.env` (from `.env.example`) when running multiple demos concurrently.
+- PHP 8.2+ · FrankenPHP · Symfony 8.1
+- SQLite (`var/data/demo.db`)
+- Path repository: bundle root mounted at `/var/user-kit-bundle`

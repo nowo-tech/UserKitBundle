@@ -181,31 +181,21 @@ UserKitBundle/
 │   ├── Twig/
 │   └── Resources/
 ├── tests/                  # Unit and integration tests
-├── demo/                   # Demo applications (Symfony 7, 8)
+├── demo/                   # Symfony 8 demo application
 ├── .github/                # GitHub configuration
 └── docs/                   # Documentation
 ```
 
 ## Demos
 
-The project includes a demo project to test the bundle:
-
-- `demo/` - Demo Symfony project with Docker setup
-
-To run the demo:
+The project includes a Symfony 8 demo under `demo/symfony8`:
 
 ```bash
-# Install dependencies
-cd demo
-make up
-make install
-
-# Start containers
-docker-compose up -d
-
-# Access the demo
-# http://localhost:8080
+make -C demo up
+# http://localhost:8023 — demo@user-kit.test / demo
 ```
+
+See [demo/README.md](../demo/README.md).
 
 ## Questions
 
