@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\EventSubscriber;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
+use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -20,9 +21,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
     private array $lastWriteAt = [];
 
     public function __construct(
-        private readonly string $userClass,
-        private readonly string $lastActivityField,
-        private readonly int $updateThrottle,
+        private readonly ProfileRegistry $registry,
         private readonly EntityManagerInterface $entityManager,
         private readonly TokenStorageInterface $tokenStorage,
         private readonly PropertyAccessorInterface $propertyAccessor,
@@ -43,7 +42,12 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         $user = $this->tokenStorage->getToken()?->getUser();
-        if (!$user instanceof UserInterface || !is_a($user, $this->userClass, true)) {
+        if (!$user instanceof UserInterface) {
+            return;
+        }
+
+        $profile = $this->registry->resolveForObject($user);
+        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings || !$profile->lastActivityEnabled) {
             return;
         }
 
@@ -54,15 +58,15 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         $now = time();
-        if ($this->updateThrottle > 0 && isset($this->lastWriteAt[$userId]) && $now - $this->lastWriteAt[$userId] < $this->updateThrottle) {
+        if ($profile->updateThrottle > 0 && isset($this->lastWriteAt[$userId]) && $now - $this->lastWriteAt[$userId] < $profile->updateThrottle) {
             return;
         }
 
         $timestamp = new DateTimeImmutable();
         if ($user instanceof LastActivityInterface) {
             $user->setLastActivityAt($timestamp);
-        } elseif ($this->propertyAccessor->isWritable($user, $this->lastActivityField)) {
-            $this->propertyAccessor->setValue($user, $this->lastActivityField, $timestamp);
+        } elseif ($this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
+            $this->propertyAccessor->setValue($user, $profile->lastActivityField, $timestamp);
         } else {
             return;
         }

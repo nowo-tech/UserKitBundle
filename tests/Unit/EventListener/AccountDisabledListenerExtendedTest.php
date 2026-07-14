@@ -9,6 +9,7 @@ use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\UnitOfWork;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 
 final class AccountDisabledListenerExtendedTest extends TestCase
@@ -25,7 +26,12 @@ final class AccountDisabledListenerExtendedTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getUnitOfWork')->willReturn($uow);
 
-        $listener = new AccountDisabledListener(DisableUser::class, 'enabled', $invalidator);
+        $listener = new AccountDisabledListener(
+            ProfileRegistryFactory::single(DisableUser::class, [
+                'account_status' => ['invalidate_sessions_on_disable' => true],
+            ]),
+            $invalidator,
+        );
         $listener->postUpdate($user, new PostUpdateEventArgs($user, $em));
     }
 
@@ -41,7 +47,12 @@ final class AccountDisabledListenerExtendedTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getUnitOfWork')->willReturn($uow);
 
-        $listener = new AccountDisabledListener(DisableUser::class, 'enabled', $invalidator);
+        $listener = new AccountDisabledListener(
+            ProfileRegistryFactory::single(DisableUser::class, [
+                'account_status' => ['invalidate_sessions_on_disable' => true],
+            ]),
+            $invalidator,
+        );
         $listener->postUpdate($user, new PostUpdateEventArgs($user, $em));
     }
 
@@ -57,7 +68,12 @@ final class AccountDisabledListenerExtendedTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getUnitOfWork')->willReturn($uow);
 
-        $listener = new AccountDisabledListener(DisableUser::class, 'enabled', $invalidator);
+        $listener = new AccountDisabledListener(
+            ProfileRegistryFactory::single(DisableUser::class, [
+                'account_status' => ['invalidate_sessions_on_disable' => true],
+            ]),
+            $invalidator,
+        );
         $listener->postUpdate($user, new PostUpdateEventArgs($user, $em));
     }
 }

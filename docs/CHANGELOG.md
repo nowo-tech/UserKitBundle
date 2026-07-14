@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-14
+
+### Added
+
+- **Named configuration profiles** under `nowo_user_kit.profiles` for applications with multiple user entities (e.g. `App\Entity\User` and `App\Entity\Admin`).
+- **`ProfileRegistry`** with O(1) class lookup and per-class resolution cache (inheritance supported).
+- Optional **profile name** argument on `UserPresenceResolver::isOnline()` and Twig `user_is_online()`.
+- `default_profile` configuration key.
+
+### Changed
+
+- `AccountStatusUserChecker`, `LastActivitySubscriber`, `AccountDisabledListener`, and `UserPresenceResolver` resolve settings from the matching profile (by entity class).
+- Configuration YAML templates and Flex recipe migrated to the `profiles` layout (flat config still accepted and normalized to `profiles.default`).
+- `docs/CONFIGURATION.md` and `docs/USAGE.md` document profiles and runtime resolution.
+
 ## [1.0.3] - 2026-07-14
 
 ### Changed
@@ -73,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.0
 [1.0.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.3
 [1.0.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.1

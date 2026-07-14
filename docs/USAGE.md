@@ -1,8 +1,16 @@
 # Usage
 
+## Configuration profiles
+
+Since **1.1.0**, settings can be grouped under named **profiles** when the application has more than one user entity. Each profile maps a `user_class` to its own `account_status` and `last_activity` options.
+
+The bundle resolves the profile automatically from the entity class at runtime. You can also pass a profile name explicitly to presence checks.
+
+See [Configuration — Profiles](CONFIGURATION.md#profiles) for the YAML structure.
+
 ## Account status checker
 
-When `nowo_user_kit.account_status.enabled: true`, the bundle registers `AccountStatusUserChecker` as a Symfony `UserChecker`.
+When a profile has `account_status.enabled: true`, `AccountStatusUserChecker` applies to authenticated users of that profile's `user_class`.
 
 - Users with `enabled: false` (or the configured field) cannot authenticate — Symfony throws `DisabledException`.
 - If the entity implements `AccountStatusInterface`, `isEnabled()` is used.
@@ -12,7 +20,7 @@ No application code is required beyond configuration and entity mapping.
 
 ## Last activity tracking
 
-When `nowo_user_kit.last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests.
+When a profile has `last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests for that user class.
 
 Writes are throttled by `update_throttle` (seconds) to reduce database load.
 
@@ -33,6 +41,8 @@ final class UserDirectoryController
     public function show(User $user): Response
     {
         $online = $this->presenceResolver->isOnline($user);
+        // Or with an explicit profile name:
+        // $online = $this->presenceResolver->isOnline($user, 'admin');
 
         // ...
     }
@@ -51,6 +61,9 @@ When `twig: true` and `symfony/twig-bundle` is installed:
 {% else %}
     <span class="badge bg-secondary">Offline</span>
 {% endif %}
+
+{# Optional explicit profile: #}
+{# {% if user_is_online(admin, 'admin') %} ... {% endif %} #}
 ```
 
 ## Session invalidation on disable

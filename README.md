@@ -13,6 +13,7 @@ Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tec
 - **`enabled` / disabled accounts** — `AccountStatusUserChecker` blocks login for disabled users
 - **`lastActivityAt`** — updated on authenticated HTTP requests (throttled)
 - **`online_threshold`** — `UserPresenceResolver::isOnline()` and optional Twig `user_is_online()`
+- **Named profiles** — separate config per user entity (`User`, `Admin`, …) with O(1) class resolution
 - **Session invalidation hook** — optional listener when an account is disabled
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
@@ -31,13 +32,18 @@ composer require nowo-tech/user-kit-bundle
 ```yaml
 # config/packages/nowo_user_kit.yaml
 nowo_user_kit:
-    user_class: App\Entity\User
-    account_status:
-        enabled: true
-    last_activity:
-        enabled: true
-        online_threshold: 300
+    default_profile: default
+    profiles:
+        default:
+            user_class: App\Entity\User
+            account_status:
+                enabled: true
+            last_activity:
+                enabled: true
+                online_threshold: 300
 ```
+
+The legacy flat layout (`user_class` at root) remains supported. See [Configuration](docs/CONFIGURATION.md).
 
 ## AuthKit coexistence
 

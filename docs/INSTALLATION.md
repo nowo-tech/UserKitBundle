@@ -48,9 +48,9 @@ nowo_user_kit:
         online_threshold: 300
 ```
 
-See [Configuration](CONFIGURATION.md) for all options.
+See [Configuration](CONFIGURATION.md) for all options, including **named profiles** for multiple user entities.
 
-When AuthKit is installed, `user_class` may be omitted if `nowo_auth_kit.user_class` is already defined.
+When AuthKit is installed, `user_class` may be omitted on the **default profile** if `nowo_auth_kit.user_class` is already defined.
 
 ## User entity
 

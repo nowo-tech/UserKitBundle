@@ -22,8 +22,8 @@ final class UserPresenceExtension extends AbstractExtension
         ];
     }
 
-    public function isOnline(object $user): bool
+    public function isOnline(object $user, ?string $profile = null): bool
     {
-        return $this->presenceResolver->isOnline($user);
+        return $this->presenceResolver->isOnline($user, $profile);
     }
 }

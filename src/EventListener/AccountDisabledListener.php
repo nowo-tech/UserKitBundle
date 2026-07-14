@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\EventListener;
 
 use Doctrine\ORM\Event\PostUpdateEventArgs;
+use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 
 use function is_array;
@@ -12,24 +13,24 @@ use function is_array;
 final class AccountDisabledListener
 {
     public function __construct(
-        private readonly string $userClass,
-        private readonly string $enabledField,
+        private readonly ProfileRegistry $registry,
         private readonly SessionInvalidatorInterface $sessionInvalidator,
     ) {
     }
 
     public function postUpdate(object $entity, PostUpdateEventArgs $event): void
     {
-        if (!is_a($entity, $this->userClass, true)) {
+        $profile = $this->registry->resolveForObject($entity);
+        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings || !$profile->invalidateSessionsOnDisable) {
             return;
         }
 
         $changeSet = $event->getObjectManager()->getUnitOfWork()->getEntityChangeSet($entity);
-        if (!isset($changeSet[$this->enabledField])) {
+        if (!isset($changeSet[$profile->enabledField])) {
             return;
         }
 
-        $fieldChange = $changeSet[$this->enabledField];
+        $fieldChange = $changeSet[$profile->enabledField];
         if (!is_array($fieldChange)) {
             return;
         }

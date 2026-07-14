@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Unit\EventSubscriber;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -15,15 +16,29 @@ use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 
 final class LastActivitySubscriberEdgeCasesTest extends TestCase
 {
+    public function testIgnoresAnonymousUsersOnMainRequest(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->never())->method('flush');
+
+        $subscriber = new LastActivitySubscriber(
+            ProfileRegistryFactory::single(ActivityUser::class),
+            $em,
+            new TokenStorage(),
+            PropertyAccess::createPropertyAccessor(),
+        );
+
+        $kernel = $this->createMock(HttpKernelInterface::class);
+        $subscriber->onKernelRequest(new RequestEvent($kernel, Request::create('/'), HttpKernelInterface::MAIN_REQUEST));
+    }
+
     public function testIgnoresSubRequestsAndAnonymousUsers(): void
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $em->expects($this->never())->method('flush');
 
         $subscriber = new LastActivitySubscriber(
-            ActivityUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(ActivityUser::class),
             $em,
             new TokenStorage(),
             PropertyAccess::createPropertyAccessor(),

@@ -1,15 +1,18 @@
 # User Kit Bundle configuration (installed by Symfony Flex).
 # See docs/CONFIGURATION.md in the bundle repository for all options.
 nowo_user_kit:
-    # FQCN of the application user entity.
-    user_class: App\Entity\User
-    account_status:
-        # Register AccountStatusUserChecker (blocks login when enabled is false).
-        enabled: true
-    last_activity:
-        # Set to true to persist lastActivityAt and enable online presence.
-        enabled: false
-        # Seconds within which a user is considered "online".
-        online_threshold: 300
-        # Minimum seconds between last-activity DB updates.
-        update_throttle: 30
+    default_profile: default
+    profiles:
+        default:
+            # FQCN of the application user entity.
+            user_class: App\Entity\User
+            account_status:
+                # Register AccountStatusUserChecker for this profile.
+                enabled: true
+            last_activity:
+                # Set to true to persist lastActivityAt and enable online presence.
+                enabled: false
+                # Seconds within which a user is considered "online".
+                online_threshold: 300
+                # Minimum seconds between last-activity DB updates.
+                update_throttle: 30

@@ -4,6 +4,39 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.1.0
+
+From **1.0.3**, **1.0.2**, **1.0.1**, or **1.0.0** — backward compatible for single-entity setups.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+**No migration required** if you keep the flat configuration (`user_class` at root). It is normalized internally to a single `default` profile.
+
+**What is new:**
+
+- Multiple user entities can each have their own `account_status` and `last_activity` settings under `nowo_user_kit.profiles`.
+- `UserPresenceResolver::isOnline($user, 'profile_name')` and `user_is_online(user, 'profile_name')` accept an optional profile name.
+- Automatic profile resolution uses the authenticated entity class (cached O(1) lookup).
+
+**Optional migration to profiles layout:**
+
+```yaml
+nowo_user_kit:
+    default_profile: app_user
+    profiles:
+        app_user:
+            user_class: App\Entity\User
+            account_status:
+                enabled: true
+            last_activity:
+                enabled: true
+                online_threshold: 300
+```
+
+**Behavior note:** `AccountStatusUserChecker` now applies only to user classes registered in a profile with `account_status.enabled: true`. Unmapped classes are no longer checked implicitly.
+
 ### 1.0.3
 
 From **1.0.2**, **1.0.1**, or **1.0.0** — backward compatible.
