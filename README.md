@@ -58,12 +58,10 @@ make phpstan
 ## Demo
 
 ```bash
-make -C demo up-symfony7        # Symfony 7.4 — http://localhost:8022
-make -C demo up-symfony8        # Symfony 8.1 — http://localhost:8023
-make -C demo up-symfony8-php85  # Symfony 8.1 + PHP 8.5 — http://localhost:8024
+make -C demo up    # Symfony 8.1 — http://localhost:8023
 ```
 
-Login with `demo@user-kit.test` / `demo`. Demos run under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
+Login with `demo@user-kit.test` / `demo`. The demo runs under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
 
 ## Tests and coverage
 

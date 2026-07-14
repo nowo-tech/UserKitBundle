@@ -2,6 +2,8 @@
 
 All options live under the `nowo_user_kit` root key.
 
+A commented default template ships at `src/Resources/config/packages/nowo_user_kit.yaml` in the bundle repository (and in the Symfony Flex recipe). Copy or adapt it as `config/packages/nowo_user_kit.yaml` in your application.
+
 ## Top level
 
 | Key | Type | Default | Description |

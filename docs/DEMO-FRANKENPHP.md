@@ -25,7 +25,7 @@ The demos use:
 - **Two Caddyfiles**: `Caddyfile` (production, with worker) and `Caddyfile.dev` (development, no worker).
 - An **entrypoint** that, when `APP_ENV=dev`, copies `Caddyfile.dev` over the default Caddyfile and then starts FrankenPHP.
 
-There are demos for **Symfony 7**, **8** and **8 (PHP 8.5)** (e.g. **demo/symfony7**, **demo/symfony8**, **demo/symfony8-php85**). Each demo has its own Dockerfile, docker-compose.yml and Makefile. From the bundle root you run e.g. `make -C demo/symfony8 up` (see the demo's README for the URL and port).
+The bundle ships one demo: **`demo/symfony8`** (Symfony 8.1, FrankenPHP, SQLite). From the bundle root run `make -C demo up` (default **http://localhost:8023**; see the demo README for the port).
 
 The main difference between development and production is:
 
@@ -37,7 +37,7 @@ The main difference between development and production is:
 | HTTP cache headers | `no-store`, `no-cache` (in Caddyfile.dev) | Omitted or cache-friendly |
 | `APP_ENV` / `APP_DEBUG` | `dev` / `1` | `prod` / `0` |
 
-**Ports:** Each demo uses `PORT` from its `.env`. To run multiple demos at once, set a different `PORT` per demo.
+**Port:** The demo uses `PORT` from `.env` (default **8023** in `.env.example`).
 
 ---
 
@@ -85,11 +85,11 @@ The demos use **config/packages/dev/twig.yaml** with `twig.cache: false` so temp
 
 ### 4. Docker Compose (development)
 
-Each demo's **docker-compose.yml** sets `APP_ENV=dev` and `APP_DEBUG=1`, mounts the app, the bundle (`../..:/var/user-kit-bundle`), `docker/frankenphp/Caddyfile.dev`, and `docker/php-dev.ini`. The entrypoint copies Caddyfile.dev when `APP_ENV=dev`.
+The demo **docker-compose.yml** sets `APP_ENV=dev` and `APP_DEBUG=1`, mounts the app, the bundle (`../..:/var/user-kit-bundle`), `docker/frankenphp/Caddyfile.dev`, and `docker/php-dev.ini`. The entrypoint copies Caddyfile.dev when `APP_ENV=dev`.
 
 ### 5. Start the demo (development)
 
-From the bundle root: `make -C demo/symfony8 up` (or symfony7, symfony8-php85). Or from the demo directory: `make up`.
+From the bundle root: `make -C demo up`. Or from the demo directory: `cd demo/symfony8 && make up`.
 
 ---
 

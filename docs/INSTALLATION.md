@@ -80,21 +80,19 @@ php bin/console debug:container UserPresenceResolver
 
 ## Demo
 
-Three FrankenPHP demos are available:
+Single FrankenPHP demo: **`demo/symfony8`** (Symfony 8.1, PHP 8.2+, default **http://localhost:8023**). The demo Docker image uses PHP 8.4 because Symfony 8 requires PHP 8.4+ at runtime.
 
-| Demo | Symfony | Default URL |
-| ---- | ------- | ----------- |
-| `demo/symfony7` | 7.4 | http://localhost:8022 |
-| `demo/symfony8` | 8.1 | http://localhost:8023 |
-| `demo/symfony8-php85` | 8.1 (PHP 8.5) | http://localhost:8024 |
+```bash
+make -C demo up
+```
 
-See [Demo with FrankenPHP](DEMO-FRANKENPHP.md), [demo/README.md](../demo/README.md), and per-demo README files.
+See [Demo with FrankenPHP](DEMO-FRANKENPHP.md) and [demo/README.md](../demo/README.md).
 
 ## Symfony Flex recipe
 
 When using Symfony Flex, the recipe at `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/` copies:
 
-- `config/packages/nowo_user_kit.yaml` — default bundle configuration
+- `config/packages/nowo_user_kit.yaml` — default bundle configuration (with English comments)
 
 See `post-install.txt` in the recipe for next steps after `composer require`.
 

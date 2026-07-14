@@ -1,3 +1,4 @@
+# User Kit Bundle — service wiring.
 services:
     _defaults:
         autowire: true
@@ -11,23 +12,27 @@ services:
             - '../../Model/'
             - '../../NowoUserKitBundle.php'
 
+    # Blocks authentication when the user account is disabled (security.user_checker).
     Nowo\UserKitBundle\Security\AccountStatusUserChecker:
         arguments:
             $enabledField: '%nowo_user_kit.account_status.field%'
         tags:
             - { name: security.user_checker }
 
+    # Resolves whether a user is currently online from lastActivityAt.
     Nowo\UserKitBundle\Presence\UserPresenceResolver:
         arguments:
             $onlineThreshold: '%nowo_user_kit.last_activity.online_threshold%'
             $lastActivityField: '%nowo_user_kit.last_activity.field%'
 
+    # Updates lastActivityAt on authenticated requests (throttled).
     Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber:
         arguments:
             $userClass: '%nowo_user_kit.user_class%'
             $lastActivityField: '%nowo_user_kit.last_activity.field%'
             $updateThrottle: '%nowo_user_kit.last_activity.update_throttle%'
 
+    # Optional: invalidates sessions when enabled is set to false on postUpdate.
     Nowo\UserKitBundle\EventListener\AccountDisabledListener:
         arguments:
             $userClass: '%nowo_user_kit.user_class%'

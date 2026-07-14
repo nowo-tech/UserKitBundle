@@ -4,6 +4,21 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.0.3
+
+From **1.0.2**, **1.0.1**, or **1.0.0** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration or entity changes required.
+
+**What is new:**
+
+- Bundle and Flex recipe YAML templates now include English comments describing each option. You may copy comments into your app's `config/packages/nowo_user_kit.yaml` when helpful; existing configs without comments keep working unchanged.
+- Repository demos: only **`demo/symfony8`** remains (Symfony 8.1). If you relied on clone paths `demo/symfony7` or `demo/symfony8-php85`, use `demo/symfony8` instead (`make -C demo up`, default **http://localhost:8023**).
+
 ### 1.0.2
 
 From **1.0.1** or **1.0.0** — backward compatible.

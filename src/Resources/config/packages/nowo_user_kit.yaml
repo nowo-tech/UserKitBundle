@@ -1,12 +1,28 @@
+# Default configuration for User Kit Bundle.
+# Copy to your app: config/packages/nowo_user_kit.yaml (or use the Symfony Flex recipe).
+# See docs/CONFIGURATION.md for all options.
+#
 nowo_user_kit:
+    # FQCN of the application user entity (required unless nowo_auth_kit.user_class is set).
     user_class: App\Entity\User
+
     account_status:
+        # Register AccountStatusUserChecker (blocks login when enabled is false).
         enabled: true
+        # Entity property or accessor for the enabled flag.
         field: enabled
+        # Invalidate active sessions when enabled changes from true to false.
         invalidate_sessions_on_disable: false
+
     last_activity:
+        # Persist lastActivityAt on authenticated requests.
         enabled: false
+        # Entity property for the last activity timestamp.
         field: lastActivityAt
+        # Seconds within which a user is considered "online" (minimum: 1).
         online_threshold: 300
+        # Minimum seconds between DB writes for last activity (minimum: 0).
         update_throttle: 30
+
+    # Register user_is_online Twig helper when Twig is installed.
     twig: true
