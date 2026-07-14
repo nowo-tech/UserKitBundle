@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-14
+
+### Fixed
+
+- **CI:** PHP 8.2 and 8.3 matrix jobs now install `doctrine/doctrine-bundle` ^2.10; ^3.0 is used only on PHP 8.4+ (Doctrine Bundle 3.x requires PHP ^8.4).
+
 ## [1.1.0] - 2026-07-14
 
 ### Added
@@ -88,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.1
 [1.1.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.0
 [1.0.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.3
 [1.0.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.2
