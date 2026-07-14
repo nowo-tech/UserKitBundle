@@ -1,0 +1,4 @@
+  * Configure your User entity (AccountStatusInterface / LastActivityInterface or traits).
+  * Set nowo_user_kit.user_class if not using AuthKit.
+  * Enable last_activity in config/packages/nowo_user_kit.yaml if you need presence tracking.
+  * See docs/INSTALLATION.md and docs/USAGE.md.

@@ -1,0 +1,41 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    Nowo\UserKitBundle\:
+        resource: '../../'
+        exclude:
+            - '../../DependencyInjection/'
+            - '../../Model/'
+            - '../../NowoUserKitBundle.php'
+
+    Nowo\UserKitBundle\Security\AccountStatusUserChecker:
+        arguments:
+            $enabledField: '%nowo_user_kit.account_status.field%'
+        tags:
+            - { name: security.user_checker }
+
+    Nowo\UserKitBundle\Presence\UserPresenceResolver:
+        arguments:
+            $onlineThreshold: '%nowo_user_kit.last_activity.online_threshold%'
+            $lastActivityField: '%nowo_user_kit.last_activity.field%'
+
+    Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber:
+        arguments:
+            $userClass: '%nowo_user_kit.user_class%'
+            $lastActivityField: '%nowo_user_kit.last_activity.field%'
+            $updateThrottle: '%nowo_user_kit.last_activity.update_throttle%'
+
+    Nowo\UserKitBundle\EventListener\AccountDisabledListener:
+        arguments:
+            $userClass: '%nowo_user_kit.user_class%'
+            $enabledField: '%nowo_user_kit.account_status.field%'
+        tags:
+            - { name: doctrine.orm.entity_listener, event: postUpdate, entity: null, lazy: true, method: postUpdate }
+
+    Nowo\UserKitBundle\Session\SessionInvalidatorInterface:
+        alias: Nowo\UserKitBundle\Session\DefaultSessionInvalidator
+
+    Nowo\UserKitBundle\Session\DefaultSessionInvalidator: ~

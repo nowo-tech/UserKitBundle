@@ -1,0 +1,30 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}User Kit Demo{% endblock %}
+
+{% block body %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h1 class="h3 mb-3">Account status &amp; presence</h1>
+                {% if app.user %}
+                    <ul class="list-unstyled mb-0">
+                        <li><strong>Email:</strong> {{ user.email }}</li>
+                        <li><strong>Enabled:</strong> {{ user.enabled ? 'yes' : 'no' }}</li>
+                        <li><strong>Last activity:</strong> {{ user.lastActivityAt ? user.lastActivityAt|date('Y-m-d H:i:s') : 'never' }}</li>
+                        <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
+                        <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
+                    </ul>
+                    <p class="text-muted small mt-3 mb-0">
+                        Reload this page to see throttled <code>lastActivityAt</code> updates.
+                        Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
+                    </p>
+                {% else %}
+                    <p class="mb-0">Not authenticated. <a href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
