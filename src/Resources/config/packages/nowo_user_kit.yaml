@@ -1,0 +1,12 @@
+nowo_user_kit:
+    user_class: App\Entity\User
+    account_status:
+        enabled: true
+        field: enabled
+        invalidate_sessions_on_disable: false
+    last_activity:
+        enabled: false
+        field: lastActivityAt
+        online_threshold: 300
+        update_throttle: 30
+    twig: true

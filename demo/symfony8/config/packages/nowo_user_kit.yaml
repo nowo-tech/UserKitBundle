@@ -1,0 +1,8 @@
+nowo_user_kit:
+    user_class: App\Entity\User
+    account_status:
+        enabled: true
+    last_activity:
+        enabled: true
+        online_threshold: 300
+        update_throttle: 30
