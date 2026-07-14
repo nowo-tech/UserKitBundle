@@ -6,7 +6,7 @@ COMPOSE_FILE := docker-compose.yml
 COMPOSE := docker-compose -f $(COMPOSE_FILE)
 SERVICE_PHP := php
 
-.PHONY: help up down build shell install test test-coverage test-coverage-100 coverage-php-percent cs-check cs-fix rector rector-dry phpstan qa release-check release-check-demos composer-sync clean update validate assets setup-hooks
+.PHONY: help up down build shell install test test-coverage test-coverage-100 coverage-php-percent cs-check cs-fix rector rector-dry phpstan qa release-check release-check-demos composer-sync clean update validate validate-translations assets setup-hooks
 
 # Default target
 help:
@@ -34,6 +34,7 @@ help:
 	@echo "  clean         Remove vendor and cache"
 	@echo "  update        Update composer.lock (composer update)"
 	@echo "  validate      Run composer validate --strict"
+	@echo "  validate-translations Validate translation YAML and key parity"
 	@echo "  assets        No-op (no frontend assets in this bundle)"
 	@echo "  setup-hooks   Install git pre-commit hooks"
 	@echo ""
@@ -113,7 +114,7 @@ qa: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer qa
 
 # Pre-release checks (no demos healthcheck if demo/Makefile has no release-verify; optional)
-release-check: ensure-up composer-sync cs-fix cs-check rector-dry phpstan test-coverage release-check-demos
+release-check: ensure-up composer-sync cs-fix cs-check rector-dry phpstan test-coverage-100 validate-translations release-check-demos
 
 release-check-demos:
 	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check 2>/dev/null || true; else true; fi
@@ -138,6 +139,11 @@ update: ensure-up
 # Validate composer.json
 validate: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer validate --strict
+
+# Validate translation files (syntax + key parity across required locales)
+validate-translations: ensure-up
+	$(COMPOSE) exec -T $(SERVICE_PHP) php vendor/bin/yaml-lint src/Resources/translations
+	$(COMPOSE) exec -T $(SERVICE_PHP) php .scripts/validate-translation-keys.php
 
 # No-op for bundles without frontend assets
 assets:

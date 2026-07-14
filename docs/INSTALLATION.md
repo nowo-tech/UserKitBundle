@@ -3,7 +3,7 @@
 ## Requirements
 
 - PHP 8.2 or higher (< 8.6)
-- Symfony 7.x or 8.x
+- Symfony **7.4+** or **8.x** (minimum supported minors: 7.4, 8.0, 8.1)
 - Doctrine ORM (user entity persistence)
 - `symfony/security-bundle`
 
@@ -11,6 +11,10 @@ Optional:
 
 - `symfony/twig-bundle` — for the `user_is_online` Twig helper
 - [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tech/AuthKitBundle) — login/register UI (complementary, not required)
+
+## Translations
+
+The bundle ships **`NowoUserKitBundle`** catalogues for **`de`**, **`en`**, **`es`**, **`fr`**, **`it`**, **`nl`**, and **`pt`**. Override keys in your application under `translations/NowoUserKitBundle.<locale>.yaml`. See [Usage — Translation overrides](USAGE.md#translation-overrides-req-i18n-001).
 
 ## Composer
 
@@ -76,7 +80,15 @@ php bin/console debug:container UserPresenceResolver
 
 ## Demo
 
-See [Demo with FrankenPHP](DEMO-FRANKENPHP.md) and `demo/symfony8/README.md`.
+Three FrankenPHP demos are available:
+
+| Demo | Symfony | Default URL |
+| ---- | ------- | ----------- |
+| `demo/symfony7` | 7.4 | http://localhost:8022 |
+| `demo/symfony8` | 8.1 | http://localhost:8023 |
+| `demo/symfony8-php85` | 8.1 (PHP 8.5) | http://localhost:8024 |
+
+See [Demo with FrankenPHP](DEMO-FRANKENPHP.md), [demo/README.md](../demo/README.md), and per-demo README files.
 
 ## Symfony Flex recipe
 

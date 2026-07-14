@@ -4,6 +4,21 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.0.2
+
+From **1.0.1** or **1.0.0** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration or entity changes required.
+
+**What is new:**
+
+- Five additional bundle translation files (`de`, `fr`, `it`, `nl`, `pt`) ship with the same keys as `en` / `es`. Existing app overrides under `translations/NowoUserKitBundle.*.yaml` continue to work unchanged.
+- Integrators may override any locale; see [Usage — Translation overrides](USAGE.md#translation-overrides-req-i18n-001).
+
 ### 1.0.1
 
 From **1.0.0** — backward compatible.
