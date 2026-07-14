@@ -8,6 +8,7 @@ use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -29,9 +30,9 @@ final class LastActivitySubscriberTest extends TestCase
         $em->expects($this->once())->method('flush');
 
         $subscriber = new LastActivitySubscriber(
-            ActivityUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(ActivityUser::class, [
+                'last_activity' => ['update_throttle' => 0],
+            ]),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
@@ -54,9 +55,9 @@ final class LastActivitySubscriberTest extends TestCase
         $em->expects($this->once())->method('flush');
 
         $subscriber = new LastActivitySubscriber(
-            ActivityUser::class,
-            'lastActivityAt',
-            60,
+            ProfileRegistryFactory::single(ActivityUser::class, [
+                'last_activity' => ['update_throttle' => 60],
+            ]),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),

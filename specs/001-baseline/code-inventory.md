@@ -10,7 +10,9 @@
 | Source file | Spec section | Requirement IDs | Status |
 | --- | --- | --- | --- |
 | `Resources/config/services.yaml` | DI wiring | FR-SEC-002, FR-PRES-001 | Mapped |
-| `Resources/config/packages/nowo_user_kit.yaml` | Default config template | FR-CFG-002 | Mapped |
+| `Resources/config/packages/nowo_user_kit.yaml` | Default config template (profiles) | FR-CFG-002 | Mapped |
+| `Profile/ProfileRegistry.php` | Named profile resolution | FR-CFG-001 | Mapped |
+| `Profile/ProfileSettings.php` | Profile value object | FR-CFG-001 | Mapped |
 
 ## PHP — bundle core
 
@@ -63,9 +65,10 @@
 | Category | Files | Mapped |
 | --- | ---: | ---: |
 | Bundle + DI | 3 | 3 |
+| Profile registry | 3 | 3 |
 | Contracts & traits | 4 | 4 |
 | Security & presence | 6 | 6 |
 | Twig | 1 | 1 |
 | Symfony config | 2 | 2 |
 | Translations | 7 | 7 |
-| **Total production sources** | **23** | **23** |
+| **Total production sources** | **26** | **26** |

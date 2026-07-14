@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Unit\Security;
 
 use Nowo\UserKitBundle\Model\AccountStatusInterface;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Security\Core\Exception\DisabledException;
@@ -15,7 +16,10 @@ final class AccountStatusUserCheckerTest extends TestCase
 {
     public function testDisabledAccountThrows(): void
     {
-        $checker = new AccountStatusUserChecker('enabled', PropertyAccess::createPropertyAccessor());
+        $checker = new AccountStatusUserChecker(
+            ProfileRegistryFactory::single(DisabledUser::class),
+            PropertyAccess::createPropertyAccessor(),
+        );
 
         $this->expectException(DisabledException::class);
         $checker->checkPostAuth(new DisabledUser());
@@ -23,14 +27,22 @@ final class AccountStatusUserCheckerTest extends TestCase
 
     public function testEnabledAccountPasses(): void
     {
-        $checker = new AccountStatusUserChecker('enabled', PropertyAccess::createPropertyAccessor());
+        $checker = new AccountStatusUserChecker(
+            ProfileRegistryFactory::single(EnabledUser::class),
+            PropertyAccess::createPropertyAccessor(),
+        );
         $checker->checkPostAuth(new EnabledUser());
         $this->addToAssertionCount(1);
     }
 
     public function testCustomFieldName(): void
     {
-        $checker = new AccountStatusUserChecker('isActive', PropertyAccess::createPropertyAccessor());
+        $checker = new AccountStatusUserChecker(
+            ProfileRegistryFactory::single(ActiveFieldUser::class, [
+                'account_status' => ['field' => 'isActive'],
+            ]),
+            PropertyAccess::createPropertyAccessor(),
+        );
         $this->expectException(DisabledException::class);
         $checker->checkPostAuth(new ActiveFieldUser(false));
     }

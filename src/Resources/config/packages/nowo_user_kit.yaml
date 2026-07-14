@@ -3,26 +3,43 @@
 # See docs/CONFIGURATION.md for all options.
 #
 nowo_user_kit:
-    # FQCN of the application user entity (required unless nowo_auth_kit.user_class is set).
-    user_class: App\Entity\User
-
-    account_status:
-        # Register AccountStatusUserChecker (blocks login when enabled is false).
-        enabled: true
-        # Entity property or accessor for the enabled flag.
-        field: enabled
-        # Invalidate active sessions when enabled changes from true to false.
-        invalidate_sessions_on_disable: false
-
-    last_activity:
-        # Persist lastActivityAt on authenticated requests.
-        enabled: false
-        # Entity property for the last activity timestamp.
-        field: lastActivityAt
-        # Seconds within which a user is considered "online" (minimum: 1).
-        online_threshold: 300
-        # Minimum seconds between DB writes for last activity (minimum: 0).
-        update_throttle: 30
+    # Profile used when no profile name is passed to user_is_online() or UserPresenceResolver.
+    default_profile: default
 
     # Register user_is_online Twig helper when Twig is installed.
     twig: true
+
+    profiles:
+        default:
+            # FQCN of the application user entity (required unless nowo_auth_kit.user_class is set).
+            user_class: App\Entity\User
+
+            account_status:
+                # Register AccountStatusUserChecker for this profile when enabled is false.
+                enabled: true
+                # Entity property or accessor for the enabled flag.
+                field: enabled
+                # Invalidate active sessions when enabled changes from true to false.
+                invalidate_sessions_on_disable: false
+
+            last_activity:
+                # Persist lastActivityAt on authenticated requests for this profile.
+                enabled: false
+                # Entity property for the last activity timestamp.
+                field: lastActivityAt
+                # Seconds within which a user is considered "online" (minimum: 1).
+                online_threshold: 300
+                # Minimum seconds between DB writes for last activity (minimum: 0).
+                update_throttle: 30
+
+        # Example second profile (uncomment and adjust user_class as needed):
+        # admin:
+        #     user_class: App\Entity\Admin
+        #     account_status:
+        #         enabled: true
+        #         field: isActive
+        #     last_activity:
+        #         enabled: true
+        #         field: lastSeenAt
+        #         online_threshold: 60
+        #         update_throttle: 15

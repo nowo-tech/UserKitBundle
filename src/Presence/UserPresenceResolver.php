@@ -6,40 +6,48 @@ namespace Nowo\UserKitBundle\Presence;
 
 use DateTimeInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
+use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
 final class UserPresenceResolver
 {
     public function __construct(
-        private readonly int $onlineThreshold,
-        private readonly string $lastActivityField,
+        private readonly ProfileRegistry $registry,
         private readonly PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 
-    public function isOnline(object $user): bool
+    public function isOnline(object $user, ?string $profileName = null): bool
     {
-        $lastActivity = $this->resolveLastActivity($user);
+        $profile = $profileName !== null
+            ? $this->registry->getByName($profileName)
+            : $this->registry->resolveForObject($user);
+
+        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings) {
+            return false;
+        }
+
+        $lastActivity = $this->resolveLastActivity($user, $profile->lastActivityField);
         if (!$lastActivity instanceof DateTimeInterface) {
             return false;
         }
 
         $elapsed = time() - $lastActivity->getTimestamp();
 
-        return $elapsed <= $this->onlineThreshold;
+        return $elapsed <= $profile->onlineThreshold;
     }
 
-    private function resolveLastActivity(object $user): ?DateTimeInterface
+    private function resolveLastActivity(object $user, string $lastActivityField): ?DateTimeInterface
     {
         if ($user instanceof LastActivityInterface) {
             return $user->getLastActivityAt();
         }
 
-        if (!$this->propertyAccessor->isReadable($user, $this->lastActivityField)) {
+        if (!$this->propertyAccessor->isReadable($user, $lastActivityField)) {
             return null;
         }
 
-        $value = $this->propertyAccessor->getValue($user, $this->lastActivityField);
+        $value = $this->propertyAccessor->getValue($user, $lastActivityField);
 
         return $value instanceof DateTimeInterface ? $value : null;
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Unit\Twig;
 
 use Nowo\UserKitBundle\Presence\UserPresenceResolver;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use PHPUnit\Framework\TestCase;
 use stdClass;
@@ -14,7 +15,10 @@ final class UserPresenceExtensionTest extends TestCase
 {
     public function testUserIsOnlineFunction(): void
     {
-        $resolver  = new UserPresenceResolver(300, 'lastActivityAt', PropertyAccess::createPropertyAccessor());
+        $resolver = new UserPresenceResolver(
+            ProfileRegistryFactory::single(stdClass::class),
+            PropertyAccess::createPropertyAccessor(),
+        );
         $extension = new UserPresenceExtension($resolver);
 
         $this->assertFalse($extension->isOnline(new stdClass()));

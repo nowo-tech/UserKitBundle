@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Tests\Unit\EventSubscriber;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -36,9 +37,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
         $tokenStorage->setToken(new UsernamePasswordToken(new WrongClassUser(), 'main', ['ROLE_USER']));
 
         $subscriber = new LastActivitySubscriber(
-            ActivityUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(ActivityUser::class),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
@@ -57,9 +56,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
         $tokenStorage->setToken(new UsernamePasswordToken(new EmptyIdUser(), 'main', ['ROLE_USER']));
 
         $subscriber = new LastActivitySubscriber(
-            EmptyIdUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(EmptyIdUser::class),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
@@ -79,9 +76,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
         $em->expects($this->once())->method('flush');
 
         $subscriber = new LastActivitySubscriber(
-            PropertyActivityUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(PropertyActivityUser::class),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
@@ -103,9 +98,28 @@ final class LastActivitySubscriberExtendedTest extends TestCase
         $em->expects($this->never())->method('flush');
 
         $subscriber = new LastActivitySubscriber(
-            ReadOnlyActivityUser::class,
-            'lastActivityAt',
-            0,
+            ProfileRegistryFactory::single(ReadOnlyActivityUser::class),
+            $em,
+            $tokenStorage,
+            PropertyAccess::createPropertyAccessor(),
+        );
+
+        $kernel = $this->createMock(HttpKernelInterface::class);
+        $subscriber->onKernelRequest(new RequestEvent($kernel, Request::create('/'), HttpKernelInterface::MAIN_REQUEST));
+    }
+
+    public function testSkipsWhenLastActivityDisabledForProfile(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->never())->method('flush');
+
+        $tokenStorage = new TokenStorage();
+        $tokenStorage->setToken(new UsernamePasswordToken(new ActivityUser(), 'main', ['ROLE_USER']));
+
+        $subscriber = new LastActivitySubscriber(
+            ProfileRegistryFactory::single(ActivityUser::class, [
+                'last_activity' => ['enabled' => false],
+            ]),
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),

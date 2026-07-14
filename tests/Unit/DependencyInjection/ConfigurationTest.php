@@ -14,10 +14,23 @@ final class ConfigurationTest extends TestCase
     {
         $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
 
-        $this->assertNull($config['user_class']);
-        $this->assertTrue($config['account_status']['enabled']);
-        $this->assertSame('enabled', $config['account_status']['field']);
-        $this->assertFalse($config['last_activity']['enabled']);
-        $this->assertSame(300, $config['last_activity']['online_threshold']);
+        $this->assertSame('default', $config['default_profile']);
+        $this->assertNull($config['profiles']['default']['user_class']);
+        $this->assertTrue($config['profiles']['default']['account_status']['enabled']);
+        $this->assertSame('enabled', $config['profiles']['default']['account_status']['field']);
+        $this->assertFalse($config['profiles']['default']['last_activity']['enabled']);
+        $this->assertSame(300, $config['profiles']['default']['last_activity']['online_threshold']);
+    }
+
+    public function testLegacyFlatConfigurationIsNormalizedToProfiles(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'user_class'    => 'App\\Entity\\User',
+            'last_activity' => ['enabled' => true, 'online_threshold' => 120],
+        ]]);
+
+        $this->assertSame('App\\Entity\\User', $config['profiles']['default']['user_class']);
+        $this->assertTrue($config['profiles']['default']['last_activity']['enabled']);
+        $this->assertSame(120, $config['profiles']['default']['last_activity']['online_threshold']);
     }
 }

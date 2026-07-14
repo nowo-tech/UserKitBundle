@@ -9,6 +9,7 @@ use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\UnitOfWork;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
@@ -26,7 +27,12 @@ final class AccountDisabledListenerTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getUnitOfWork')->willReturn($uow);
 
-        $listener = new AccountDisabledListener(DisableUser::class, 'enabled', $invalidator);
+        $listener = new AccountDisabledListener(
+            ProfileRegistryFactory::single(DisableUser::class, [
+                'account_status' => ['invalidate_sessions_on_disable' => true],
+            ]),
+            $invalidator,
+        );
         $listener->postUpdate($user, new PostUpdateEventArgs($user, $em));
     }
 
@@ -35,7 +41,12 @@ final class AccountDisabledListenerTest extends TestCase
         $invalidator = $this->createMock(SessionInvalidatorInterface::class);
         $invalidator->expects($this->never())->method('invalidateSessionsForUser');
 
-        $listener = new AccountDisabledListener(DisableUser::class, 'enabled', $invalidator);
+        $listener = new AccountDisabledListener(
+            ProfileRegistryFactory::single(DisableUser::class, [
+                'account_status' => ['invalidate_sessions_on_disable' => true],
+            ]),
+            $invalidator,
+        );
         $listener->postUpdate(new stdClass(), new PostUpdateEventArgs(new stdClass(), $this->createMock(EntityManagerInterface::class)));
     }
 }
