@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\Presence\UserPresenceResolver;
+use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -19,6 +20,7 @@ final class DemoController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly UserPresenceResolver $presenceResolver,
+        private readonly ProfileRegistry $profileRegistry,
     ) {
     }
 
@@ -29,10 +31,12 @@ final class DemoController extends AbstractController
 
         $user = $this->getUser();
         $online = $user instanceof User ? $this->presenceResolver->isOnline($user) : false;
+        $profile = $user instanceof User ? $this->profileRegistry->resolveForObject($user) : null;
 
         return $this->render('demo/index.html.twig', [
             'user' => $user,
             'online' => $online,
+            'profile' => $profile,
         ]);
     }
 

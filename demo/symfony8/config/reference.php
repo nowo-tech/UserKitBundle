@@ -1242,18 +1242,21 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     },
  * }
  * @psalm-type NowoUserKitConfig = array{
- *     user_class?: scalar|Param|null, // FQCN of the application user entity. // Default: null
- *     account_status?: array{
- *         enabled?: bool|Param, // Register AccountStatusUserChecker when true. // Default: true
- *         field?: scalar|Param|null, // Default: "enabled"
- *         invalidate_sessions_on_disable?: bool|Param, // Default: false
- *     },
- *     last_activity?: array{
- *         enabled?: bool|Param, // Default: false
- *         field?: scalar|Param|null, // Default: "lastActivityAt"
- *         online_threshold?: int|Param, // Default: 300
- *         update_throttle?: int|Param, // Default: 30
- *     },
+ *     default_profile?: scalar|Param|null, // Profile name used when no profile is specified explicitly. // Default: "default"
+ *     profiles?: array<string, array{ // Default: []
+ *         user_class?: scalar|Param|null, // FQCN of the application user entity for this profile. // Default: null
+ *         account_status?: array{
+ *             enabled?: bool|Param, // Register AccountStatusUserChecker for this profile when true. // Default: true
+ *             field?: scalar|Param|null, // Default: "enabled"
+ *             invalidate_sessions_on_disable?: bool|Param, // Default: false
+ *         },
+ *         last_activity?: array{
+ *             enabled?: bool|Param, // Default: false
+ *             field?: scalar|Param|null, // Default: "lastActivityAt"
+ *             online_threshold?: int|Param, // Default: 300
+ *             update_throttle?: int|Param, // Default: 30
+ *         },
+ *     }>,
  *     twig?: bool|Param, // Register user_is_online Twig helper when Twig is installed. // Default: true
  * }
  * @psalm-type NowoTwigInspectorConfig = array{

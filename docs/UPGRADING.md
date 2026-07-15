@@ -4,6 +4,16 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.1.2
+
+From **1.1.1**, **1.1.0**, or any **1.0.x** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration, entity, or template changes required. This release updates the repository demo only (`demo/symfony8` uses the recommended `profiles` layout). Integrators already on flat config or profiles layout are unaffected.
+
 ### 1.1.1
 
 From **1.1.0** — backward compatible.
