@@ -1,8 +1,30 @@
+# Demo configuration — named profiles (UserKitBundle 1.1+).
+# See ../../docs/CONFIGURATION.md for the full reference.
 nowo_user_kit:
-    user_class: App\Entity\User
-    account_status:
-        enabled: true
-    last_activity:
-        enabled: true
-        online_threshold: 300
-        update_throttle: 30
+    default_profile: app_user
+    twig: true
+
+    profiles:
+        app_user:
+            user_class: App\Entity\User
+            account_status:
+                enabled: true
+                field: enabled
+                invalidate_sessions_on_disable: false
+            last_activity:
+                enabled: true
+                field: lastActivityAt
+                online_threshold: 300
+                update_throttle: 30
+
+        # Example second profile (not wired in this demo's security firewall):
+        # staff:
+        #     user_class: App\Entity\Staff
+        #     account_status:
+        #         enabled: true
+        #         field: isActive
+        #     last_activity:
+        #         enabled: true
+        #         field: lastSeenAt
+        #         online_threshold: 60
+        #         update_throttle: 15

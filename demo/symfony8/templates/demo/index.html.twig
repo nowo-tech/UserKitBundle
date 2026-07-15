@@ -11,12 +11,17 @@
                 {% if app.user %}
                     <ul class="list-unstyled mb-0">
                         <li><strong>Email:</strong> {{ user.email }}</li>
+                        {% if profile %}
+                            <li><strong>Profile:</strong> <code>{{ profile.name }}</code> (online threshold {{ profile.onlineThreshold }}s)</li>
+                        {% endif %}
                         <li><strong>Enabled:</strong> {{ user.enabled ? 'yes' : 'no' }}</li>
                         <li><strong>Last activity:</strong> {{ user.lastActivityAt ? user.lastActivityAt|date('Y-m-d H:i:s') : 'never' }}</li>
                         <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
                         <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
                     </ul>
                     <p class="text-muted small mt-3 mb-0">
+                        Configuration uses <code>nowo_user_kit.profiles.app_user</code> — see
+                        <code>config/packages/nowo_user_kit.yaml</code>.
                         Reload this page to see throttled <code>lastActivityAt</code> updates.
                         Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
                     </p>

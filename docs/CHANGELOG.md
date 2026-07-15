@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-07-15
+
+### Changed
+
+- **`demo/symfony8`:** configuration migrated to the **`profiles`** layout (`default_profile: app_user`); demo UI shows the resolved profile name and online threshold via `ProfileRegistry`.
+- **`demo/symfony8/README.md`** and **`demo/README.md`:** document named profiles and the `app_user` profile example.
+
 ## [1.1.1] - 2026-07-14
 
 ### Fixed
@@ -94,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.2
 [1.1.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.1
 [1.1.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.0
 [1.0.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.0.3

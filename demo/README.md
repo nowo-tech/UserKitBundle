@@ -1,6 +1,6 @@
 # User Kit Bundle — Symfony 8 demo
 
-FrankenPHP demo for account status (`UserChecker`), throttled `lastActivityAt`, and online detection.
+FrankenPHP demo for **named configuration profiles**: account status (`UserChecker`), throttled `lastActivityAt`, and online detection.
 
 ## Quick start
 
@@ -14,9 +14,11 @@ Open **http://localhost:8023**. Login: `demo@user-kit.test` / `demo`
 
 ## What to try
 
-1. Sign in and reload `/` — throttled `lastActivityAt` updates.
+1. Sign in and reload `/` — throttled `lastActivityAt` updates; the page shows the resolved profile (`app_user`).
 2. Set `enabled = 0` for the demo user in SQLite — login is blocked by `AccountStatusUserChecker`.
 3. Compare online status via `UserPresenceResolver` and Twig `user_is_online()`.
+
+Configuration lives in `demo/symfony8/config/packages/nowo_user_kit.yaml` (`nowo_user_kit.profiles.app_user`). See [Configuration](../docs/CONFIGURATION.md#profiles).
 
 ## Commands
 
