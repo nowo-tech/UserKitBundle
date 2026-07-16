@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-07-16
+
+### Added
+
+- **REQ-GIT-001:** CI job `git-hygiene`, `.scripts/check-no-cursor-coauthor.sh`, `.githooks/commit-msg`, and Makefile targets `check-no-cursor-coauthor` / `strip-cursor-coauthor-from-history` so release and CI reject Cursor co-author trailers in git history.
+- **`docs/GITHUB_CI.md`** — operator guide for GitHub Actions git-hygiene requirements.
+- **`CODE_OF_CONDUCT.md`** (Contributor Covenant) and README / Contributing links.
+
+### Changed
+
+- `make release-check` runs `check-no-cursor-coauthor` first.
+- `make setup-hooks` also installs the `commit-msg` hook.
+- `docs/RELEASE.md` and `docs/CONTRIBUTING.md` document the git-hygiene workflow.
+
 ## [1.1.2] - 2026-07-15
 
 ### Changed
@@ -101,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.3
 [1.1.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.2
 [1.1.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.1
 [1.1.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.0

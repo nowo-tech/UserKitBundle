@@ -4,6 +4,16 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.1.3
+
+From **1.1.2** or any earlier **1.x** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration, entity, or template changes required. This release adds repository git-hygiene (REQ-GIT-001), Code of Conduct, and CI documentation only. Application integrators are unaffected.
+
 ### 1.1.2
 
 From **1.1.1**, **1.1.0**, or any **1.0.x** — backward compatible.
