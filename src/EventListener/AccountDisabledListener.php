@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\EventListener;
 
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
+use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 
 use function is_array;
@@ -21,7 +22,7 @@ final class AccountDisabledListener
     public function postUpdate(object $entity, PostUpdateEventArgs $event): void
     {
         $profile = $this->registry->resolveForObject($entity);
-        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings || !$profile->invalidateSessionsOnDisable) {
+        if (!$profile instanceof ProfileSettings || !$profile->invalidateSessionsOnDisable) {
             return;
         }
 

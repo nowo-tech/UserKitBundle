@@ -42,3 +42,4 @@ A commented `staff` profile in the same file shows how to add a second user enti
 - PHP 8.2+ · FrankenPHP · Symfony 8.1
 - SQLite (`var/data/demo.db`)
 - Path repository: `../../` mounted at `/var/user-kit-bundle`
+- **`FRANKENPHP_MODE`:** `worker` (default) or `classic` — see `.env.example` and [docs/DEMO-FRANKENPHP.md](../../docs/DEMO-FRANKENPHP.md)

@@ -4,6 +4,16 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### 1.1.4
+
+From **1.1.3** or any earlier **1.x** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration, entity, or template changes required for application integrators. Repository demo operators can set `FRANKENPHP_MODE=classic` or `worker` (default) in `demo/symfony8/.env`; recreate the container after changing it. See [Demo with FrankenPHP](DEMO-FRANKENPHP.md).
+
 ### 1.1.3
 
 From **1.1.2** or any earlier **1.x** — backward compatible.

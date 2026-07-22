@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Security;
 
 use Nowo\UserKitBundle\Model\AccountStatusInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
+use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\DisabledException;
@@ -27,7 +28,7 @@ final class AccountStatusUserChecker implements UserCheckerInterface
     public function checkPostAuth(UserInterface $user, ?TokenInterface $token = null): void
     {
         $profile = $this->registry->resolveForObject($user);
-        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings || !$profile->accountStatusEnabled) {
+        if (!$profile instanceof ProfileSettings || !$profile->accountStatusEnabled) {
             return;
         }
 

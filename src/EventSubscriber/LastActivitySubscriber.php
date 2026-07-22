@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
+use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -47,7 +48,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         $profile = $this->registry->resolveForObject($user);
-        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings || !$profile->lastActivityEnabled) {
+        if (!$profile instanceof ProfileSettings || !$profile->lastActivityEnabled) {
             return;
         }
 

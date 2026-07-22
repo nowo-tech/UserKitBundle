@@ -8,6 +8,19 @@
 
 After creating the release commit and tag, run `make check-no-cursor-coauthor` again **before** `git push` (REQ-GIT-001). The release commit itself is not covered by an earlier `release-check` run.
 
+## Example for v1.1.4
+
+```bash
+git add -A
+git status   # review
+make release-check
+git commit -m "Release 1.1.4: FRANKENPHP_MODE demo, CS import_symbols"
+git tag -a v1.1.4 -m "Release 1.1.4"
+make check-no-cursor-coauthor
+git push origin main
+git push origin v1.1.4
+```
+
 ## Example for v1.1.3
 
 ```bash

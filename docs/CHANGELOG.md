@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-07-22
+
+### Added
+
+- **Demo FrankenPHP:** `FRANKENPHP_MODE` (`classic` \| `worker`, default `worker`) via `demo/symfony8/docker/entrypoint.sh`, `.env.example`, and Compose; documented in `docs/DEMO-FRANKENPHP.md`.
+
+### Changed
+
+- PHP-CS-Fixer `fully_qualified_strict_types` enables `import_symbols`; source uses imported class names (`ProfileSettings`, Twig `AbstractExtension`) instead of leading-backslash FQCNs.
+- Dev dependency lock updates (`composer.lock`, `demo/symfony8/composer.lock`).
+
 ## [1.1.3] - 2026-07-16
 
 ### Added
@@ -115,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.4]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.4
 [1.1.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.3
 [1.1.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.2
 [1.1.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.1

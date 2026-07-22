@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Presence;
 use DateTimeInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
+use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
 final class UserPresenceResolver
@@ -23,7 +24,7 @@ final class UserPresenceResolver
             ? $this->registry->getByName($profileName)
             : $this->registry->resolveForObject($user);
 
-        if (!$profile instanceof \Nowo\UserKitBundle\Profile\ProfileSettings) {
+        if (!$profile instanceof ProfileSettings) {
             return false;
         }
 

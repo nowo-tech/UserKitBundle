@@ -14,6 +14,7 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Twig\Extension\AbstractExtension;
 
 use function sprintf;
 
@@ -63,7 +64,7 @@ final class NowoUserKitExtension extends Extension
             $container->removeDefinition(AccountDisabledListener::class);
         }
 
-        if (!$config['twig'] || !class_exists(\Twig\Extension\AbstractExtension::class)) {
+        if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);
         }
     }
