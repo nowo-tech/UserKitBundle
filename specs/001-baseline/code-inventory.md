@@ -72,3 +72,7 @@
 | Symfony config | 2 | 2 |
 | Translations | 7 | 7 |
 | **Total production sources** | **26** | **26** |
+
+## Inventory refresh (2026-07-29 remedia)
+
+- `Profile/UnknownProfileException.php`

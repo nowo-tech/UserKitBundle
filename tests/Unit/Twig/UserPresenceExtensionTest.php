@@ -9,6 +9,7 @@ use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Clock\Clock;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 final class UserPresenceExtensionTest extends TestCase
@@ -18,6 +19,7 @@ final class UserPresenceExtensionTest extends TestCase
         $resolver = new UserPresenceResolver(
             ProfileRegistryFactory::single(stdClass::class),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
         $extension = new UserPresenceExtension($resolver);
 

@@ -5,8 +5,11 @@
 > ⭐ **Found this useful?** Install from [Packagist](https://packagist.org/packages/nowo-tech/user-kit-bundle) and give the repo a star on GitHub.
 
 Symfony bundle for **user account lifecycle and presence**: enable/disable accounts (`UserChecker`), throttled `lastActivityAt` updates, and configurable online detection.
-
 Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tech/AuthKitBundle) without a hard Composer dependency.
+
+![FrankenPHP Friendly Worker Mode](docs/images/frankenphp-friendly.png)
+
+This bundle is **FrankenPHP worker mode friendly**.
 
 ## Features
 
@@ -17,11 +20,6 @@ Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tec
 - **Session invalidation hook** — optional listener when an account is disabled
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
-
-## Requirements
-
-- PHP 8.2+
-- Symfony 7.4 | 8.x
 
 ## Quick start
 
@@ -45,6 +43,11 @@ nowo_user_kit:
 
 The legacy flat layout (`user_class` at root) remains supported. See [Configuration](docs/CONFIGURATION.md).
 
+## Requirements
+
+- PHP 8.2+
+- Symfony 7.4 | 8.x
+
 ## AuthKit coexistence
 
 ```
@@ -52,14 +55,6 @@ Login (AuthKit) → form_login → UserProvider → UserChecker (UserKit) → OK
 ```
 
 Use the same `user_class` in both bundles. UserKit may inherit `user_class` from `nowo_auth_kit.user_class` when that parameter exists.
-
-## Development
-
-```bash
-make up
-make test-coverage-100
-make phpstan
-```
 
 ## Demo
 
@@ -69,15 +64,13 @@ make -C demo up    # Symfony 8.1 — http://localhost:8023
 
 Login with `demo@user-kit.test` / `demo`. The demo runs under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
 
-## Tests and coverage
+## Development
 
-- **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)
-- **Compatibility:** PHP 8.2+ · Symfony 7.4 / 8.x (CI matrix)
-
-## Package
-
-- **Composer:** `nowo-tech/user-kit-bundle`
-- **Config root:** `nowo_user_kit`
+```bash
+make up
+make test-coverage-100
+make phpstan
+```
 
 ## Documentation
 
@@ -100,3 +93,13 @@ Login with `demo@user-kit.test` / `demo`. The demo runs under **FrankenPHP** in 
 - [Demo with FrankenPHP](docs/DEMO-FRANKENPHP.md)
 - [Baseline product spec](specs/001-baseline/spec.md)
 - [Code inventory](specs/001-baseline/code-inventory.md)
+## Tests and coverage
+
+- **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)
+- **Compatibility:** PHP 8.2+ · Symfony 7.4 / 8.x (CI matrix)
+
+## Package
+
+- **Composer:** `nowo-tech/user-kit-bundle`
+- **Config root:** `nowo_user_kit`
+

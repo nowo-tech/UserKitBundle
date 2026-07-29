@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Nowo\UserKitBundle\Presence\UserPresenceResolver;
 use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\Clock;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 final class UserPresenceResolverExtendedTest extends TestCase
@@ -19,6 +20,7 @@ final class UserPresenceResolverExtendedTest extends TestCase
                 'last_activity' => ['online_threshold' => 120],
             ]),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
         $user = new PropertyPresenceUser(new DateTimeImmutable('-30 seconds'));
 
@@ -32,6 +34,7 @@ final class UserPresenceResolverExtendedTest extends TestCase
                 'last_activity' => ['online_threshold' => 120],
             ]),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
         $user = new PropertyPresenceUser('invalid');
 

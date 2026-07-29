@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\Clock;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
@@ -41,6 +42,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $kernel = $this->createMock(HttpKernelInterface::class);
@@ -60,6 +62,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $kernel = $this->createMock(HttpKernelInterface::class);
@@ -80,6 +83,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $kernel = $this->createMock(HttpKernelInterface::class);
@@ -102,6 +106,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $kernel = $this->createMock(HttpKernelInterface::class);
@@ -123,6 +128,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
             $em,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $kernel = $this->createMock(HttpKernelInterface::class);

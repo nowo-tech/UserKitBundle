@@ -11,6 +11,7 @@ use Nowo\UserKitBundle\Presence\UserPresenceResolver;
 use Nowo\UserKitBundle\Profile\UnknownProfileException;
 use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\Clock;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 final class UserPresenceResolverTest extends TestCase
@@ -22,6 +23,7 @@ final class UserPresenceResolverTest extends TestCase
                 'last_activity' => ['online_threshold' => 60],
             ]),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
         $user = new PresenceUser(new DateTimeImmutable('-30 seconds'));
 
@@ -35,6 +37,7 @@ final class UserPresenceResolverTest extends TestCase
                 'last_activity' => ['online_threshold' => 60],
             ]),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
         $user = new PresenceUser(new DateTimeImmutable('-2 minutes'));
 
@@ -46,6 +49,7 @@ final class UserPresenceResolverTest extends TestCase
         $resolver = new UserPresenceResolver(
             ProfileRegistryFactory::single(PresenceUser::class),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $this->assertFalse($resolver->isOnline(new PresenceUser(null)));
@@ -67,6 +71,7 @@ final class UserPresenceResolverTest extends TestCase
                 ],
             ]),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $user = new PresenceUser(new DateTimeImmutable('-45 seconds'));
@@ -79,6 +84,7 @@ final class UserPresenceResolverTest extends TestCase
         $resolver = new UserPresenceResolver(
             ProfileRegistryFactory::single(PresenceUser::class),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $this->expectException(UnknownProfileException::class);
@@ -90,6 +96,7 @@ final class UserPresenceResolverTest extends TestCase
         $resolver = new UserPresenceResolver(
             ProfileRegistryFactory::single(PresenceUser::class),
             PropertyAccess::createPropertyAccessor(),
+            new Clock(),
         );
 
         $this->assertFalse($resolver->isOnline(new UnmappedPresenceUser(new DateTimeImmutable())));

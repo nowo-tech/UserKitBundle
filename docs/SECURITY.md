@@ -72,6 +72,7 @@ Before tagging a release, confirm:
 | **Cryptography** | If used: keys from secure config; never hardcoded. |
 | **Permissions / exposure** | Routes and admin features documented; roles configured for production. |
 | **Limits / DoS** | Timeouts, size limits, rate limits where applicable. |
+| **AI security audit (REQ-SEC-004)** | Pass (conditional) recorded in monorepo `BUNDLES_SECURITY_ANALYSIS.md`. |
 
 Record confirmation in the release PR or tag notes.
 

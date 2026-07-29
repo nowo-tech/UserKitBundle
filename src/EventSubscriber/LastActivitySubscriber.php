@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\EventSubscriber;
 
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Profile\ProfileSettings;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -26,6 +26,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         private readonly EntityManagerInterface $entityManager,
         private readonly TokenStorageInterface $tokenStorage,
         private readonly PropertyAccessorInterface $propertyAccessor,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -58,21 +59,21 @@ final class LastActivitySubscriber implements EventSubscriberInterface
             return;
         }
 
-        $now = time();
-        if ($profile->updateThrottle > 0 && isset($this->lastWriteAt[$userId]) && $now - $this->lastWriteAt[$userId] < $profile->updateThrottle) {
+        $now     = $this->clock->now();
+        $nowUnix = $now->getTimestamp();
+        if ($profile->updateThrottle > 0 && isset($this->lastWriteAt[$userId]) && $nowUnix - $this->lastWriteAt[$userId] < $profile->updateThrottle) {
             return;
         }
 
-        $timestamp = new DateTimeImmutable();
         if ($user instanceof LastActivityInterface) {
-            $user->setLastActivityAt($timestamp);
+            $user->setLastActivityAt($now);
         } elseif ($this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
-            $this->propertyAccessor->setValue($user, $profile->lastActivityField, $timestamp);
+            $this->propertyAccessor->setValue($user, $profile->lastActivityField, $now);
         } else {
             return;
         }
 
         $this->entityManager->flush();
-        $this->lastWriteAt[$userId] = $now;
+        $this->lastWriteAt[$userId] = $nowUnix;
     }
 }

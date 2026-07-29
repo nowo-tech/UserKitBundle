@@ -8,6 +8,7 @@ use DateTimeInterface;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Profile\ProfileSettings;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
 final class UserPresenceResolver
@@ -15,6 +16,7 @@ final class UserPresenceResolver
     public function __construct(
         private readonly ProfileRegistry $registry,
         private readonly PropertyAccessorInterface $propertyAccessor,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -33,7 +35,7 @@ final class UserPresenceResolver
             return false;
         }
 
-        $elapsed = time() - $lastActivity->getTimestamp();
+        $elapsed = $this->clock->now()->getTimestamp() - $lastActivity->getTimestamp();
 
         return $elapsed <= $profile->onlineThreshold;
     }

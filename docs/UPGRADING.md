@@ -4,6 +4,20 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
 
+### Unreleased (next 1.x)
+
+_Placeholder for the next release._
+
+### 1.1.5
+
+From **1.1.4** — backward compatible for normal integrators.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+**Note:** `LastActivitySubscriber` and `UserPresenceResolver` now require a `Psr\Clock\ClockInterface` constructor argument. Symfony FrameworkBundle already provides the `clock` service (autowiring). If you instantiate these classes manually in tests or custom DI, pass a clock (e.g. `Symfony\Component\Clock\Clock` or `MockClock`).
+
 ### 1.1.4
 
 From **1.1.3** or any earlier **1.x** — backward compatible.

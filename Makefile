@@ -1,12 +1,16 @@
+SHELL := /bin/bash
+
 # Makefile for User Kit Bundle
 # Simplifies Docker commands for development.
 # All dev targets use the root docker-compose.yml (single file).
 
 COMPOSE_FILE := docker-compose.yml
-COMPOSE := docker-compose -f $(COMPOSE_FILE)
+# Prefer Compose V2 plugin (GitHub Actions / modern Docker Desktop); fall back to docker-compose V1 (REQ-MAKE-010).
+COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+COMPOSE     := $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 SERVICE_PHP := php
 
-.PHONY: help up down build shell install test test-coverage test-coverage-100 coverage-php-percent cs-check cs-fix rector rector-dry phpstan qa release-check release-check-demos composer-sync clean update validate validate-translations assets setup-hooks check-no-cursor-coauthor strip-cursor-coauthor-from-history
+.PHONY: help up down down-dev build shell install test test-coverage test-coverage-100 coverage-check coverage-php-percent cs-check cs-fix rector rector-dry phpstan qa release-check release-check-demos demo-smoke composer-sync clean update validate validate-translations assets setup-hooks check-no-cursor-coauthor check-open-prs strip-cursor-coauthor-from-history
 
 # Default target
 help:
@@ -17,6 +21,7 @@ help:
 	@echo "Targets:"
 	@echo "  up            Start Docker container"
 	@echo "  down          Stop Docker container"
+	@echo "  down-dev      Stop Docker container (dev alias)"
 	@echo "  build         Rebuild Docker image (no cache)"
 	@echo "  shell         Open shell in container"
 	@echo "  install       Install Composer dependencies (starts container if needed)"
@@ -59,6 +64,8 @@ up:
 down:
 	$(COMPOSE) down
 
+down-dev: down
+
 # Open shell in container
 shell: ensure-up
 	$(COMPOSE) exec $(SERVICE_PHP) sh
@@ -89,6 +96,8 @@ test-coverage-100: ensure-up
 	$(COMPOSE) exec $(SERVICE_PHP) composer test-coverage
 	$(COMPOSE) exec $(SERVICE_PHP) php .scripts/coverage-check-100.php
 
+coverage-check: test-coverage-100
+
 # Check code style
 cs-check: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer cs-check
@@ -114,7 +123,7 @@ qa: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer qa
 
 # Pre-release checks (no demos healthcheck if demo/Makefile has no release-verify; optional)
-release-check: check-no-cursor-coauthor ensure-up composer-sync cs-fix cs-check rector-dry phpstan test-coverage-100 validate-translations release-check-demos
+release-check: check-no-cursor-coauthor check-open-prs ensure-up composer-sync cs-check rector-dry phpstan validate-translations coverage-check release-check-demos
 
 release-check-demos:
 	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check 2>/dev/null || true; else true; fi
@@ -154,6 +163,13 @@ check-no-cursor-coauthor:
 	@chmod +x .scripts/check-no-cursor-coauthor.sh
 	@./.scripts/check-no-cursor-coauthor.sh HEAD
 
+check-open-prs:
+	@chmod +x .scripts/check-open-prs.sh
+	@GH_REPO=nowo-tech/UserKitBundle ./.scripts/check-open-prs.sh
+
+demo-smoke:
+	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check; else echo "No demo/Makefile — skip demo-smoke"; fi
+
 setup-hooks:
 	@chmod +x .githooks/pre-commit 2>/dev/null || true
 	@chmod +x .githooks/commit-msg 2>/dev/null || true
@@ -163,7 +179,8 @@ setup-hooks:
 
 # REQ-MAKE-008: update-deps (REQ-MAKE-008)
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-include $(BUNDLE_ROOT)/../.scripts/Makefile.update-deps.mk
+# Optional: monorepo helper absent on standalone GitHub Actions checkout (REQ-MAKE-009).
+-include $(BUNDLE_ROOT)/../.scripts/Makefile.update-deps.mk
 
 strip-cursor-coauthor-from-history:
 	@chmod +x .scripts/strip-cursor-coauthor-from-history.sh

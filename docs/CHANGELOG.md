@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-07-29
+
+### Added
+
+- **REQ-DI-001:** `LastActivitySubscriber` and `UserPresenceResolver` use `Psr\Clock\ClockInterface` (require `symfony/clock`).
+- **Makefile:** `check-open-prs`, `coverage-check`, `demo-smoke`, `down-dev`; `release-check` wires the full REQ-MAKE-002 chain.
+- **SF-005:** `SYMFONY_DEPRECATIONS_HELPER=max[direct]=0` in `phpunit.xml.dist` and CI.
+- FrankenPHP Friendly banner (`docs/images/frankenphp-friendly.png`) — REQ-DOCS-017.
+- Spec Kit inventory entry for `Profile/UnknownProfileException.php`.
+
+### Security
+
+- Release checklist (12.4.1) includes **REQ-SEC-004** Pass (conditional) row.
+
+### Changed
+
+- Demo image `dunglas/frankenphp:1-php8.5-alpine` (REQ-DEMO-010).
+- Packagist homepage + GitHub About topics for REQ-DOCS-018.
+
 ## [1.1.4] - 2026-07-22
 
 ### Added
