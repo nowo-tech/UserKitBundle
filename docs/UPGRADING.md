@@ -8,6 +8,20 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 _Placeholder for the next release._
 
+### 1.1.6
+
+From **1.1.5** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+**Behavior:** `AccountStatusUserChecker` now rejects disabled accounts in **`checkPreAuth`** (and still in `checkPostAuth`). This covers AuthKit magic login / social / QR, which call `Security::login()` and only run pre-auth.
+
+Do **not** replace the firewall `user_checker` with a custom service unless you chain UserKit’s checker; overriding it can skip the tagged `AccountStatusUserChecker`.
+
+Hosts that added a custom pre-auth-only disabled checker for AuthKit can remove it after upgrading to **1.1.6**.
+
 ### 1.1.5
 
 From **1.1.4** — backward compatible for normal integrators.

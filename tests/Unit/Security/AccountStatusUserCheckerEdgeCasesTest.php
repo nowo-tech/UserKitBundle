@@ -12,10 +12,22 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 final class AccountStatusUserCheckerEdgeCasesTest extends TestCase
 {
-    public function testPreAuthIsNoOp(): void
+    public function testPreAuthAllowsUnmappedPlainUser(): void
     {
         $checker = new AccountStatusUserChecker(
             ProfileRegistryFactory::single(PlainUser::class),
+            PropertyAccess::createPropertyAccessor(),
+        );
+        $checker->checkPreAuth(new OtherUser());
+        $this->addToAssertionCount(1);
+    }
+
+    public function testPreAuthSkipsWhenAccountStatusDisabledForProfile(): void
+    {
+        $checker = new AccountStatusUserChecker(
+            ProfileRegistryFactory::single(PlainUser::class, [
+                'account_status' => ['enabled' => false],
+            ]),
             PropertyAccess::createPropertyAccessor(),
         );
         $checker->checkPreAuth(new PlainUser());

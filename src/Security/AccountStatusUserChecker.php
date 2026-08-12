@@ -13,6 +13,13 @@ use Symfony\Component\Security\Core\Exception\DisabledException;
 use Symfony\Component\Security\Core\User\UserCheckerInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
+/**
+ * Blocks disabled accounts during authentication.
+ *
+ * Checks run in both {@see checkPreAuth()} and {@see checkPostAuth()} so AuthKit
+ * flows that call Symfony Security::login() (magic login, social, QR) are covered —
+ * those paths invoke pre-auth only.
+ */
 final class AccountStatusUserChecker implements UserCheckerInterface
 {
     public function __construct(
@@ -23,9 +30,15 @@ final class AccountStatusUserChecker implements UserCheckerInterface
 
     public function checkPreAuth(UserInterface $user): void
     {
+        $this->assertAccountEnabled($user);
     }
 
     public function checkPostAuth(UserInterface $user, ?TokenInterface $token = null): void
+    {
+        $this->assertAccountEnabled($user);
+    }
+
+    private function assertAccountEnabled(UserInterface $user): void
     {
         $profile = $this->registry->resolveForObject($user);
         if (!$profile instanceof ProfileSettings || !$profile->accountStatusEnabled) {

@@ -12,6 +12,12 @@ See [Configuration — Profiles](CONFIGURATION.md#profiles) for the YAML structu
 
 When a profile has `account_status.enabled: true`, `AccountStatusUserChecker` applies to authenticated users of that profile's `user_class`.
 
+The checker runs on **both** `checkPreAuth` and `checkPostAuth`, so disabled accounts are blocked for:
+
+- Standard form / authenticator login (post-auth)
+- AuthKit flows that call `Security::login()` — magic login, social, QR (pre-auth only)
+
+Do not set a custom firewall `user_checker` that replaces the Symfony default chain unless you still invoke UserKit’s checker; otherwise disabled-account enforcement may be skipped.
 - Users with `enabled: false` (or the configured field) cannot authenticate — Symfony throws `DisabledException`.
 - If the entity implements `AccountStatusInterface`, `isEnabled()` is used.
 - Otherwise the configured property is read via the PropertyAccess component.

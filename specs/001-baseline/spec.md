@@ -109,8 +109,8 @@ Complements **AuthKitBundle** (login/register/reset UI and routes) without requi
 ### Security
 
 - **FR-SEC-001**: `AccountStatusUserChecker` implements Symfony `UserCheckerInterface`:
-  - `checkPreAuth` — no-op or lightweight checks.
-  - `checkPostAuth` — if account disabled, throw `DisabledException` with translatable message key in domain `NowoUserKitBundle`.
+  - `checkPreAuth` — if account disabled, throw `DisabledException` (covers `Security::login()` used by AuthKit magic/social/QR).
+  - `checkPostAuth` — same disabled check for standard authenticator flows.
 - **FR-SEC-002**: Auto-register checker tag `security.user_checker` when `account_status.enabled: true`.
 - **FR-SEC-003**: Document firewall requirement: integrator must not disable user checkers on the firewall (Symfony default includes them).
 

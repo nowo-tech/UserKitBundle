@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-08-12
+
+### Fixed
+
+- **`AccountStatusUserChecker`**: reject disabled accounts in **`checkPreAuth`** as well as `checkPostAuth`, so AuthKit flows that call `Security::login()` (magic login, social, QR) cannot sign in a disabled user.
+
+### Changed
+
+- Spec FR-SEC-001 updated: pre-auth is no longer a no-op for account status.
+
 ## [1.1.5] - 2026-07-29
 
 ### Added
@@ -145,6 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.6]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.6
+[1.1.5]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.5
 [1.1.4]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.4
 [1.1.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.3
 [1.1.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.2

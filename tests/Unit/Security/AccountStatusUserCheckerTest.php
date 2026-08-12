@@ -14,7 +14,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 final class AccountStatusUserCheckerTest extends TestCase
 {
-    public function testDisabledAccountThrows(): void
+    public function testDisabledAccountThrowsOnPostAuth(): void
     {
         $checker = new AccountStatusUserChecker(
             ProfileRegistryFactory::single(DisabledUser::class),
@@ -25,12 +25,24 @@ final class AccountStatusUserCheckerTest extends TestCase
         $checker->checkPostAuth(new DisabledUser());
     }
 
-    public function testEnabledAccountPasses(): void
+    public function testDisabledAccountThrowsOnPreAuth(): void
+    {
+        $checker = new AccountStatusUserChecker(
+            ProfileRegistryFactory::single(DisabledUser::class),
+            PropertyAccess::createPropertyAccessor(),
+        );
+
+        $this->expectException(DisabledException::class);
+        $checker->checkPreAuth(new DisabledUser());
+    }
+
+    public function testEnabledAccountPassesPreAndPostAuth(): void
     {
         $checker = new AccountStatusUserChecker(
             ProfileRegistryFactory::single(EnabledUser::class),
             PropertyAccess::createPropertyAccessor(),
         );
+        $checker->checkPreAuth(new EnabledUser());
         $checker->checkPostAuth(new EnabledUser());
         $this->addToAssertionCount(1);
     }
