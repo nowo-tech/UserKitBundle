@@ -33,6 +33,9 @@ test-coverage: test-coverage-symfony8
 release-check:
 	@$(MAKE) -C symfony8 release-check
 
+update-bundle:
+	@$(MAKE) -C symfony8 update-bundle
+
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 # Optional: monorepo helper absent on standalone GitHub Actions checkout (REQ-MAKE-009).
 -include $(BUNDLE_ROOT)/../.scripts/Makefile.demo-aggregate-update-deps.mk
