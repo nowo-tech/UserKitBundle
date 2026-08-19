@@ -8,6 +8,14 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 _Placeholder for the next release._
 
+### 1.1.8
+
+From **1.1.7** — **no action required**.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
 ### 1.1.7
 
 From **1.1.6** — **no action required**. Demos only: Hot Reload Bundle `^1.4` (FrankenPHP Mercure/`hot_reload`, `dev`/`test`).
