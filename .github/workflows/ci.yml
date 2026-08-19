@@ -93,6 +93,9 @@ jobs:
             doctrine/doctrine-bundle:${DOCTRINE_BUNDLE} \
             --no-interaction --no-update
           composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
+      - name: Composer audit (Critical/High)
+        run: composer audit --locked
+
 
       - name: Run tests
         env:
