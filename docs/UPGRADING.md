@@ -1,5 +1,27 @@
 # Upgrading
 
+## Table of contents
+
+- [From 1.1.8 to 1.1.9](#from-118-to-119)
+
+## From 1.1.8 to 1.1.9
+
+No breaking changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+## From 1.1.8 to 1.1.9
+
+No breaking changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+# Upgrading
+
 This document describes how to upgrade between versions of User Kit Bundle.
 
 ## 1.x
