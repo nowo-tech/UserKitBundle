@@ -2,8 +2,8 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-07-14  
-**Status**: Implemented
+**Last audited**: 2026-09-25  
+**Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
 
@@ -36,7 +36,7 @@
 | Source file | Spec section | Requirement IDs | Status |
 | --- | --- | --- | --- |
 | `Security/AccountStatusUserChecker.php` | UserChecker | FR-SEC-001 | Mapped |
-| `EventSubscriber/LastActivitySubscriber.php` | Request subscriber | FR-PRES-001 | Mapped |
+| `EventSubscriber/LastActivitySubscriber.php` | Request subscriber | FR-PRES-001, FR-RUNTIME-001 | Mapped |
 | `Presence/UserPresenceResolver.php` | Online detection | FR-PRES-002 | Mapped |
 | `EventListener/AccountDisabledListener.php` | Session invalidation | FR-SES-001 | Mapped |
 | `Session/SessionInvalidatorInterface.php` | Extension point | FR-SES-002 | Mapped |
@@ -72,6 +72,10 @@
 | Symfony config | 2 | 2 |
 | Translations | 7 | 7 |
 | **Total production sources** | **26** | **26** |
+
+## Inventory refresh (2026-09-25)
+
+- FrankenPHP worker audit (`docs/FRANKENPHP-WORKER-AUDIT.md`); `LastActivitySubscriber` throttle/EM/firewall hardening; PHPStan `ruleset-worker-no-kernel-reset`.
 
 ## Inventory refresh (2026-07-29 remedia)
 

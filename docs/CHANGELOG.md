@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.10] - 2026-09-25
+
+### Fixed
+
+- **FrankenPHP worker mode without kernel reset** (`LastActivitySubscriber`, see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md)):
+  - The throttle map is keyed by profile and user identifier, drops expired entries on every write and is capped (`LastActivitySubscriber::MAX_THROTTLE_ENTRIES` = 10 000, constructor argument `$maxThrottleEntries`), so memory no longer grows with the number of distinct users.
+  - The entity manager is resolved per request through `ManagerRegistry::getManagerForClass()` and reset when closed; a failing `flush()` is logged, resets closed managers and no longer turns the page into an HTTP 500.
+  - Activity is only recorded when the main request passed a firewall with security enabled, so a token left over from a previous request never updates another user's `lastActivityAt`.
+  - New optional constructor arguments (autowired): `$managerRegistry`, `$security`, `$logger`, `$maxThrottleEntries`.
+
+### Changed
+
+- **PHPStan:** include `ruleset-worker-no-kernel-reset.neon` (FrankenPHP kernel reused / `FRANKENPHP_RESET_KERNEL` unset/false).
+- **`NowoUserKitBundle`:** rely on Symfony's extension naming convention (no mutable `getContainerExtension()` override).
+- **Docs:** `FRANKENPHP-WORKER-AUDIT.md`, upgrading notes for 1.1.10, baseline spec FR-PRES-001 / FR-RUNTIME-001.
 
 ## [1.1.9] - 2026-08-24
 
@@ -184,6 +199,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony Flex recipe `.symfony/recipe/nowo-tech/user-kit-bundle/1.0/`.
 - CI matrix: PHP 8.2–8.5, Symfony 7.0 / 7.4 / 8.0 / 8.1 with **100%** PHPUnit line coverage on `src/`.
 
+[1.1.10]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.10
+[1.1.9]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.9
 [1.1.6]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.6
 [1.1.5]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.5
 [1.1.4]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.4

@@ -1,36 +1,50 @@
 # Upgrading
 
-## Table of contents
-
-- [From 1.1.8 to 1.1.9](#from-118-to-119)
-
-## From 1.1.8 to 1.1.9
-
-No breaking changes. **No application upgrade steps.**
-
-```bash
-composer update nowo-tech/user-kit-bundle
-```
-
-## From 1.1.8 to 1.1.9
-
-No breaking changes. **No application upgrade steps.**
-
-```bash
-composer update nowo-tech/user-kit-bundle
-```
-
-# Upgrading
-
 This document describes how to upgrade between versions of User Kit Bundle.
 
-## 1.x
+## Table of contents
 
-### Unreleased (next 1.x)
+- [From 1.1.9 to 1.1.10](#from-119-to-1110)
+- [From 1.1.8 to 1.1.9](#from-118-to-119)
+- [1.1.8](#118)
+- [1.1.7](#117)
+- [1.1.6](#116)
+- [1.1.5](#115)
+- [1.1.4](#114)
+- [1.1.3](#113)
+- [1.1.2](#112)
+- [1.1.1](#111)
+- [1.1.0](#110)
+- [1.0.x](#10x)
 
-_Placeholder for the next release._
+## From 1.1.9 to 1.1.10
 
-### 1.1.8
+From **1.1.9** — backward compatible.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration or entity changes required.
+
+**Behaviour of `last_activity` (FrankenPHP worker / `FRANKENPHP_RESET_KERNEL` unset/false):**
+
+- `lastActivityAt` is only updated on main requests behind a firewall with `security: true`. Classic and reset-enabled setups see no practical difference (no token outside those paths).
+- A database error while storing the timestamp is logged (`warning`) instead of failing the request with HTTP 500; closed entity managers are reset via `ManagerRegistry` when available.
+- The in-memory throttle is keyed by profile + user identifier, pruned, and capped at 10 000 entries per worker (`LastActivitySubscriber::MAX_THROTTLE_ENTRIES` / constructor `$maxThrottleEntries`).
+- New optional constructor arguments (autowired): `$managerRegistry`, `$security`, `$logger`, `$maxThrottleEntries`. Manual instantiations in tests should pass them when asserting worker behaviour.
+
+See [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
+
+## From 1.1.8 to 1.1.9
+
+No breaking changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+## 1.1.8
 
 From **1.1.7** — **no action required**.
 
@@ -38,11 +52,11 @@ From **1.1.7** — **no action required**.
 composer update nowo-tech/user-kit-bundle
 ```
 
-### 1.1.7
+## 1.1.7
 
 From **1.1.6** — **no action required**. Demos only: Hot Reload Bundle `^1.4` (FrankenPHP Mercure/`hot_reload`, `dev`/`test`).
 
-### 1.1.6
+## 1.1.6
 
 From **1.1.5** — backward compatible.
 
@@ -56,7 +70,7 @@ Do **not** replace the firewall `user_checker` with a custom service unless you 
 
 Hosts that added a custom pre-auth-only disabled checker for AuthKit can remove it after upgrading to **1.1.6**.
 
-### 1.1.5
+## 1.1.5
 
 From **1.1.4** — backward compatible for normal integrators.
 
@@ -66,7 +80,7 @@ composer update nowo-tech/user-kit-bundle
 
 **Note:** `LastActivitySubscriber` and `UserPresenceResolver` now require a `Psr\Clock\ClockInterface` constructor argument. Symfony FrameworkBundle already provides the `clock` service (autowiring). If you instantiate these classes manually in tests or custom DI, pass a clock (e.g. `Symfony\Component\Clock\Clock` or `MockClock`).
 
-### 1.1.4
+## 1.1.4
 
 From **1.1.3** or any earlier **1.x** — backward compatible.
 
@@ -76,7 +90,7 @@ composer update nowo-tech/user-kit-bundle
 
 No configuration, entity, or template changes required for application integrators. Repository demo operators can set `FRANKENPHP_MODE=classic` or `worker` (default) in `demo/symfony8/.env`; recreate the container after changing it. See [Demo with FrankenPHP](DEMO-FRANKENPHP.md).
 
-### 1.1.3
+## 1.1.3
 
 From **1.1.2** or any earlier **1.x** — backward compatible.
 
@@ -86,7 +100,7 @@ composer update nowo-tech/user-kit-bundle
 
 No configuration, entity, or template changes required. This release adds repository git-hygiene (REQ-GIT-001), Code of Conduct, and CI documentation only. Application integrators are unaffected.
 
-### 1.1.2
+## 1.1.2
 
 From **1.1.1**, **1.1.0**, or any **1.0.x** — backward compatible.
 
@@ -96,7 +110,7 @@ composer update nowo-tech/user-kit-bundle
 
 No configuration, entity, or template changes required. This release updates the repository demo only (`demo/symfony8` uses the recommended `profiles` layout). Integrators already on flat config or profiles layout are unaffected.
 
-### 1.1.1
+## 1.1.1
 
 From **1.1.0** — backward compatible.
 
@@ -106,7 +120,7 @@ composer update nowo-tech/user-kit-bundle
 
 No configuration, entity, or template changes required. This release fixes the CI dependency matrix only (`doctrine/doctrine-bundle` ^2.10 on PHP 8.2–8.3, ^3.0 on PHP 8.4+).
 
-### 1.1.0
+## 1.1.0
 
 From **1.0.3**, **1.0.2**, **1.0.1**, or **1.0.0** — backward compatible for single-entity setups.
 
@@ -138,6 +152,8 @@ nowo_user_kit:
 ```
 
 **Behavior note:** `AccountStatusUserChecker` now applies only to user classes registered in a profile with `account_status.enabled: true`. Unmapped classes are no longer checked implicitly.
+
+## 1.0.x
 
 ### 1.0.3
 

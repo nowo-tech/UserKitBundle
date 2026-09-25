@@ -26,7 +26,7 @@ No application code is required beyond configuration and entity mapping.
 
 ## Last activity tracking
 
-When a profile has `last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests for that user class.
+When a profile has `last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests for that user class (main request behind a security-enabled firewall). The in-memory throttle is worker-safe under FrankenPHP without kernel reset; see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
 
 Writes are throttled by `update_throttle` (seconds) to reduce database load.
 

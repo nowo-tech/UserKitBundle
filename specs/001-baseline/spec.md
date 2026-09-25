@@ -116,8 +116,9 @@ Complements **AuthKitBundle** (login/register/reset UI and routes) without requi
 
 ### Presence
 
-- **FR-PRES-001**: `LastActivitySubscriber` on `KernelEvents::REQUEST` (priority documented) — only main requests, only fully authenticated users, respects throttle.
+- **FR-PRES-001**: `LastActivitySubscriber` on `KernelEvents::REQUEST` (priority documented) — only main requests behind a security-enabled firewall, only fully authenticated users, respects throttle; throttle map is bounded and EntityManager failures are logged (FrankenPHP worker / no kernel reset — see `docs/FRANKENPHP-WORKER-AUDIT.md`).
 - **FR-PRES-002**: `UserPresenceResolver` — `isOnline(object $user): bool` using configured threshold and field.
+- **FR-RUNTIME-001**: Bundle services are safe under FrankenPHP worker with `FRANKENPHP_RESET_KERNEL` unset/false (scenario B audit pass); PHPStan includes `ruleset-worker-no-kernel-reset`.
 
 ### Session invalidation
 
