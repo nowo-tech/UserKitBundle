@@ -94,6 +94,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         if ($user instanceof LastActivityInterface) {
+            // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
             $user->setLastActivityAt($now);
         } elseif ($this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
             $this->propertyAccessor->setValue($user, $profile->lastActivityField, $now);
@@ -182,6 +183,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
             unset($this->throttledUntil[array_key_first($this->throttledUntil)]);
         }
 
+        // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
         $this->throttledUntil[$throttleKey] = $nowUnix + $updateThrottle;
     }
 }

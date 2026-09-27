@@ -18,6 +18,7 @@ trait EnabledUserTrait
 
     public function setEnabled(bool $enabled): self
     {
+        // @igor-ignore - Domain model value object; instance-scoped, not a shared service.
         $this->enabled = $enabled;
 
         return $this;

@@ -70,6 +70,7 @@ Login with `demo@user-kit.test` / `demo`. The demo runs under **FrankenPHP** in 
 make up
 make test-coverage-100
 make phpstan
+make igor
 ```
 
 ## Documentation

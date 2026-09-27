@@ -20,6 +20,7 @@ trait LastActivityTrait
 
     public function setLastActivityAt(DateTimeInterface $lastActivityAt): void
     {
+        // @igor-ignore - Domain model value object; instance-scoped, not a shared service.
         $this->lastActivityAt = $lastActivityAt instanceof DateTimeImmutable
             ? $lastActivityAt
             : DateTimeImmutable::createFromInterface($lastActivityAt);
