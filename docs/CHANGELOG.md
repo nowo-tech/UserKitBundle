@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-10-09
+
+### Changed
+
+- PHPStan: `frankenphp.worker.noMissingResetInterface` ignored (with justification) for `ProfileRegistry` (class → profile resolve cache) and `LastActivitySubscriber` (bounded per-worker write throttle); both are intentional cross-request state now detected by phpstan-frankenphp 1.2.2+.
+- Dependencies (Dependabot + lock refresh): `doctrine/orm` 3.7.3; dev `igor-php/igor-php` 0.10, PHPStan 2.3.1 (+ phpunit/symfony extensions 2.1), Rector 2.7.0, `nowo-tech/phpstan-frankenphp` 1.2.3.
+- Demo (Symfony 8): `doctrine/orm` 3.7.4, `doctrine/dbal` 4.5.0, Twig 3.30.0, HotReloadBundle 1.5.5, TwigInspectorBundle 1.1.7; regenerated `config/reference.php`.
+
+[1.1.12]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.1.12
+
 ## [1.1.11] - 2026-09-27
 
 ### Added

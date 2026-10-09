@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+## To 1.1.12
+
+From **1.1.11** — dependency refresh and PHPStan configuration only. No breaking changes. No application upgrade steps.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
 ## To 1.1.11
 
 From **1.1.10** — REQ-CS-008 Igor FrankenPHP worker audit (igor-php require-dev, igor.json, make igor).
@@ -18,6 +26,8 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## Table of contents
 
+- [To 1.1.12](#to-1112)
+- [To 1.1.11](#to-1111)
 - [From 1.1.9 to 1.1.10](#from-119-to-1110)
 - [From 1.1.8 to 1.1.9](#from-118-to-119)
 - [1.1.8](#118)
