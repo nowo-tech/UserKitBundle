@@ -8,6 +8,17 @@ parameters:
         - tests
     excludePaths:
         - demo/*
+    ignoreErrors:
+        # Intentional cross-request state (phpstan-frankenphp >= 1.2.2 now sees array-element writes):
+        # - ProfileRegistry::$resolveCache maps user class => profile; deterministic, bounded by the number of user classes.
+        # - LastActivitySubscriber::$throttledUntil throttles lastActivityAt writes per worker; bounded by MAX_THROTTLE_ENTRIES
+        #   and pruned on write. Resetting it per request would defeat the throttle.
+        -
+            identifier: frankenphp.worker.noMissingResetInterface
+            path: src/Profile/ProfileRegistry.php
+        -
+            identifier: frankenphp.worker.noMissingResetInterface
+            path: src/EventSubscriber/LastActivitySubscriber.php
 
 includes:
   - vendor/nowo-tech/phpstan-frankenphp/ruleset-classic.neon
