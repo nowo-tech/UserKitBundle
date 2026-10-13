@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Security:** `AccountStatusUserChecker` is now actually attached to every security-enabled firewall (the previous global `security.user_checker` tag was ignored by SecurityBundle). Disabled accounts that could log in before are now rejected with `DisabledException`. Remove any manual firewall `user_checker: Nowo\UserKitBundle\Security\AccountStatusUserChecker` workaround (harmless if kept); a custom firewall `user_checker` keeps running alongside UserKit’s checker.
+- **Fixed:** with `invalidate_sessions_on_disable: true`, `AccountDisabledListener` is now attached to the profile `user_class` and calls `SessionInvalidatorInterface`. The default `DefaultSessionInvalidator` is a no-op; alias the interface to your own implementation to really clear sessions (see [USAGE](USAGE.md#session-invalidation-on-disable)).
+
 ## To 1.1.13
 
 From **1.1.12** — dependency refresh and repository maintenance.

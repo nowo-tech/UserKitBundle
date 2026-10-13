@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `AccountStatusUserChecker` is now wired into every security-enabled firewall (`security.user_checker.<firewall>` + per-firewall chain) by a compiler pass. Previously it was tagged `security.user_checker`, which SecurityBundle never consumes, so disabled accounts could still log in unless the firewall set `user_checker` manually. A custom firewall `user_checker` is kept in the chain and still runs.
+
+### Fixed
+
+- `invalidate_sessions_on_disable: true` now attaches `AccountDisabledListener` as a Doctrine entity listener on each opted-in profile `user_class` (it was tagged with `entity: null` and never attached).
+
+### Changed
+
+- Docs: session invalidation section describes the real behaviour (Doctrine `postUpdate`; `DefaultSessionInvalidator` is a no-op) and how to plug a real invalidator.
+
 ## [1.1.13] - 2026-10-13
 
 ### Changed

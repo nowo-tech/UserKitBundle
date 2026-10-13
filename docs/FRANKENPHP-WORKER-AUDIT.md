@@ -41,7 +41,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 |---------|--------|---------------|------------|------------|
 | `Nowo\UserKitBundle\Profile\ProfileRegistry` | yes | `$resolveCache` (class-string → profile), filled lazily; `$byName` / `$byExactClass` set in constructor only | ✅ | ✅ (bounded by number of user classes and their proxies) |
 | `Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber` | yes (removed if no profile enables `last_activity`) | `$throttledUntil` (profile + user identifier → window end), pruned and capped | ✅ | ✅ |
-| `Nowo\UserKitBundle\Security\AccountStatusUserChecker` (`security.user_checker`) | yes | none (`readonly`) | ✅ | ✅ |
+| `Nowo\UserKitBundle\Security\AccountStatusUserChecker` (`security.user_checker.<firewall>`) | yes | none (`readonly`) | ✅ | ✅ |
 | `Nowo\UserKitBundle\EventListener\AccountDisabledListener` (`doctrine.orm.entity_listener`, lazy) | yes | none (`readonly`) | ✅ | ✅ |
 | `Nowo\UserKitBundle\Presence\UserPresenceResolver` | yes | none (`readonly`, uses `ClockInterface`) | ✅ | ✅ |
 | `Nowo\UserKitBundle\Twig\UserPresenceExtension` | yes | none (`readonly`) | ✅ | ✅ |

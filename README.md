@@ -17,7 +17,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **`lastActivityAt`** — updated on authenticated HTTP requests (throttled)
 - **`online_threshold`** — `UserPresenceResolver::isOnline()` and optional Twig `user_is_online()`
 - **Named profiles** — separate config per user entity (`User`, `Admin`, …) with O(1) class resolution
-- **Session invalidation hook** — optional listener when an account is disabled
+- **Session invalidation hook** — optional Doctrine listener that calls your `SessionInvalidatorInterface` when an account is disabled (default implementation is a no-op)
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 

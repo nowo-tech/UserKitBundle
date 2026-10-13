@@ -62,6 +62,8 @@ final class NowoUserKitExtension extends Extension
 
         if (!$registry->hasSessionInvalidationEnabled()) {
             $container->removeDefinition(AccountDisabledListener::class);
+        } else {
+            $this->attachAccountDisabledListener($profiles, $container);
         }
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
@@ -72,6 +74,30 @@ final class NowoUserKitExtension extends Extension
     public function getAlias(): string
     {
         return Configuration::ALIAS;
+    }
+
+    /**
+     * Attaches the Doctrine entity listener to the user class of every profile that enables
+     * `invalidate_sessions_on_disable` (an entity listener without `entity` is never attached).
+     *
+     * @param array<string, array<string, mixed>> $profiles
+     */
+    private function attachAccountDisabledListener(array $profiles, ContainerBuilder $container): void
+    {
+        $definition = $container->getDefinition(AccountDisabledListener::class);
+
+        foreach ($profiles as $profile) {
+            if (true !== ($profile['account_status']['invalidate_sessions_on_disable'] ?? false)) {
+                continue;
+            }
+
+            $definition->addTag('doctrine.orm.entity_listener', [
+                'event'  => 'postUpdate',
+                'entity' => $profile['user_class'],
+                'lazy'   => true,
+                'method' => 'postUpdate',
+            ]);
+        }
     }
 
     /**

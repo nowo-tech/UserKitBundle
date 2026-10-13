@@ -19,9 +19,9 @@ Each profile supports:
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `user_class` | string | — | FQCN of the user entity for this profile (required; must be unique across profiles). |
-| `account_status.enabled` | bool | `true` | Apply `AccountStatusUserChecker` to this profile. |
+| `account_status.enabled` | bool | `true` | Apply `AccountStatusUserChecker` to this profile (wired automatically into every security-enabled firewall; `false` on all profiles removes it). |
 | `account_status.field` | string | `enabled` | Enabled flag property or accessor. |
-| `account_status.invalidate_sessions_on_disable` | bool | `false` | Invalidate sessions when the account is disabled. |
+| `account_status.invalidate_sessions_on_disable` | bool | `false` | Attach a Doctrine `postUpdate` entity listener on `user_class` that calls `SessionInvalidatorInterface` when the account is disabled. The default invalidator is a no-op; see [USAGE](USAGE.md#session-invalidation-on-disable). |
 | `last_activity.enabled` | bool | `false` | Persist last activity on authenticated requests for this profile. |
 | `last_activity.field` | string | `lastActivityAt` | Last-activity timestamp property. |
 | `last_activity.online_threshold` | int | `300` | Seconds within which the user is considered online (min `1`). |

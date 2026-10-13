@@ -17,7 +17,8 @@ The checker runs on **both** `checkPreAuth` and `checkPostAuth`, so disabled acc
 - Standard form / authenticator login (post-auth)
 - AuthKit flows that call `Security::login()` — magic login, social, QR (pre-auth only)
 
-Do not set a custom firewall `user_checker` that replaces the Symfony default chain unless you still invoke UserKit’s checker; otherwise disabled-account enforcement may be skipped.
+The checker is attached automatically to **every security-enabled firewall** (no `user_checker` firewall option needed). At compile time the bundle tags it `security.user_checker.<firewall>` and points the firewall checker at Symfony’s per-firewall chain (`security.user_checker.chain.<firewall>`). If a firewall already sets its own `user_checker`, that service is kept in the same chain, so both run. Firewalls with `security: false` are untouched. Set `account_status.enabled: false` on every profile to opt out.
+
 - Users with `enabled: false` (or the configured field) cannot authenticate — Symfony throws `DisabledException`.
 - If the entity implements `AccountStatusInterface`, `isEnabled()` is used.
 - Otherwise the configured property is read via the PropertyAccess component.
@@ -74,9 +75,34 @@ When `twig: true` and `symfony/twig-bundle` is installed:
 
 ## Session invalidation on disable
 
-When `account_status.invalidate_sessions_on_disable: true`, `AccountDisabledListener` runs on Doctrine `preUpdate` / `prePersist`.
+When a profile sets `account_status.invalidate_sessions_on_disable: true`, `AccountDisabledListener` is registered as a Doctrine **entity listener** on that profile’s `user_class` (event `postUpdate`). When the configured enabled field changes from `true` to `false` in a flush, it calls `SessionInvalidatorInterface::invalidateSessionsForUser($user)`.
 
-If `enabled` changes from `true` to `false`, `DefaultSessionInvalidator` clears sessions for that user. Replace `SessionInvalidatorInterface` with a custom implementation if your app stores sessions differently.
+The default implementation, `DefaultSessionInvalidator`, is a **no-op**: Symfony has no generic API to find and destroy another user’s sessions, so nothing is cleared out of the box. The disabled user can no longer log in (see the checker above), but an already-open session stays valid until it expires unless you plug in a real invalidator, for example:
+
+- **Database / Redis session store** — store the user identifier next to each session (e.g. a `user_id` column on a `PdoSessionHandler` table, or a Redis set per user) and delete those rows/keys.
+- **Remember-me** — with persistent tokens, delete the user’s rows in `rememberme_token`.
+
+```php
+use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Symfony\Component\DependencyInjection\Attribute\AsAlias;
+
+#[AsAlias(SessionInvalidatorInterface::class)]
+final class PdoSessionInvalidator implements SessionInvalidatorInterface
+{
+    public function __construct(private readonly \PDO $pdo)
+    {
+    }
+
+    public function invalidateSessionsForUser(object $user): void
+    {
+        $this->pdo->prepare('DELETE FROM sessions WHERE user_id = :id')->execute(['id' => $user->getId()]);
+    }
+}
+```
+
+The invalidator runs inside Doctrine `postUpdate`: do not call `flush()` from it.
+
+Without a session store, you can still log disabled users out on their next request by making the user entity implement Symfony’s `EquatableInterface` and returning `false` from `isEqualTo()` when the refreshed user’s enabled flag differs from the one stored in the session; the firewall then drops the stale token.
 
 ## Entity traits (optional)
 

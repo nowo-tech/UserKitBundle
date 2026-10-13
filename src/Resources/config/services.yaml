@@ -17,10 +17,9 @@ services:
             $profiles: '%nowo_user_kit.profiles%'
             $defaultProfileName: '%nowo_user_kit.default_profile%'
 
-    # Blocks authentication when the user account is disabled (security.user_checker).
-    Nowo\UserKitBundle\Security\AccountStatusUserChecker:
-        tags:
-            - { name: security.user_checker }
+    # Blocks authentication when the user account is disabled. Attached to every security-enabled
+    # firewall (security.user_checker.<firewall>) by DependencyInjection\Compiler\AccountStatusUserCheckerPass.
+    Nowo\UserKitBundle\Security\AccountStatusUserChecker: ~
 
     # Resolves whether a user is currently online from lastActivityAt.
     Nowo\UserKitBundle\Presence\UserPresenceResolver: ~
@@ -28,10 +27,9 @@ services:
     # Updates lastActivityAt on authenticated requests (throttled).
     Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber: ~
 
-    # Optional: invalidates sessions when enabled is set to false on postUpdate.
-    Nowo\UserKitBundle\EventListener\AccountDisabledListener:
-        tags:
-            - { name: doctrine.orm.entity_listener, event: postUpdate, entity: null, lazy: true, method: postUpdate }
+    # Optional: calls SessionInvalidatorInterface when enabled flips to false (Doctrine postUpdate).
+    # Entity listener tags (one per profile user_class) are added by NowoUserKitExtension.
+    Nowo\UserKitBundle\EventListener\AccountDisabledListener: ~
 
     Nowo\UserKitBundle\Session\SessionInvalidatorInterface:
         alias: Nowo\UserKitBundle\Session\DefaultSessionInvalidator
