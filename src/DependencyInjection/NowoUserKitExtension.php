@@ -13,13 +13,36 @@ use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
+use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Twig\Extension\AbstractExtension;
 
+use function is_array;
+use function is_string;
 use function sprintf;
 
-final class NowoUserKitExtension extends Extension
+final class NowoUserKitExtension extends Extension implements PrependExtensionInterface
 {
+    /**
+     * Build-time parameter (dot prefix: removed from the compiled container) holding the AuthKit
+     * user class read from the raw `nowo_auth_kit` configuration in {@see prepend()}.
+     *
+     * prepend() runs for every extension before any load(), so this does not depend on whether
+     * AuthKitBundle is registered before or after this bundle.
+     */
+    private const AUTH_KIT_USER_CLASS_PARAMETER = '.nowo_user_kit.auth_kit_user_class';
+
+    /**
+     * Captures the AuthKit user class from its raw configuration (independent of bundle order).
+     */
+    public function prepend(ContainerBuilder $container): void
+    {
+        $userClass = self::findAuthKitUserClass($container);
+        if ($userClass !== null) {
+            $container->setParameter(self::AUTH_KIT_USER_CLASS_PARAMETER, $userClass);
+        }
+    }
+
     public function load(array $configs, ContainerBuilder $container): void
     {
         $configuration = new Configuration();
@@ -101,6 +124,28 @@ final class NowoUserKitExtension extends Extension
     }
 
     /**
+     * Reads the default-profile user class from the raw (unprocessed) AuthKit configuration.
+     * Later configuration files win, mirroring how Symfony merges them.
+     */
+    private static function findAuthKitUserClass(ContainerBuilder $container): ?string
+    {
+        foreach (array_reverse($container->getExtensionConfig('nowo_auth_kit')) as $authConfig) {
+            $candidate = $authConfig['user_class'] ?? null;
+            if (!is_string($candidate) && is_array($authConfig['profiles'] ?? null) && $authConfig['profiles'] !== []) {
+                $profileName = $authConfig['default_profile'] ?? array_key_first($authConfig['profiles']);
+                $profile     = $authConfig['profiles'][$profileName] ?? null;
+                $candidate   = is_array($profile) ? ($profile['user_class'] ?? null) : null;
+            }
+
+            if (is_string($candidate) && $candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param array<string, array<string, mixed>> $profiles
      */
     private function resolveMissingUserClasses(array &$profiles, string $defaultProfileName, ContainerBuilder $container): void
@@ -109,6 +154,13 @@ final class NowoUserKitExtension extends Extension
             return;
         }
 
+        if ($container->hasParameter(self::AUTH_KIT_USER_CLASS_PARAMETER)) {
+            $profiles[$defaultProfileName]['user_class'] = $container->getParameter(self::AUTH_KIT_USER_CLASS_PARAMETER);
+
+            return;
+        }
+
+        // Legacy fallback: parameter set by AuthKit when it happened to be loaded first (or by the app).
         if ($container->hasParameter('nowo_auth_kit.user_class')) {
             $profiles[$defaultProfileName]['user_class'] = $container->getParameter('nowo_auth_kit.user_class');
 

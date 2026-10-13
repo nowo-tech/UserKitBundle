@@ -89,7 +89,7 @@ Prefer the `profiles` layout for new projects or when adding a second user entit
 
 ## AuthKit integration
 
-If `nowo_auth_kit.user_class` is set and the **default profile** omits `user_class`, UserKit inherits the AuthKit user class automatically.
+If `nowo_auth_kit.user_class` is set and the **default profile** omits `user_class`, UserKit inherits the AuthKit user class automatically. It is read from the AuthKit configuration (flat `user_class` or its default profile) at prepend time, so the order of the bundles in `config/bundles.php` does not matter.
 
 Use the same entity for both bundles so the `UserChecker` applies to login flows provided by AuthKit.
 

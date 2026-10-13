@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Symfony 7.4+ required** by Composer (was `^7.0`; 7.4 was already the documented/tested minimum).
+- No configuration changes. With AuthKit installed, omitting `user_class` on the default profile now works regardless of bundle order in `config/bundles.php`.
+
 ## To 1.2.0
 
 From **1.1.13** — security: AccountStatusUserChecker enforced on every firewall; session listener attached.
