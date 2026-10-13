@@ -17,6 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
 
+use function dirname;
 use function sprintf;
 
 /**
@@ -99,6 +100,13 @@ final class TestKernel extends Kernel
                             'is_bundle' => false,
                             'dir'       => __DIR__ . '/Entity',
                             'prefix'    => 'Nowo\\UserKitBundle\\Tests\\Integration\\Fixtures\\Entity',
+                        ],
+                        // Ready-made embeddables (UiPreferences, ProductTourProgress), as documented in USAGE.md.
+                        'NowoUserKitModel' => [
+                            'type'      => 'attribute',
+                            'is_bundle' => false,
+                            'dir'       => dirname(__DIR__, 3) . '/src/Model',
+                            'prefix'    => 'Nowo\\UserKitBundle\\Model',
                         ],
                     ],
                 ],

@@ -65,7 +65,7 @@ final class Configuration implements ConfigurationInterface
                 ->end()
                 ->booleanNode('twig')
                     ->defaultTrue()
-                    ->info('Register user_is_online Twig helper when Twig is installed.')
+                    ->info('Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.')
                 ->end()
             ->end();
 

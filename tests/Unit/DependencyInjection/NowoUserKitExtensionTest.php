@@ -10,6 +10,7 @@ use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
+use Nowo\UserKitBundle\Twig\UiPreferencesExtension;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -169,6 +170,7 @@ final class NowoUserKitExtensionTest extends TestCase
             'twig'       => false,
         ]], $container);
 
+        $this->assertFalse($container->hasDefinition(UiPreferencesExtension::class));
         $this->assertFalse($container->hasDefinition(UserPresenceExtension::class));
     }
 

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.4.0] - 2026-10-13](#140---2026-10-13)
 - [[1.3.0] - 2026-10-13](#130---2026-10-13)
 - [[1.2.0] - 2026-10-13](#120---2026-10-13)
 - [[1.1.13] - 2026-10-13](#1113---2026-10-13)
@@ -30,6 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-10-13
+
+### Added
+
+- **UI preferences** (spec `002-ui-preferences`): `Model\UiPreferencesTrait` + `UiPreferencesInterface` + ready-made `Model\UiPreferences` embeddable with the generic display columns `preferred_locale`, `preferred_theme`, `preferred_content_width`, `preferred_ui_density`, `preferred_motion`, `preferred_font_scale`, `preferred_contrast`, `preferred_sidebar`, `preferred_footer` (explicit names, nullable strings, no DB default). Backed enums under `Model\Preference\` (`Theme`, `ContentWidth`, `UiDensity`, `Motion`, `FontScale`, `Contrast`, `SidebarMode`, `FooterMode`) with `DEFAULT`, `values()` and `normalize()`. Setters accept the enum or a raw string (unknown values stored as null); `applyMissingUiPreferences()` and `resetUiPreferences()`.
+- **Product tour progress**: `Model\ProductTourProgressTrait` + `ProductTourProgressInterface` + `Model\ProductTourProgress` embeddable (`product_tour_seen_at`, `product_tour_seen_pages`) with `markPageSeen()`, `hasSeenPage()`, `getEnabledPages()`, `syncEnabledPages()`, `markProductTourSeen()`, `clearProductTourSeen()`; the tour catalog is passed per call or declared by overriding `productTourPages()`.
+- Twig `user_ui_html_attributes(subject, {resolved: false})` and the `Preference\UiPreferencesHtmlAttributes` service: `<html>` `data-theme` / `data-user-*` / `data-footer-fixed` attributes for a pre-paint theme boot script.
+- `Model\ModelResolver` to find the preference models on a user (`getUiPreferences()`, `getProductTourProgress()`).
+
+### Changed
+
+- `NowoUserKitExtension::findAuthKitUserClass()` is now an instance method (behaviour-neutral Rector fix).
+- `igor.json` excludes `src/Model/` (entity traits / embeddables / enums, never container services) from the worker-state audit.
+
+[1.4.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.4.0
 
 ## [1.3.0] - 2026-10-13
 

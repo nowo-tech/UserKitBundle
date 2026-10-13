@@ -6,7 +6,7 @@ nowo_user_kit:
     # Profile used when no profile name is passed to user_is_online() or UserPresenceResolver.
     default_profile: default
 
-    # Register user_is_online Twig helper when Twig is installed.
+    # Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.
     twig: true
 
     profiles:

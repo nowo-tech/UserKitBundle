@@ -19,6 +19,8 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Named profiles** — separate config per user entity (`User`, `Admin`, …) with O(1) class resolution
 - **Session invalidation hook** — optional Doctrine listener that calls your `SessionInvalidatorInterface` when an account is disabled (default implementation is a no-op)
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
+- **UI preferences** — `UiPreferences` embeddable / `UiPreferencesTrait` (locale, theme, width, density, motion, font scale, contrast, sidebar, footer) and the Twig `user_ui_html_attributes()` helper for `<html>` `data-*` attributes
+- **Product tour progress** — `ProductTourProgress` embeddable / trait (`markPageSeen()`, `hasSeenPage()`, `syncEnabledPages()`)
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 
 ## Quick start
@@ -96,6 +98,7 @@ make igor
 - [FrankenPHP worker audit](docs/FRANKENPHP-WORKER-AUDIT.md)
 - [Baseline product spec](specs/001-baseline/spec.md)
 - [Code inventory](specs/001-baseline/code-inventory.md)
+- [UI preferences spec (002)](specs/002-ui-preferences/spec.md)
 ## Tests and coverage
 
 - **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)

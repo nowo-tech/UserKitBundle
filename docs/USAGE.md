@@ -122,6 +122,128 @@ class User implements UserInterface, AccountStatusInterface, LastActivityInterfa
 
 Customize field names via configuration (`account_status.field`, `last_activity.field`) when not using the default trait property names.
 
+## UI preferences
+
+Since **1.4.0**. Generic display preferences stored as columns on the user table: preferred locale, theme, content width, density, motion, font scale, contrast, sidebar and footer.
+
+| Column | Type | Length | Nullable | PHP default | Choices (enum) |
+| --- | --- | --- | --- | --- | --- |
+| `preferred_locale` | string | 8 | yes | `null` (getter falls back to `en`) | free (trimmed, lower-cased) |
+| `preferred_theme` | string | 8 | yes | `light` | `Theme`: `light`, `dark` |
+| `preferred_content_width` | string | 8 | yes | `content` | `ContentWidth`: `content`, `full` |
+| `preferred_ui_density` | string | 16 | yes | `comfortable` | `UiDensity`: `comfortable`, `compact` |
+| `preferred_motion` | string | 16 | yes | `system` | `Motion`: `system`, `reduce`, `full` |
+| `preferred_font_scale` | string | 8 | yes | `md` | `FontScale`: `sm`, `md`, `lg` |
+| `preferred_contrast` | string | 8 | yes | `system` | `Contrast`: `system`, `more` |
+| `preferred_sidebar` | string | 16 | yes | `expanded` | `SidebarMode`: `expanded`, `rail`, `collapsed` |
+| `preferred_footer` | string | 16 | yes | `scroll` | `FooterMode`: `scroll`, `fixed` |
+
+Column names are explicit (independent of the Doctrine naming strategy) and there is no database default. The enums live in `Nowo\UserKitBundle\Model\Preference\` and expose `DEFAULT`, `values()` and `normalize()`.
+
+**Option A — ready-made embeddable** (requires the [Doctrine mapping entry](CONFIGURATION.md#doctrine-mapping-for-the-kit-embeddables)):
+
+```php
+use Nowo\UserKitBundle\Model\UiPreferences;
+
+#[ORM\Entity]
+class User
+{
+    #[ORM\Embedded(class: UiPreferences::class, columnPrefix: false)]
+    private UiPreferences $uiPreferences;
+
+    public function __construct()
+    {
+        $this->uiPreferences = new UiPreferences();
+    }
+
+    public function getUiPreferences(): UiPreferences
+    {
+        return $this->uiPreferences;
+    }
+}
+```
+
+**Option B — trait in your own embeddable or entity**, next to host-specific columns (same column names, so switching between A and B needs no migration):
+
+```php
+use Nowo\UserKitBundle\Model\UiPreferencesInterface;
+use Nowo\UserKitBundle\Model\UiPreferencesTrait;
+
+#[ORM\Embeddable]
+class UserUiPreferences implements UiPreferencesInterface
+{
+    use UiPreferencesTrait;
+
+    #[ORM\Column(options: ['default' => true])]
+    private bool $pushNotificationsEnabled = true; // host-only column
+}
+```
+
+API (from `UiPreferencesTrait`):
+
+- `getPreferred*()` always returns a valid choice; `getPreferred*Raw()` returns the stored value (nullable).
+- `setPreferred*(Enum|string|null)` trims and lower-cases strings; unknown values are stored as `null` (no exception), so raw form / AJAX input can be passed as-is. Setters return `static`.
+- `applyMissingUiPreferences(string $defaultLocale = 'en')` fills null columns with the defaults (call it from a `prePersist` listener so new accounts store concrete values).
+- `resetUiPreferences()` clears every column (GDPR erasure).
+
+### `<html>` data attributes
+
+`user_ui_html_attributes(subject, {resolved: false})` prints the attributes read by a pre-paint theme boot script. `subject` is a `UiPreferencesInterface` or a user exposing `getUiPreferences()`; guests (`null`) or users without preferences print nothing.
+
+```twig
+<html lang="{{ app.request.locale }}" {{ user_ui_html_attributes(app.user) }}>
+```
+
+| Attribute | Value |
+| --- | --- |
+| `data-footer-fixed` | `1`, only when the footer preference is `fixed` |
+| `data-theme`, `data-user-theme` | theme |
+| `data-user-density` | density |
+| `data-user-motion` | motion |
+| `data-user-font-scale` | font scale |
+| `data-user-contrast` | contrast |
+| `data-user-sidebar` | sidebar mode |
+| `data-user-footer` | footer mode |
+| with `resolved: true` also `data-ui-density`, `data-motion`, `data-font-scale`, `data-contrast`, `data-content-width` | the resolved values, for pages rendered without the boot script |
+
+The boot script reads the `data-user-*` inputs and writes the resolved attributes (`data-theme`, `data-ui-density`, `data-motion`, `data-font-scale`, `data-contrast`) that CSS selects on; the names match the existing Beacon contract and the planned UiKit theme boot. Outside Twig, use the `UiPreferencesHtmlAttributes` service (`build()` returns the array, `render()` the escaped string).
+
+## Product tour progress
+
+Since **1.4.0**. Seen-page tracking for product tours (the tour driver and step content stay in the application):
+
+| Column | Type | Nullable |
+| --- | --- | --- |
+| `product_tour_seen_at` | `datetime_immutable` | yes — set when every tour is done or suppressed |
+| `product_tour_seen_pages` | `json` | yes — list of completed tour page ids |
+
+Use the ready-made `ProductTourProgress` embeddable (`#[ORM\Embedded(class: ProductTourProgress::class, columnPrefix: false)]`) or `ProductTourProgressTrait` in your own class. Tour page ids are strings or backed enums. The host catalog is passed as `$knownPages`, or declared once by overriding `productTourPages()` in the class using the trait:
+
+```php
+#[ORM\Embeddable]
+class UserUiPreferences implements UiPreferencesInterface, ProductTourProgressInterface
+{
+    use ProductTourProgressTrait;
+    use UiPreferencesTrait;
+
+    protected function productTourPages(): array
+    {
+        return ProductTourPage::cases(); // host enum
+    }
+}
+
+$preferences->markPageSeen(ProductTourPage::Dashboard); // sets product_tour_seen_at once every page is seen
+$preferences->hasSeenPage('dashboard');
+$preferences->getEnabledPages();                         // pages whose tour should still auto-start
+$preferences->syncEnabledPages($form->get('pages')->getData()); // settings form: "replay these tours"
+$preferences->markProductTourSeen();                     // suppress every tour
+$preferences->clearProductTourSeen();
+```
+
+Without a catalog, `markPageSeen()` / `hasSeenPage()` accept any id; `getEnabledPages()` and `syncEnabledPages()` need one and throw `LogicException` otherwise.
+
+`ModelResolver::uiPreferences($user)` and `ModelResolver::productTour($user)` find the models on a user (the user itself, or `getUiPreferences()` / `getProductTourProgress()` / `getProductTour()`).
+
 ## Translation overrides (REQ-I18N-001)
 
 Domain: **`NowoUserKitBundle`**

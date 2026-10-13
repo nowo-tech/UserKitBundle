@@ -12,7 +12,7 @@ Each **profile** maps a `user_class` to its own account-status and last-activity
 | --- | --- | --- | --- |
 | `default_profile` | string | first profile key | Profile used when no name is passed to `UserPresenceResolver::isOnline()` or Twig `user_is_online()`. |
 | `profiles` | map | `default` | Named profile definitions (at least one required). |
-| `twig` | bool | `true` | Register `user_is_online` when Twig is installed. |
+| `twig` | bool | `true` | Register the `user_is_online` and `user_ui_html_attributes` Twig functions when Twig is installed. |
 
 Each profile supports:
 
@@ -86,6 +86,24 @@ nowo_user_kit:
 ```
 
 Prefer the `profiles` layout for new projects or when adding a second user entity.
+
+## Doctrine mapping for the kit embeddables
+
+The ready-made embeddables `Nowo\UserKitBundle\Model\UiPreferences` and `Nowo\UserKitBundle\Model\ProductTourProgress` (since 1.4.0) live outside your `src/Entity` mapping, so Doctrine needs a mapping entry for the kit model namespace:
+
+```yaml
+# config/packages/doctrine.yaml
+doctrine:
+    orm:
+        mappings:
+            NowoUserKitBundle:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/vendor/nowo-tech/user-kit-bundle/src/Model'
+                prefix: 'Nowo\UserKitBundle\Model'
+```
+
+Not needed when you only use the traits (`UiPreferencesTrait`, `ProductTourProgressTrait`) inside your own entity or embeddable. No other configuration key is involved: the preference columns are plain entity mapping. See [USAGE](USAGE.md#ui-preferences).
 
 ## AuthKit integration
 

@@ -9,6 +9,7 @@ use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
+use Nowo\UserKitBundle\Twig\UiPreferencesExtension;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -37,7 +38,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        $userClass = self::findAuthKitUserClass($container);
+        $userClass = $this->findAuthKitUserClass($container);
         if ($userClass !== null) {
             $container->setParameter(self::AUTH_KIT_USER_CLASS_PARAMETER, $userClass);
         }
@@ -91,6 +92,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);
+            $container->removeDefinition(UiPreferencesExtension::class);
         }
     }
 
@@ -127,7 +129,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
      * Reads the default-profile user class from the raw (unprocessed) AuthKit configuration.
      * Later configuration files win, mirroring how Symfony merges them.
      */
-    private static function findAuthKitUserClass(ContainerBuilder $container): ?string
+    private function findAuthKitUserClass(ContainerBuilder $container): ?string
     {
         foreach (array_reverse($container->getExtensionConfig('nowo_auth_kit')) as $authConfig) {
             $candidate = $authConfig['user_class'] ?? null;

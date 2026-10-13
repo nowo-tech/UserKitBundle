@@ -35,3 +35,6 @@ services:
         alias: Nowo\UserKitBundle\Session\DefaultSessionInvalidator
 
     Nowo\UserKitBundle\Session\DefaultSessionInvalidator: ~
+
+    # Builds the <html> data-* attributes from UiPreferencesInterface (Twig: user_ui_html_attributes()).
+    Nowo\UserKitBundle\Preference\UiPreferencesHtmlAttributes: ~

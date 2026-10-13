@@ -1264,7 +1264,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             update_throttle?: int|Param, // Default: 30
  *         },
  *     }>,
- *     twig?: bool|Param, // Register user_is_online Twig helper when Twig is installed. // Default: true
+ *     twig?: bool|Param, // Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed. // Default: true
  *     ...<string, mixed>
  * }
  * @psalm-type NowoHotReloadConfig = array{

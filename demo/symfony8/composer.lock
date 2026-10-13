@@ -934,7 +934,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/user-kit-bundle",
-                "reference": "d585b5e2bb0497320338e815cf001d98253bc65c"
+                "reference": "2f6fadca9299d2b137ae8246099022c29fbaaaad"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.10 || ^3.0",

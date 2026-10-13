@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.4.0](#to-140)
 - [To 1.3.0](#to-130)
 - [To 1.2.0](#to-120)
 - [To 1.1.13](#to-1113)
@@ -26,6 +27,19 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.4.0
+
+From **1.3.0** — opt-in UI preferences and product-tour progress models.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+- No configuration change and no schema change unless you adopt the new models.
+- To use the ready-made `UiPreferences` / `ProductTourProgress` embeddables, add the Doctrine mapping entry for `Nowo\UserKitBundle\Model` (see [CONFIGURATION](CONFIGURATION.md#doctrine-mapping-for-the-kit-embeddables)); the traits need no mapping entry.
+- **Adopting over existing columns:** the column names, types and lengths match the common `preferred_*` / `product_tour_seen_*` layout (Symfony Beacon). Embed with `columnPrefix: false` (or `use` the traits in your existing embeddable) and run `doctrine:schema:validate`: no migration is expected. Remove your own copies of the properties first (a class cannot declare a property that a trait it uses also declares with a different default).
+- With `twig: false`, `user_ui_html_attributes()` is not registered either.
 
 ## To 1.3.0
 
