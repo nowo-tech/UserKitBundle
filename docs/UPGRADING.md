@@ -1,5 +1,30 @@
 # Upgrading
 
+## Table of contents
+
+- [Unreleased](#unreleased)
+- [To 1.3.0](#to-130)
+- [To 1.2.0](#to-120)
+- [To 1.1.13](#to-1113)
+- [To 1.1.12](#to-1112)
+- [To 1.1.11](#to-1111)
+- [From 1.1.9 to 1.1.10](#from-119-to-1110)
+- [From 1.1.8 to 1.1.9](#from-118-to-119)
+- [1.1.8](#118)
+- [1.1.7](#117)
+- [1.1.6](#116)
+- [1.1.5](#115)
+- [1.1.4](#114)
+- [1.1.3](#113)
+- [1.1.2](#112)
+- [1.1.1](#111)
+- [1.1.0](#110)
+- [1.0.x](#10x)
+  - [1.0.3](#103)
+  - [1.0.2](#102)
+  - [1.0.1](#101)
+  - [1.0.0](#100)
+
 ## Unreleased
 
 ## To 1.3.0
@@ -54,26 +79,6 @@ php bin/console cache:clear
 - No application upgrade steps for require-dev Igor tooling (REQ-CS-008). Consumers do not pull `igor-php/igor-php` transitively.
 
 This document describes how to upgrade between versions of User Kit Bundle.
-
-## Table of contents
-
-- [To 1.3.0](#to-130)
-- [To 1.2.0](#to-120)
-- [To 1.1.13](#to-1113)
-- [To 1.1.12](#to-1112)
-- [To 1.1.11](#to-1111)
-- [From 1.1.9 to 1.1.10](#from-119-to-1110)
-- [From 1.1.8 to 1.1.9](#from-118-to-119)
-- [1.1.8](#118)
-- [1.1.7](#117)
-- [1.1.6](#116)
-- [1.1.5](#115)
-- [1.1.4](#114)
-- [1.1.3](#113)
-- [1.1.2](#112)
-- [1.1.1](#111)
-- [1.1.0](#110)
-- [1.0.x](#10x)
 
 ## From 1.1.9 to 1.1.10
 
