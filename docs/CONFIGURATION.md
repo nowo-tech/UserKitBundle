@@ -13,6 +13,7 @@ Each **profile** maps a `user_class` to its own account-status and last-activity
 | `default_profile` | string | first profile key | Profile used when no name is passed to `UserPresenceResolver::isOnline()` or Twig `user_is_online()`. |
 | `profiles` | map | `default` | Named profile definitions (at least one required). |
 | `twig` | bool | `true` | Register the `user_is_online` and `user_ui_html_attributes` Twig functions when Twig is installed. |
+| `personal_data` | map | see [Personal data](#personal-data-gdpr) | GDPR export / erasure SPI (since 1.5.0, opt-in). |
 
 Each profile supports:
 
@@ -104,6 +105,26 @@ doctrine:
 ```
 
 Not needed when you only use the traits (`UiPreferencesTrait`, `ProductTourProgressTrait`) inside your own entity or embeddable. No other configuration key is involved: the preference columns are plain entity mapping. See [USAGE](USAGE.md#ui-preferences).
+
+## Personal data (GDPR)
+
+Since **1.5.0**. Opt-in; see [USAGE](USAGE.md#personal-data-export-and-erasure-gdpr).
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `personal_data.enabled` | bool | `false` | Register `PersonalDataExporter` and `PersonalDataEraser`, and autoconfigure `PersonalDataExportProviderInterface`, `PersonalDataEraserInterface` and `ErasureGuardInterface`. |
+| `personal_data.schema` | string | `nowo-user-kit/personal-data` | `schema` key of the export document. |
+| `personal_data.version` | int | `1` | `version` key of the export document (min `1`); bump it when your document shape changes. |
+| `personal_data.builtin_providers` | bool | `true` | Register the `account_status`, `last_activity`, `ui_preferences` and `product_tour` sections. |
+| `personal_data.builtin_erasers` | bool | `true` | Register the `last_activity`, `ui_preferences` and `product_tour` erasers. |
+
+```yaml
+nowo_user_kit:
+    personal_data:
+        enabled: true
+        schema: 'acme-account-export'
+        version: 2
+```
 
 ## AuthKit integration
 

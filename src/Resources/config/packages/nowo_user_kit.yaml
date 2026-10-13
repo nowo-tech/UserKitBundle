@@ -9,6 +9,17 @@ nowo_user_kit:
     # Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.
     twig: true
 
+    # GDPR self-service SPI (PersonalDataExporter / PersonalDataEraser). Opt-in.
+    personal_data:
+        enabled: false
+        # "schema" and "version" keys of the export document.
+        schema: 'nowo-user-kit/personal-data'
+        version: 1
+        # Built-in sections: account_status, last_activity, ui_preferences, product_tour.
+        builtin_providers: true
+        # Built-in erasers: last_activity, ui_preferences, product_tour.
+        builtin_erasers: true
+
     profiles:
         default:
             # FQCN of the application user entity (required unless nowo_auth_kit.user_class is set).

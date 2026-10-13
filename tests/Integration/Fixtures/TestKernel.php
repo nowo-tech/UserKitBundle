@@ -6,8 +6,13 @@ namespace Nowo\UserKitBundle\Tests\Integration\Fixtures;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Nowo\UserKitBundle\NowoUserKitBundle;
+use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
+use Nowo\UserKitBundle\PersonalData\PersonalDataExporter;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 use Nowo\UserKitBundle\Tests\Integration\Fixtures\Entity\User;
+use Nowo\UserKitBundle\Tests\Integration\Fixtures\PersonalData\AccountSectionProvider;
+use Nowo\UserKitBundle\Tests\Integration\Fixtures\PersonalData\AnonymizeEmailEraser;
+use Nowo\UserKitBundle\Tests\Integration\Fixtures\PersonalData\LastAdminGuard;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
@@ -115,6 +120,14 @@ final class TestKernel extends Kernel
             $container->loadFromExtension('nowo_user_kit', array_replace(['user_class' => User::class], $this->userKitConfig));
 
             $container->register(AppUserChecker::class, AppUserChecker::class)->setPublic(true);
+            foreach ([AccountSectionProvider::class, AnonymizeEmailEraser::class, LastAdminGuard::class] as $class) {
+                $container->register($class, $class)->setAutoconfigured(true);
+            }
+
+            if (true === ($this->userKitConfig['personal_data']['enabled'] ?? false)) {
+                $container->setAlias('test.personal_data.exporter', PersonalDataExporter::class)->setPublic(true);
+                $container->setAlias('test.personal_data.eraser', PersonalDataEraser::class)->setPublic(true);
+            }
             $container->register(SpySessionInvalidator::class, SpySessionInvalidator::class)->setPublic(true);
             $container->setAlias(SessionInvalidatorInterface::class, SpySessionInvalidator::class);
         });

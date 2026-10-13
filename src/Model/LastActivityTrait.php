@@ -25,4 +25,12 @@ trait LastActivityTrait
             ? $lastActivityAt
             : DateTimeImmutable::createFromInterface($lastActivityAt);
     }
+
+    /**
+     * Forgets the last activity (GDPR erasure).
+     */
+    public function clearLastActivityAt(): void
+    {
+        $this->lastActivityAt = null;
+    }
 }

@@ -244,6 +244,90 @@ Without a catalog, `markPageSeen()` / `hasSeenPage()` accept any id; `getEnabled
 
 `ModelResolver::uiPreferences($user)` and `ModelResolver::productTour($user)` find the models on a user (the user itself, or `getUiPreferences()` / `getProductTourProgress()` / `getProductTour()`).
 
+## Personal data export and erasure (GDPR)
+
+Since **1.5.0**, with `nowo_user_kit.personal_data.enabled: true`. The kit ships the orchestration (SPI, exporter, transactional eraser, guard hook); controllers, routes, confirmation forms and domain guards stay in the application.
+
+| Tag (autoconfigured from the interface) | Interface | Role |
+| --- | --- | --- |
+| `nowo_user_kit.personal_data.export_provider` | `PersonalDataExportProviderInterface` | One section of the export document. |
+| `nowo_user_kit.personal_data.eraser` | `PersonalDataEraserInterface` | Deletes / anonymises one kind of data. |
+| `nowo_user_kit.personal_data.erasure_guard` | `ErasureGuardInterface` | Vetoes an erasure with a reason. |
+
+Order is the tag priority (higher first; `#[AsTaggedItem(priority: …)]` or `tags: [{ name: …, priority: … }]`). Host services default to `0`; the built-ins use `-100` and below, so they come after host sections / erasers.
+
+### Export
+
+```php
+use Nowo\UserKitBundle\PersonalData\PersonalDataExportProviderInterface;
+
+final class AccountSectionProvider implements PersonalDataExportProviderInterface
+{
+    public function getSectionKey(): string { return 'account'; }
+
+    public function supports(object $user): bool { return $user instanceof User; }
+
+    public function export(object $user): array
+    {
+        return ['email' => $user->getEmail(), 'created_at' => $user->getCreatedAt()];
+    }
+}
+```
+
+`PersonalDataExporter::export($user)` returns (`exportJson()` encodes it):
+
+```json
+{
+    "schema": "nowo-user-kit/personal-data",
+    "version": 1,
+    "exported_at": "2026-10-13T10:00:00+00:00",
+    "sections": {
+        "account": {"email": "jane@example.com", "created_at": "2026-01-01T00:00:00+00:00"},
+        "account_status": {"enabled": true},
+        "last_activity": {"last_activity_at": "2026-10-13T09:58:00+00:00"},
+        "ui_preferences": {"preferred_locale": "en", "preferred_theme": "dark", "...": "..."},
+        "product_tour": {"seen_at": null, "seen_pages": ["dashboard"]}
+    }
+}
+```
+
+Nested `DateTimeInterface` values become ATOM strings and enums their value (backed) or name. Section keys must be unique (`LogicException` otherwise); providers whose `supports()` returns false are skipped.
+
+Built-in sections: `account_status` (`AccountStatusInterface` or the profile `account_status.field`), `last_activity` (`LastActivityInterface` or `last_activity.field`), `ui_preferences` and `product_tour` (the 1.4.0 models, found on the user or through `getUiPreferences()` / `getProductTourProgress()`).
+
+### Erasure
+
+```php
+use Nowo\UserKitBundle\PersonalData\ErasureGuardInterface;
+use Nowo\UserKitBundle\PersonalData\ErasureRequest;
+use Nowo\UserKitBundle\PersonalData\ErasureVeto;
+
+final class LastAdminGuard implements ErasureGuardInterface
+{
+    public function check(ErasureRequest $request): ?ErasureVeto
+    {
+        return $this->isLastAdmin($request->user) ? new ErasureVeto('last_admin') : null;
+    }
+}
+```
+
+```php
+// Pre-flight for the privacy page: list<ErasureVeto> (nothing erased)
+$vetoes = $eraser->check($user, $actor);
+
+try {
+    $erased = $eraser->erase($user, $actor, ['scope' => 'self']); // list of eraser keys that ran
+} catch (ErasureVetoedException $e) {
+    $this->addFlash('error', 'privacy.'.$e->getReasons()[0]);
+}
+```
+
+`erase()` runs every guard first (any veto throws `ErasureVetoedException` with all vetoes, before anything changes), then every supporting eraser in priority order inside **one** Doctrine transaction (`wrapInTransaction()` on the entity manager of the user class), flushed once. An exception from an eraser rolls everything back. Erasers must not call `flush()` or open transactions; DBAL statements on the same connection join the transaction.
+
+`ErasureRequest` carries `user`, `actor` (nullable) and `context` (free array); `isSelfService()` is true without an actor or when the actor is the user. `ErasureVeto` has `reason` (stable code), `message` and `details` (e.g. the blocking projects).
+
+Built-in erasers: `last_activity` (`clearLastActivityAt()`, provided by `LastActivityTrait` since 1.5.0), `ui_preferences` (`resetUiPreferences()` from `UiPreferencesTrait`), `product_tour` (`clearProductTourSeen()`). Account status is not changed by the kit: disabling / anonymising the account itself is a host eraser.
+
 ## Translation overrides (REQ-I18N-001)
 
 Domain: **`NowoUserKitBundle`**

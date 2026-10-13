@@ -21,6 +21,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Optional traits** — `EnabledUserTrait`, `LastActivityTrait`
 - **UI preferences** — `UiPreferences` embeddable / `UiPreferencesTrait` (locale, theme, width, density, motion, font scale, contrast, sidebar, footer) and the Twig `user_ui_html_attributes()` helper for `<html>` `data-*` attributes
 - **Product tour progress** — `ProductTourProgress` embeddable / trait (`markPageSeen()`, `hasSeenPage()`, `syncEnabledPages()`)
+- **GDPR self-service SPI** (opt-in) — tagged export providers / erasers / erasure guards, versioned JSON `PersonalDataExporter`, transactional `PersonalDataEraser` with veto hook
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 
 ## Quick start
@@ -99,6 +100,7 @@ make igor
 - [Baseline product spec](specs/001-baseline/spec.md)
 - [Code inventory](specs/001-baseline/code-inventory.md)
 - [UI preferences spec (002)](specs/002-ui-preferences/spec.md)
+- [Personal data (GDPR) spec (003)](specs/003-personal-data/spec.md)
 ## Tests and coverage
 
 - **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)

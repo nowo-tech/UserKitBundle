@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.5.0](#to-150)
 - [To 1.4.0](#to-140)
 - [To 1.3.0](#to-130)
 - [To 1.2.0](#to-120)
@@ -27,6 +28,19 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.5.0
+
+From **1.4.0** — opt-in GDPR export / erasure SPI.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+- Nothing changes until you set `nowo_user_kit.personal_data.enabled: true` (see [CONFIGURATION](CONFIGURATION.md#personal-data-gdpr)).
+- When enabled, every service implementing `PersonalDataExportProviderInterface`, `PersonalDataEraserInterface` or `ErasureGuardInterface` is tagged automatically; the built-in sections / erasers come after host ones (priority `-100` and below). Set `builtin_providers` / `builtin_erasers` to `false` to drop them.
+- Replacing a hand-written exporter changes the document shape to `{schema, version, exported_at, sections}`: bump your `version` (or `schema`) so consumers can tell the formats apart.
+- `LastActivityTrait` gained `clearLastActivityAt()`; if your entity already declares a method with that name, PHP keeps your method.
 
 ## To 1.4.0
 

@@ -1265,6 +1265,13 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         },
  *     }>,
  *     twig?: bool|Param, // Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed. // Default: true
+ *     personal_data?: array{ // GDPR self-service SPI: PersonalDataExporter / PersonalDataEraser and their tagged providers, erasers and guards.
+ *         enabled?: bool|Param, // Register the exporter, the eraser and autoconfigure the provider / eraser / guard interfaces. // Default: false
+ *         schema?: scalar|Param|null, // Value of the "schema" key of the export document. // Default: "nowo-user-kit/personal-data"
+ *         version?: int|Param, // Value of the "version" key of the export document (bump it when the document shape changes). // Default: 1
+ *         builtin_providers?: bool|Param, // Register the account_status, last_activity, ui_preferences and product_tour export sections. // Default: true
+ *         builtin_erasers?: bool|Param, // Register the last_activity, ui_preferences and product_tour erasers. // Default: true
+ *     },
  *     ...<string, mixed>
  * }
  * @psalm-type NowoHotReloadConfig = array{

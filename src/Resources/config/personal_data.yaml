@@ -1,0 +1,36 @@
+# User Kit Bundle — GDPR self-service SPI (loaded when nowo_user_kit.personal_data.enabled is true).
+# Host providers / erasers / guards are autoconfigured from their interfaces; order = tag priority (higher first).
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: false
+        public: false
+
+    Nowo\UserKitBundle\PersonalData\PersonalDataExporter:
+        arguments:
+            $providers: !tagged_iterator nowo_user_kit.personal_data.export_provider
+            $schema: '%nowo_user_kit.personal_data.schema%'
+            $version: '%nowo_user_kit.personal_data.version%'
+
+    Nowo\UserKitBundle\PersonalData\PersonalDataEraser:
+        arguments:
+            $erasers: !tagged_iterator nowo_user_kit.personal_data.eraser
+            $guards: !tagged_iterator nowo_user_kit.personal_data.erasure_guard
+
+    # Built-in export sections (after host sections, which default to priority 0).
+    Nowo\UserKitBundle\PersonalData\Provider\AccountStatusExportProvider:
+        tags: [{ name: nowo_user_kit.personal_data.export_provider, priority: -100 }]
+    Nowo\UserKitBundle\PersonalData\Provider\LastActivityExportProvider:
+        tags: [{ name: nowo_user_kit.personal_data.export_provider, priority: -110 }]
+    Nowo\UserKitBundle\PersonalData\Provider\UiPreferencesExportProvider:
+        tags: [{ name: nowo_user_kit.personal_data.export_provider, priority: -120 }]
+    Nowo\UserKitBundle\PersonalData\Provider\ProductTourExportProvider:
+        tags: [{ name: nowo_user_kit.personal_data.export_provider, priority: -130 }]
+
+    # Built-in erasers (after host erasers).
+    Nowo\UserKitBundle\PersonalData\Eraser\LastActivityEraser:
+        tags: [{ name: nowo_user_kit.personal_data.eraser, priority: -100 }]
+    Nowo\UserKitBundle\PersonalData\Eraser\UiPreferencesEraser:
+        tags: [{ name: nowo_user_kit.personal_data.eraser, priority: -110 }]
+    Nowo\UserKitBundle\PersonalData\Eraser\ProductTourEraser:
+        tags: [{ name: nowo_user_kit.personal_data.eraser, priority: -120 }]

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.5.0] - 2026-10-13](#150---2026-10-13)
 - [[1.4.0] - 2026-10-13](#140---2026-10-13)
 - [[1.3.0] - 2026-10-13](#130---2026-10-13)
 - [[1.2.0] - 2026-10-13](#120---2026-10-13)
@@ -31,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+## [1.5.0] - 2026-10-13
+
+### Added
+
+- **GDPR self-service SPI** (spec `003-personal-data`, opt-in with `nowo_user_kit.personal_data.enabled`):
+  - `PersonalDataExportProviderInterface`, `PersonalDataEraserInterface` and `ErasureGuardInterface`, autoconfigured with the `nowo_user_kit.personal_data.export_provider` / `.eraser` / `.erasure_guard` tags and ordered by tag priority.
+  - `PersonalDataExporter`: versioned document `{schema, version, exported_at, sections}` (`schema` / `version` configurable), dates as ATOM, enums as values, duplicate section keys rejected; `exportJson()`.
+  - `PersonalDataEraser`: `check()` pre-flight and `erase()` — guards first (`ErasureVetoedException` with every `ErasureVeto`), then all supporting erasers in one Doctrine transaction, flushed once. `ErasureRequest` (user, actor, context).
+  - Built-in sections `account_status`, `last_activity`, `ui_preferences`, `product_tour` and erasers `last_activity`, `ui_preferences`, `product_tour` (`builtin_providers` / `builtin_erasers` toggles).
+- `LastActivityTrait::clearLastActivityAt()`.
+
+[1.5.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.5.0
 
 ## [1.4.0] - 2026-10-13
 

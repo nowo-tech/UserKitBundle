@@ -67,9 +67,44 @@ final class Configuration implements ConfigurationInterface
                     ->defaultTrue()
                     ->info('Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.')
                 ->end()
+                ->append($this->createPersonalDataNode())
             ->end();
 
         return $treeBuilder;
+    }
+
+    private function createPersonalDataNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('personal_data'))->getRootNode();
+        $node
+            ->info('GDPR self-service SPI: PersonalDataExporter / PersonalDataEraser and their tagged providers, erasers and guards.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')
+                    ->defaultFalse()
+                    ->info('Register the exporter, the eraser and autoconfigure the provider / eraser / guard interfaces.')
+                ->end()
+                ->scalarNode('schema')
+                    ->defaultValue('nowo-user-kit/personal-data')
+                    ->cannotBeEmpty()
+                    ->info('Value of the "schema" key of the export document.')
+                ->end()
+                ->integerNode('version')
+                    ->defaultValue(1)
+                    ->min(1)
+                    ->info('Value of the "version" key of the export document (bump it when the document shape changes).')
+                ->end()
+                ->booleanNode('builtin_providers')
+                    ->defaultTrue()
+                    ->info('Register the account_status, last_activity, ui_preferences and product_tour export sections.')
+                ->end()
+                ->booleanNode('builtin_erasers')
+                    ->defaultTrue()
+                    ->info('Register the last_activity, ui_preferences and product_tour erasers.')
+                ->end()
+            ->end();
+
+        return $node;
     }
 
     private function createAccountStatusNode(): ArrayNodeDefinition

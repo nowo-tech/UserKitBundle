@@ -7,6 +7,16 @@ namespace Nowo\UserKitBundle\DependencyInjection;
 use InvalidArgumentException;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
+use Nowo\UserKitBundle\PersonalData\Eraser\LastActivityEraser;
+use Nowo\UserKitBundle\PersonalData\Eraser\ProductTourEraser;
+use Nowo\UserKitBundle\PersonalData\Eraser\UiPreferencesEraser;
+use Nowo\UserKitBundle\PersonalData\ErasureGuardInterface;
+use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
+use Nowo\UserKitBundle\PersonalData\PersonalDataExportProviderInterface;
+use Nowo\UserKitBundle\PersonalData\Provider\AccountStatusExportProvider;
+use Nowo\UserKitBundle\PersonalData\Provider\LastActivityExportProvider;
+use Nowo\UserKitBundle\PersonalData\Provider\ProductTourExportProvider;
+use Nowo\UserKitBundle\PersonalData\Provider\UiPreferencesExportProvider;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
 use Nowo\UserKitBundle\Twig\UiPreferencesExtension;
@@ -24,6 +34,12 @@ use function sprintf;
 
 final class NowoUserKitExtension extends Extension implements PrependExtensionInterface
 {
+    public const TAG_EXPORT_PROVIDER = 'nowo_user_kit.personal_data.export_provider';
+
+    public const TAG_ERASER = 'nowo_user_kit.personal_data.eraser';
+
+    public const TAG_ERASURE_GUARD = 'nowo_user_kit.personal_data.erasure_guard';
+
     /**
      * Build-time parameter (dot prefix: removed from the compiled container) holding the AuthKit
      * user class read from the raw `nowo_auth_kit` configuration in {@see prepend()}.
@@ -90,9 +106,43 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
             $this->attachAccountDisabledListener($profiles, $container);
         }
 
+        $this->loadPersonalData($config['personal_data'], $loader, $container);
+
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);
             $container->removeDefinition(UiPreferencesExtension::class);
+        }
+    }
+
+    /**
+     * @param array{enabled: bool, schema: string, version: int, builtin_providers: bool, builtin_erasers: bool} $config
+     */
+    private function loadPersonalData(array $config, YamlFileLoader $loader, ContainerBuilder $container): void
+    {
+        $container->setParameter('nowo_user_kit.personal_data.enabled', $config['enabled']);
+        if (!$config['enabled']) {
+            return;
+        }
+
+        $container->setParameter('nowo_user_kit.personal_data.schema', $config['schema']);
+        $container->setParameter('nowo_user_kit.personal_data.version', $config['version']);
+
+        $container->registerForAutoconfiguration(PersonalDataExportProviderInterface::class)->addTag(self::TAG_EXPORT_PROVIDER);
+        $container->registerForAutoconfiguration(PersonalDataEraserInterface::class)->addTag(self::TAG_ERASER);
+        $container->registerForAutoconfiguration(ErasureGuardInterface::class)->addTag(self::TAG_ERASURE_GUARD);
+
+        $loader->load('personal_data.yaml');
+
+        if (!$config['builtin_providers']) {
+            foreach ([AccountStatusExportProvider::class, LastActivityExportProvider::class, UiPreferencesExportProvider::class, ProductTourExportProvider::class] as $id) {
+                $container->removeDefinition($id);
+            }
+        }
+
+        if (!$config['builtin_erasers']) {
+            foreach ([LastActivityEraser::class, UiPreferencesEraser::class, ProductTourEraser::class] as $id) {
+                $container->removeDefinition($id);
+            }
         }
     }
 
