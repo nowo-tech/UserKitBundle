@@ -1,7 +1,16 @@
 # Upgrading
 
-
 ## Unreleased
+
+## To 1.1.13
+
+From **1.1.12** — dependency refresh and repository maintenance.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+- No breaking changes. No application upgrade steps.
 
 ## To 1.1.12
 
@@ -26,6 +35,7 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## Table of contents
 
+- [To 1.1.13](#to-1113)
 - [To 1.1.12](#to-1112)
 - [To 1.1.11](#to-1111)
 - [From 1.1.9 to 1.1.10](#from-119-to-1110)
