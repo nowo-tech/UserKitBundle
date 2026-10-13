@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-13
+
 ### Fixed
 
 - AuthKit bridge: when the default profile omits `user_class`, UserKit now reads it from the raw `nowo_auth_kit` configuration in `prepend()` (flat `user_class` or the AuthKit default profile), so it no longer depends on AuthKitBundle being registered before UserKitBundle in `config/bundles.php`. The `nowo_auth_kit.user_class` parameter remains a fallback.
@@ -14,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Minimum Symfony version raised from 7.0 to **7.4** in `composer.json` (`^7.4 || ^8.0`), matching the documented requirement and the lowest version tested in CI; the Symfony 7.0 CI cell was removed.
+
+[1.3.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.3.0
 
 ## [1.2.0] - 2026-10-13
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## To 1.3.0
+
+From **1.2.0** — AuthKit user_class resolved in prepend() regardless of bundle order; Symfony >=7.4.
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
 - **Symfony 7.4+ required** by Composer (was `^7.0`; 7.4 was already the documented/tested minimum).
 - No configuration changes. With AuthKit installed, omitting `user_class` on the default profile now works regardless of bundle order in `config/bundles.php`.
 
@@ -49,6 +57,7 @@ This document describes how to upgrade between versions of User Kit Bundle.
 
 ## Table of contents
 
+- [To 1.3.0](#to-130)
 - [To 1.2.0](#to-120)
 - [To 1.1.13](#to-1113)
 - [To 1.1.12](#to-1112)
