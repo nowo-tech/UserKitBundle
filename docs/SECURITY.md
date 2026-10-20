@@ -4,6 +4,9 @@
 
 - [Supported Versions](#supported-versions)
 - [Reporting a Vulnerability](#reporting-a-vulnerability)
+  - [How to Report](#how-to-report)
+  - [Response Timeline](#response-timeline)
+  - [Disclosure Policy](#disclosure-policy)
 - [Preferred Languages](#preferred-languages)
 - [Contact](#contact)
 - [Release security checklist (12.4.1)](#release-security-checklist-1241)

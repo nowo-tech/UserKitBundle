@@ -18,6 +18,8 @@ Symfony bundle for **user account state and presence**:
 2. **`lastActivityAt`** updated on authenticated HTTP requests with a configurable write throttle.
 3. **`online_threshold`** (seconds) to determine whether a user is still “connected” based on last activity.
 4. Optional **session invalidation** when an account transitions from enabled to disabled.
+5. Optional **UI preferences** (nine `preferred_*` columns, pre-paint `<html>` attributes) and **product-tour progress** — feature spec [`002-ui-preferences`](../002-ui-preferences/spec.md).
+6. Optional **personal data (GDPR) SPI**: export providers, erasers and erasure guards orchestrated in one transaction — feature spec [`003-personal-data`](../003-personal-data/spec.md).
 
 Complements **AuthKitBundle** (login/register/reset UI and routes) without requiring it. Complements **LoginThrottleBundle** (rate limiting) — different concern: account status vs. brute-force throttling.
 
@@ -138,7 +140,7 @@ Complements **AuthKitBundle** (login/register/reset UI and routes) without requi
 
 ## Success Criteria
 
-- **SC-001**: All production files listed in `code-inventory.md` implemented and mapped.
+- **SC-001**: **61/61** production files under `src/` mapped in [`code-inventory.md`](code-inventory.md), including the `002-ui-preferences` and `003-personal-data` features (audited 2026-10-20; `git ls-files src | wc -l`).
 - **SC-002**: Disabled user cannot authenticate with valid password (functional test).
 - **SC-003**: Enabled user authenticates without regression (functional test).
 - **SC-004**: Last activity updates respect throttle (unit test).

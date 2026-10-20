@@ -1,30 +1,31 @@
-# Dependencies
+# Dependencies: installed by Composer inside the container, never committed.
 /vendor
 
-# Environment (do not commit secrets; use .env.example as template)
+# Local environment: secrets and machine-specific values; .env.example is the committed template (REQ-DEMO-003).
 .env
 .env.local
 .env.*.local
 .env.dev
 
-# Symfony / runtime
+# Symfony runtime cache and logs: regenerated at boot (keep the .gitkeep placeholders).
 /var/cache/*
 /var/log/*
 !/var/cache/.gitkeep
 !/var/log/.gitkeep
 
-# PHPUnit
+# Test and coverage artifacts: produced locally / in CI only.
 .phpunit.cache
 .phpunit.result.cache
 /coverage
 coverage.xml
 
-# IDE / OS
+# IDE / OS files: personal editor and operating-system noise.
 .idea
 .vscode
 *.swp
 .DS_Store
 
+# Symfony Flex managed block (kept so recipes stay idempotent).
 ###> symfony/framework-bundle ###
 /.env.local
 /.env.local.php
@@ -35,7 +36,7 @@ coverage.xml
 /vendor/
 ###< symfony/framework-bundle ###
 
-# Archives / compressed
+# Archives / compressed: never part of the demo sources.
 *.zip
 *.tar
 *.tar.gz
@@ -43,6 +44,7 @@ coverage.xml
 *.rar
 *.7z
 
+# PHPUnit Flex managed block.
 ###> phpunit/phpunit ###
 /phpunit.xml
 /.phpunit.cache/

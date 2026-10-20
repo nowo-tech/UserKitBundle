@@ -9,6 +9,18 @@
 | **Verdict** | ✅ **Viable under scenario B (100%)** — the last-activity throttle map is bounded, the subscriber resets closed entity managers and survives flush failures, and it ignores tokens outside a security-enabled firewall. Safe under FrankenPHP worker with `FRANKENPHP_RESET_KERNEL` unset/false (kernel reused; `services_resetter` still runs). |
 | Remediation | W-01 and W-02 resolved in `src/EventSubscriber/LastActivitySubscriber.php`; `NowoUserKitBundle` no longer mutates `$extension` (convention-based DI extension). Regression tests in `tests/Unit/EventSubscriber/LastActivitySubscriberWorkerTest.php` |
 
+## Table of contents
+
+- [Execution model assumed](#execution-model-assumed)
+- [Summary](#summary)
+- [Services reviewed](#services-reviewed)
+- [Findings](#findings)
+  - [W-01 — Last-activity throttle map grows without bound (Medium)](#w-01--last-activity-throttle-map-grows-without-bound-medium)
+  - [W-02 — `flush()` on `kernel.request` depends on a healthy EntityManager (Medium)](#w-02--flush-on-kernelrequest-depends-on-a-healthy-entitymanager-medium)
+  - [W-03 — Profile resolution cache is class-keyed and bounded (Info)](#w-03--profile-resolution-cache-is-class-keyed-and-bounded-info)
+- [Usage recommendations in worker mode](#usage-recommendations-in-worker-mode)
+- [Re-audit triggers](#re-audit-triggers)
+
 ## Execution model assumed
 
 FrankenPHP worker mode boots the Symfony kernel once per worker and serves many requests with the same container. This audit assumes the **strict** variant: the kernel is **not** rebooted between requests (`FRANKENPHP_RESET_KERNEL` unset/false — the production default). Two scenarios are evaluated:

@@ -1,4 +1,4 @@
-name: user-kit-demo-symfony8
+name: user-kit-bundle-demo-symfony-8
 
 services:
   php:

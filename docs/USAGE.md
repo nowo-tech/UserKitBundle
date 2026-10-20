@@ -1,5 +1,24 @@
 # Usage
 
+## Table of contents
+
+- [Configuration profiles](#configuration-profiles)
+- [Account status checker](#account-status-checker)
+- [Last activity tracking](#last-activity-tracking)
+- [Online presence](#online-presence)
+- [Twig helper](#twig-helper)
+- [Session invalidation on disable](#session-invalidation-on-disable)
+- [Entity traits (optional)](#entity-traits-optional)
+- [UI preferences](#ui-preferences)
+  - [`<html>` data attributes](#html-data-attributes)
+- [Product tour progress](#product-tour-progress)
+- [Personal data export and erasure (GDPR)](#personal-data-export-and-erasure-gdpr)
+  - [Export](#export)
+  - [Erasure](#erasure)
+- [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
+  - [Override in the application](#override-in-the-application)
+- [AuthKit coexistence](#authkit-coexistence)
+
 ## Configuration profiles
 
 Since **1.1.0**, settings can be grouped under named **profiles** when the application has more than one user entity. Each profile maps a `user_class` to its own `account_status` and `last_activity` options.

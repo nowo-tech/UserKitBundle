@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: wave-1 REQ compliance — README documentation list order, canonical issue templates, CONTRIBUTING Cursor Agent settings (REQ-IDE-006), tables of contents, SPEC-DRIVEN-DEVELOPMENT user stories, 002/003 scope and Engram relationship, commented demo `.env.example` and `.gitignore`, demo compose project name `user-kit-bundle-demo-symfony-8`, Spec Kit inventory refresh (61/61 incl. UI preferences, product tour and personal data).
+
 ## [1.5.0] - 2026-10-13
 
 ### Added

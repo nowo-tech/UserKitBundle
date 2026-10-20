@@ -78,10 +78,8 @@ make igor
 
 ## Documentation
 
-- [GitHub Actions CI requirements](docs/GITHUB_CI.md)
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
-- [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Usage](docs/USAGE.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
@@ -95,12 +93,15 @@ make igor
 
 ### Additional documentation
 
+- [GitHub Actions CI requirements](docs/GITHUB_CI.md)
+- [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Demo with FrankenPHP](docs/DEMO-FRANKENPHP.md)
 - [FrankenPHP worker audit](docs/FRANKENPHP-WORKER-AUDIT.md)
 - [Baseline product spec](specs/001-baseline/spec.md)
 - [Code inventory](specs/001-baseline/code-inventory.md)
 - [UI preferences spec (002)](specs/002-ui-preferences/spec.md)
 - [Personal data (GDPR) spec (003)](specs/003-personal-data/spec.md)
+
 ## Tests and coverage
 
 - **PHP:** 100% line coverage on `src/` (verified via `make test-coverage-100`)

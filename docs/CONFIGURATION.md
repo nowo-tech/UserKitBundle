@@ -4,6 +4,16 @@ All options live under the `nowo_user_kit` root key.
 
 A commented default template ships at `src/Resources/config/packages/nowo_user_kit.yaml` in the bundle repository (and in the Symfony Flex recipe). Copy or adapt it as `config/packages/nowo_user_kit.yaml` in your application.
 
+## Table of contents
+
+- [Profiles](#profiles)
+  - [Resolving profiles at runtime](#resolving-profiles-at-runtime)
+- [Legacy flat configuration](#legacy-flat-configuration)
+- [Doctrine mapping for the kit embeddables](#doctrine-mapping-for-the-kit-embeddables)
+- [Personal data (GDPR)](#personal-data-gdpr)
+- [AuthKit integration](#authkit-integration)
+- [Translations](#translations)
+
 ## Profiles
 
 Each **profile** maps a `user_class` to its own account-status and last-activity settings. Use multiple profiles when the application has more than one authenticated user entity (for example `App\Entity\User` and `App\Entity\Admin`).
