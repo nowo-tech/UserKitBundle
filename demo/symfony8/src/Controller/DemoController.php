@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Form\LoginType;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\UserKitBundle\Presence\UserPresenceResolver;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
@@ -45,8 +46,14 @@ final class DemoController extends AbstractController
     {
         $this->ensureDemoUserExists();
 
+        $lastUsername = $authenticationUtils->getLastUsername();
+        $form = $this->createForm(LoginType::class, [
+            '_username' => '' !== $lastUsername ? $lastUsername : 'demo@user-kit.test',
+            '_password' => 'demo',
+        ], ['action' => $this->generateUrl('demo_login')]);
+
         return $this->render('demo/login.html.twig', [
-            'last_username' => $authenticationUtils->getLastUsername(),
+            'form' => $form->createView(),
             'error' => $authenticationUtils->getLastAuthenticationError(),
         ]);
     }

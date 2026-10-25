@@ -10,7 +10,7 @@ COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker co
 COMPOSE     := $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 SERVICE_PHP := php
 
-.PHONY: help up down down-dev build shell install test test-coverage test-coverage-100 coverage-check coverage-php-percent cs-check cs-fix rector rector-dry phpstan igor qa release-check release-check-demos demo-smoke composer-sync clean update validate validate-translations assets setup-hooks check-no-cursor-coauthor check-open-prs strip-cursor-coauthor-from-history
+.PHONY: help up down down-dev build shell install test test-coverage test-coverage-100 coverage-check coverage-php-percent cs-check cs-fix rector rector-dry phpstan igor qa release-check release-check-demos demo-smoke composer-sync clean update validate validate-translations assets setup-hooks check-no-cursor-coauthor check-open-prs strip-cursor-coauthor-from-history check-no-raw-html-form
 
 # Default target
 help:
@@ -35,6 +35,7 @@ help:
 	@echo "  phpstan       Run PHPStan static analysis"
 	@echo "  igor          Run Igor worker-state audit (REQ-CS-008)"
 	@echo "  qa            Run all QA checks (cs-check + test)"
+	@echo "  check-no-raw-html-form Fail on raw <form>/<input>/<textarea>/<select> in Twig (REQ-TWIG-005)"
 	@echo "  release-check Pre-release: cs-fix, cs-check, rector-dry, phpstan, igor, test-coverage, demo healthchecks"
 	@echo "  composer-sync Validate composer.json and align composer.lock (no install)"
 	@echo "  clean         Remove vendor and cache"
@@ -128,8 +129,11 @@ qa: ensure-up
 # Run Igor worker-state audit (REQ-CS-008)
 igor: ensure-up
 	$(COMPOSE) exec -T php composer igor
-# check-no-raw-html-form (REQ-TWIG-005) is wired once the remaining raw form markup is migrated
-release-check: ensure-up check-no-cursor-coauthor check-open-prs composer-sync cs-fix cs-check rector-dry phpstan igor validate-translations coverage-check release-check-demos
+release-check: ensure-up check-no-cursor-coauthor check-open-prs check-no-raw-html-form composer-sync cs-fix cs-check rector-dry phpstan igor validate-translations coverage-check release-check-demos
+
+check-no-raw-html-form:
+	@chmod +x .scripts/check-no-raw-html-form.sh
+	@./.scripts/check-no-raw-html-form.sh
 
 release-check-demos:
 	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check; fi
