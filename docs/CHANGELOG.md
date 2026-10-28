@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.7.0] - 2026-10-28](#170---2026-10-28)
 - [[1.6.0] - 2026-10-28](#160---2026-10-28)
 - [[1.5.0] - 2026-10-13](#150---2026-10-13)
 - [[1.4.0] - 2026-10-13](#140---2026-10-13)
@@ -34,10 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-28
+
+UserKit: ContentWidth gains narrow and wide. See [UPGRADING](UPGRADING.md#to-170).
+
 ### Added
 
 - `ContentWidth::Narrow` (`narrow`) and `ContentWidth::Wide` (`wide`): more centered content widths for
   `preferred_content_width` (default stays `content`). Hosts size them with CSS on `data-content-width`.
+
+[1.7.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.7.0
 
 ## [1.6.0] - 2026-10-28
 
