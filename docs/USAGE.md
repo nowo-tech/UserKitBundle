@@ -47,7 +47,7 @@ No application code is required beyond configuration and entity mapping.
 
 ## Last activity tracking
 
-When a profile has `last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests for that user class (main request behind a security-enabled firewall). The in-memory throttle is worker-safe under FrankenPHP without kernel reset; see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
+When a profile has `last_activity.enabled: true`, `LastActivitySubscriber` updates the configured timestamp field on authenticated HTTP requests for that user class (main request behind a security-enabled firewall). The column is written with a DQL `UPDATE` by identifier (no `flush()`): pending changes of other entities stay pending, and Doctrine lifecycle callbacks / entity listeners are not called for this write. When the field is not a mapped Doctrine column, the subscriber falls back to `flush()`. The in-memory throttle is worker-safe under FrankenPHP without kernel reset; see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
 
 Writes are throttled by `update_throttle` (seconds) to reduce database load.
 

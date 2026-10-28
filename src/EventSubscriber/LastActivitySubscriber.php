@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\EventSubscriber;
 
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
@@ -24,6 +25,8 @@ use Throwable;
 use function array_key_first;
 use function count;
 use function max;
+use function spl_object_id;
+use function sprintf;
 
 final class LastActivitySubscriber implements EventSubscriberInterface
 {
@@ -103,7 +106,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         try {
-            $entityManager->flush();
+            $this->store($entityManager, $user, $profile->lastActivityField, $now);
         } catch (Throwable $exception) {
             $this->logger?->warning('UserKit: failed to store last activity.', [
                 'bundle'    => 'nowo-tech/user-kit-bundle',
@@ -117,6 +120,37 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         $this->remember($throttleKey, $nowUnix, $profile->updateThrottle);
+    }
+
+    /**
+     * Writes only the timestamp column with a DQL UPDATE by identifier and marks the new value as the original one, so
+     * the request never flushes unrelated pending changes of the unit of work (and a later flush does not write it
+     * again). Falls back to a full flush when the field is not a mapped column (custom setter on an unmapped property).
+     */
+    private function store(EntityManagerInterface $entityManager, UserInterface $user, string $field, DateTimeImmutable $now): void
+    {
+        $metadata   = $entityManager->getClassMetadata($user::class);
+        $identifier = $metadata->getIdentifierValues($user);
+        if (!$metadata->hasField($field) || $identifier === []) {
+            $entityManager->flush();
+
+            return;
+        }
+
+        $queryBuilder = $entityManager->createQueryBuilder()
+            ->update($metadata->getName(), 'u')
+            ->set('u.' . $field, ':now')
+            ->setParameter('now', $now, $metadata->getTypeOfField($field));
+        $index = 0;
+        foreach ($identifier as $name => $value) {
+            $queryBuilder->andWhere(sprintf('u.%s = :id%d', $name, $index))->setParameter('id' . $index, $value);
+            ++$index;
+        }
+        $queryBuilder->getQuery()->execute();
+
+        if ($entityManager->contains($user)) {
+            $entityManager->getUnitOfWork()->setOriginalEntityProperty(spl_object_id($user), $field, $metadata->getFieldValue($user, $field));
+        }
     }
 
     /**

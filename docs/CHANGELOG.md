@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Last activity no longer flushes the whole unit of work.** `LastActivitySubscriber` called `EntityManager::flush()` on
+  `kernel.request`, persisting any pending change of any managed entity (and costing a full change-set computation per
+  request). It now writes only the timestamp column with a DQL `UPDATE … WHERE <identifier>` and records the value as
+  the original one, so a later flush does not write it again. A field that is not a mapped column still falls back to
+  `flush()`.
+
 ### Added
 
 - Developer tooling: `make check-no-raw-html-form` fails on raw `<form>` / `<input>` / `<textarea>` / `<select>` in bundle views and demo templates, and runs in `release-check` (REQ-TWIG-005).
