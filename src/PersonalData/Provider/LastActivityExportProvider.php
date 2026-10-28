@@ -14,11 +14,11 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 /**
  * Section `last_activity`: `{last_activity_at: ?string}` (LastActivityInterface or the profile `last_activity.field`).
  */
-final class LastActivityExportProvider implements PersonalDataExportProviderInterface
+final readonly class LastActivityExportProvider implements PersonalDataExportProviderInterface
 {
     public function __construct(
-        private readonly ProfileRegistry $registry,
-        private readonly PropertyAccessorInterface $propertyAccessor,
+        private ProfileRegistry $registry,
+        private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 

@@ -11,11 +11,11 @@ use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 
 use function is_array;
 
-final class AccountDisabledListener
+final readonly class AccountDisabledListener
 {
     public function __construct(
-        private readonly ProfileRegistry $registry,
-        private readonly SessionInvalidatorInterface $sessionInvalidator,
+        private ProfileRegistry $registry,
+        private SessionInvalidatorInterface $sessionInvalidator,
     ) {
     }
 

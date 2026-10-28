@@ -13,11 +13,11 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 /**
  * Section `account_status`: `{enabled: bool}` (AccountStatusInterface or the profile `account_status.field`).
  */
-final class AccountStatusExportProvider implements PersonalDataExportProviderInterface
+final readonly class AccountStatusExportProvider implements PersonalDataExportProviderInterface
 {
     public function __construct(
-        private readonly ProfileRegistry $registry,
-        private readonly PropertyAccessorInterface $propertyAccessor,
+        private ProfileRegistry $registry,
+        private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 

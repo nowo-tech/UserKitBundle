@@ -13,16 +13,16 @@ use function sprintf;
 /**
  * Runs the erasure guards, then every supporting eraser in one Doctrine transaction (flushed once).
  */
-final class PersonalDataEraser
+final readonly class PersonalDataEraser
 {
     /**
      * @param iterable<PersonalDataEraserInterface> $erasers ordered by priority
      * @param iterable<ErasureGuardInterface> $guards
      */
     public function __construct(
-        private readonly iterable $erasers,
-        private readonly iterable $guards,
-        private readonly ManagerRegistry $doctrine,
+        private iterable $erasers,
+        private iterable $guards,
+        private ManagerRegistry $doctrine,
     ) {
     }
 

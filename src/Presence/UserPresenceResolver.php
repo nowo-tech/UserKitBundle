@@ -11,12 +11,12 @@ use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
-final class UserPresenceResolver
+final readonly class UserPresenceResolver
 {
     public function __construct(
-        private readonly ProfileRegistry $registry,
-        private readonly PropertyAccessorInterface $propertyAccessor,
-        private readonly ClockInterface $clock,
+        private ProfileRegistry $registry,
+        private PropertyAccessorInterface $propertyAccessor,
+        private ClockInterface $clock,
     ) {
     }
 

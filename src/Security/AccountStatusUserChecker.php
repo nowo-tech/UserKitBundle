@@ -20,11 +20,11 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * flows that call Symfony Security::login() (magic login, social, QR) are covered —
  * those paths invoke pre-auth only.
  */
-final class AccountStatusUserChecker implements UserCheckerInterface
+final readonly class AccountStatusUserChecker implements UserCheckerInterface
 {
     public function __construct(
-        private readonly ProfileRegistry $registry,
-        private readonly PropertyAccessorInterface $propertyAccessor,
+        private ProfileRegistry $registry,
+        private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 

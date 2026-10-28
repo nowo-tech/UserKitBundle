@@ -7,15 +7,15 @@ namespace Nowo\UserKitBundle\PersonalData;
 /**
  * Who is erased, by whom, plus free host context (e.g. `['scope' => 'self']`).
  */
-final class ErasureRequest
+final readonly class ErasureRequest
 {
     /**
      * @param array<string, mixed> $context
      */
     public function __construct(
-        public readonly object $user,
-        public readonly ?object $actor = null,
-        public readonly array $context = [],
+        public object $user,
+        public ?object $actor = null,
+        public array $context = [],
     ) {
     }
 

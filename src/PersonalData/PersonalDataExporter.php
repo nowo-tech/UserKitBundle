@@ -28,16 +28,16 @@ use const JSON_UNESCAPED_UNICODE;
  * {"schema": "…", "version": 1, "exported_at": "2026-10-13T10:00:00+00:00", "sections": {"key": …}}
  * ```
  */
-final class PersonalDataExporter
+final readonly class PersonalDataExporter
 {
     /**
      * @param iterable<PersonalDataExportProviderInterface> $providers ordered by priority
      */
     public function __construct(
-        private readonly iterable $providers,
-        private readonly ClockInterface $clock,
-        private readonly string $schema = 'nowo-user-kit/personal-data',
-        private readonly int $version = 1,
+        private iterable $providers,
+        private ClockInterface $clock,
+        private string $schema = 'nowo-user-kit/personal-data',
+        private int $version = 1,
     ) {
     }
 
