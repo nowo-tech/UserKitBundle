@@ -62,7 +62,7 @@ final class UiPreferencesTest extends TestCase
         $preferences = (new UiPreferences())
             ->setPreferredLocale('   ')
             ->setPreferredTheme('sepia')
-            ->setPreferredContentWidth('wide')
+            ->setPreferredContentWidth('huge')
             ->setPreferredUiDensity('')
             ->setPreferredMotion(null)
             ->setPreferredFontScale('xl')
@@ -123,5 +123,12 @@ final class UiPreferencesTest extends TestCase
         $this->assertNull(Theme::normalize(null));
         $this->assertNull(Theme::normalize(''));
         $this->assertNull(Theme::normalize('blue'));
+    }
+
+    public function testCenteredContentWidthsAreAccepted(): void
+    {
+        $this->assertSame(['narrow', 'content', 'wide', 'full'], ContentWidth::values());
+        $this->assertSame('narrow', (new UiPreferences())->setPreferredContentWidth(' Narrow ')->getPreferredContentWidth());
+        $this->assertSame('wide', (new UiPreferences())->setPreferredContentWidth(ContentWidth::Wide)->getPreferredContentWidth());
     }
 }

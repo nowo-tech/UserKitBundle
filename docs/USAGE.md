@@ -150,7 +150,7 @@ Since **1.4.0**. Generic display preferences stored as columns on the user table
 | --- | --- | --- | --- | --- | --- |
 | `preferred_locale` | string | 8 | yes | `null` (getter falls back to `en`) | free (trimmed, lower-cased) |
 | `preferred_theme` | string | 8 | yes | `light` | `Theme`: `light`, `dark` |
-| `preferred_content_width` | string | 8 | yes | `content` | `ContentWidth`: `content`, `full` |
+| `preferred_content_width` | string | 8 | yes | `content` | `ContentWidth`: `narrow`, `content`, `wide`, `full` |
 | `preferred_ui_density` | string | 16 | yes | `comfortable` | `UiDensity`: `comfortable`, `compact` |
 | `preferred_motion` | string | 16 | yes | `system` | `Motion`: `system`, `reduce`, `full` |
 | `preferred_font_scale` | string | 8 | yes | `md` | `FontScale`: `sm`, `md`, `lg` |

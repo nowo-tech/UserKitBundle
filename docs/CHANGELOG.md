@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ContentWidth::Narrow` (`narrow`) and `ContentWidth::Wide` (`wide`): more centered content widths for
+  `preferred_content_width` (default stays `content`). Hosts size them with CSS on `data-content-width`.
+
 ## [1.6.0] - 2026-10-28
 
 UserKit: last activity is stored with a targeted UPDATE instead of a full flush on every request. See [UPGRADING](UPGRADING.md#to-160).
