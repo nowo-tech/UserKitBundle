@@ -35,10 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ContentWidth::Wider` (`wider`): an extra-wide centered content width between `wide` and `full` for
+  `preferred_content_width` (default stays `content`). Hosts size it with CSS on `data-content-width`.
 
 ### Changed
 
 - Developer tooling: Rector targets PHP 8.2, the declared `php` floor (REQ-CS-003, REQ-SF-001). Rector's PHP 8.2 rules made the final services / value objects `readonly` classes (no API change).
+
 ## [1.7.0] - 2026-10-28
 
 UserKit: ContentWidth gains narrow and wide. See [UPGRADING](UPGRADING.md#to-170).

@@ -127,8 +127,10 @@ final class UiPreferencesTest extends TestCase
 
     public function testCenteredContentWidthsAreAccepted(): void
     {
-        $this->assertSame(['narrow', 'content', 'wide', 'full'], ContentWidth::values());
+        $this->assertSame(['narrow', 'content', 'wide', 'wider', 'full'], ContentWidth::values());
         $this->assertSame('narrow', (new UiPreferences())->setPreferredContentWidth(' Narrow ')->getPreferredContentWidth());
         $this->assertSame('wide', (new UiPreferences())->setPreferredContentWidth(ContentWidth::Wide)->getPreferredContentWidth());
+        $this->assertSame('wider', (new UiPreferences())->setPreferredContentWidth(' WIDER ')->getPreferredContentWidth());
+        $this->assertSame('wider', (new UiPreferences())->setPreferredContentWidth(ContentWidth::Wider)->getPreferredContentWidth());
     }
 }
