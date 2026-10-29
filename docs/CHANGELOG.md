@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-28](#170---2026-10-28)
 - [[1.6.0] - 2026-10-28](#160---2026-10-28)
 - [[1.5.0] - 2026-10-13](#150---2026-10-13)
@@ -35,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-29
+
+UserKit: ContentWidth gains wider. See [UPGRADING](UPGRADING.md#to-180).
+
 ### Added
 
 - `ContentWidth::Wider` (`wider`): an extra-wide centered content width between `wide` and `full` for
@@ -43,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Developer tooling: Rector targets PHP 8.2, the declared `php` floor (REQ-CS-003, REQ-SF-001). Rector's PHP 8.2 rules made the final services / value objects `readonly` classes (no API change).
+
+[1.8.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.8.0
 
 ## [1.7.0] - 2026-10-28
 

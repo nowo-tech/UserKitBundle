@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
 - [To 1.6.0](#to-160)
 - [To 1.5.0](#to-150)
@@ -30,6 +31,17 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.8.0
+
+From **1.7.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No schema change: `preferred_content_width` is a string column and `wider` fits it. Hosts that size the centered
+widths with CSS on `data-content-width` add a rule for `wider` (between `wide` and `full`).
 
 ## To 1.7.0
 
