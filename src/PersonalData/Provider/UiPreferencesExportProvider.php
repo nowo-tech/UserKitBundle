@@ -13,17 +13,25 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataExportProviderInterface;
  */
 final class UiPreferencesExportProvider implements PersonalDataExportProviderInterface
 {
+    /**
+     * Returns the export section key.
+     */
     public function getSectionKey(): string
     {
         return 'ui_preferences';
     }
 
+    /**
+     * Whether a UI preferences model can be resolved for the user.
+     */
     public function supports(object $user): bool
     {
         return ModelResolver::uiPreferences($user) instanceof UiPreferencesInterface;
     }
 
     /**
+     * Exports the resolved UI preference values of the user.
+     *
      * @return array<string, string>
      */
     public function export(object $user): array

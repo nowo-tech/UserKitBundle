@@ -15,16 +15,25 @@ use function is_callable;
  */
 final class UiPreferencesEraser implements PersonalDataEraserInterface
 {
+    /**
+     * Returns the stable key reported in the erasure result.
+     */
     public function getKey(): string
     {
         return 'ui_preferences';
     }
 
+    /**
+     * Whether the resolved UI preferences model exposes `resetUiPreferences()`.
+     */
     public function supports(object $user): bool
     {
         return is_callable([ModelResolver::uiPreferences($user), 'resetUiPreferences']);
     }
 
+    /**
+     * Clears every UI preference column of the user.
+     */
     public function erase(ErasureRequest $request): void
     {
         $reset = [ModelResolver::uiPreferences($request->user), 'resetUiPreferences'];

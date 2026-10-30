@@ -20,15 +20,25 @@ use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
+use function array_filter;
 use function array_key_first;
 use function count;
 use function max;
 use function spl_object_id;
 use function sprintf;
 
-final class LastActivitySubscriber implements EventSubscriberInterface
+/**
+ * Updates the last activity timestamp of the authenticated user on main requests, throttled per profile and user.
+ *
+ * The throttle map is the only state and is deliberately kept across requests of a worker (dropping it every request
+ * would turn every request into a write). It holds no request data, is pruned on every write and capped at
+ * {@see MAX_THROTTLE_ENTRIES}; {@see reset()} (called by `services_resetter` between requests in FrankenPHP worker
+ * mode) evicts the windows that already expired.
+ */
+final class LastActivitySubscriber implements EventSubscriberInterface, ResetInterface
 {
     /** Upper bound of throttle entries kept per worker (oldest entries are evicted first). */
     public const MAX_THROTTLE_ENTRIES = 10000;
@@ -42,6 +52,9 @@ final class LastActivitySubscriber implements EventSubscriberInterface
      */
     private array $throttledUntil = [];
 
+    /**
+     * Receives the collaborators and the throttle map size cap.
+     */
     public function __construct(
         private readonly ProfileRegistry $registry,
         private readonly EntityManagerInterface $entityManager,
@@ -55,6 +68,9 @@ final class LastActivitySubscriber implements EventSubscriberInterface
     ) {
     }
 
+    /**
+     * Subscribes to `kernel.request`.
+     */
     public static function getSubscribedEvents(): array
     {
         return [
@@ -62,6 +78,9 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         ];
     }
 
+    /**
+     * Stores the last activity of the authenticated user unless throttled.
+     */
     public function onKernelRequest(RequestEvent $event): void
     {
         if (!$event->isMainRequest() || !$this->isBehindSecuredFirewall($event->getRequest())) {
@@ -100,7 +119,10 @@ final class LastActivitySubscriber implements EventSubscriberInterface
             // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
             $user->setLastActivityAt($now);
         } elseif ($this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
-            $this->propertyAccessor->setValue($user, $profile->lastActivityField, $now);
+            // Writes the user entity; the (readonly, stateless) accessor itself is not mutated. Igor reads a setter call
+            // on $this->propertyAccessor as a mutation of that property, hence the local variable.
+            $accessor = $this->propertyAccessor;
+            $accessor->setValue($user, $profile->lastActivityField, $now);
         } else {
             return;
         }
@@ -120,6 +142,15 @@ final class LastActivitySubscriber implements EventSubscriberInterface
         }
 
         $this->remember($throttleKey, $nowUnix, $profile->updateThrottle);
+    }
+
+    /**
+     * Evicts the expired throttle windows; windows still open are kept so the throttle survives the request.
+     */
+    public function reset(): void
+    {
+        $nowUnix              = $this->clock->now()->getTimestamp();
+        $this->throttledUntil = array_filter($this->throttledUntil, static fn (int $until): bool => $until > $nowUnix);
     }
 
     /**
@@ -201,13 +232,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface
     private function remember(string $throttleKey, int $nowUnix, int $updateThrottle): void
     {
         unset($this->throttledUntil[$throttleKey]);
-
-        foreach ($this->throttledUntil as $key => $until) {
-            if ($until > $nowUnix) {
-                break;
-            }
-            unset($this->throttledUntil[$key]);
-        }
+        $this->pruneExpired($nowUnix);
 
         if ($updateThrottle <= 0) {
             return;
@@ -219,5 +244,18 @@ final class LastActivitySubscriber implements EventSubscriberInterface
 
         // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
         $this->throttledUntil[$throttleKey] = $nowUnix + $updateThrottle;
+    }
+
+    /**
+     * Drops the expired windows at the head of the map (insertion order = expiry order for one throttle value).
+     */
+    private function pruneExpired(int $nowUnix): void
+    {
+        foreach ($this->throttledUntil as $key => $until) {
+            if ($until > $nowUnix) {
+                break;
+            }
+            unset($this->throttledUntil[$key]);
+        }
     }
 }

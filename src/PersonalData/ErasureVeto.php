@@ -10,6 +10,8 @@ namespace Nowo\UserKitBundle\PersonalData;
 final readonly class ErasureVeto
 {
     /**
+     * Creates a veto with a stable reason code and optional details.
+     *
      * @param array<string, mixed> $details e.g. `['projects' => [['uuid' => …, 'name' => …]]]`
      */
     public function __construct(

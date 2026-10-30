@@ -16,6 +16,8 @@ use function sprintf;
 final readonly class PersonalDataEraser
 {
     /**
+     * Receives the tagged erasers and guards plus the Doctrine registry.
+     *
      * @param iterable<PersonalDataEraserInterface> $erasers ordered by priority
      * @param iterable<ErasureGuardInterface> $guards
      */
@@ -39,6 +41,8 @@ final readonly class PersonalDataEraser
     }
 
     /**
+     * Runs the guards, then every supporting eraser in one transaction, flushing once.
+     *
      * @param array<string, mixed> $context
      *
      * @throws ErasureVetoedException when a guard vetoes (nothing is erased)

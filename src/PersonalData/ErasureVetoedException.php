@@ -16,6 +16,8 @@ use function sprintf;
 final class ErasureVetoedException extends RuntimeException
 {
     /**
+     * Builds the exception from the guard vetoes (their reasons become the message).
+     *
      * @param non-empty-list<ErasureVeto> $vetoes
      */
     public function __construct(public readonly array $vetoes)
@@ -24,6 +26,8 @@ final class ErasureVetoedException extends RuntimeException
     }
 
     /**
+     * Returns the reason codes of every veto, in order.
+     *
      * @return list<string>
      */
     public function getReasons(): array
@@ -31,6 +35,9 @@ final class ErasureVetoedException extends RuntimeException
         return array_map(static fn (ErasureVeto $veto): string => $veto->reason, $this->vetoes);
     }
 
+    /**
+     * Whether one of the vetoes carries the given reason code.
+     */
     public function hasReason(string $reason): bool
     {
         return in_array($reason, $this->getReasons(), true);

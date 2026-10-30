@@ -32,6 +32,8 @@ trait PreferenceChoiceTrait
     }
 
     /**
+     * Returns every backed value of the enum, in declaration order.
+     *
      * @return list<string>
      */
     public static function values(): array

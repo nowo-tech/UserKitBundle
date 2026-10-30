@@ -14,16 +14,25 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
  */
 final class ProductTourEraser implements PersonalDataEraserInterface
 {
+    /**
+     * Returns the stable key reported in the erasure result.
+     */
     public function getKey(): string
     {
         return 'product_tour';
     }
 
+    /**
+     * Whether a product-tour progress model can be resolved for the user.
+     */
     public function supports(object $user): bool
     {
         return ModelResolver::productTour($user) instanceof ProductTourProgressInterface;
     }
 
+    /**
+     * Clears the product-tour progress of the user.
+     */
     public function erase(ErasureRequest $request): void
     {
         ModelResolver::productTour($request->user)?->clearProductTourSeen();

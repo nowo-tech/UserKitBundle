@@ -22,17 +22,26 @@ use Symfony\Component\Security\Core\User\UserInterface;
  */
 final readonly class AccountStatusUserChecker implements UserCheckerInterface
 {
+    /**
+     * Receives the profile registry and the property accessor.
+     */
     public function __construct(
         private ProfileRegistry $registry,
         private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 
+    /**
+     * Rejects disabled accounts before authentication.
+     */
     public function checkPreAuth(UserInterface $user): void
     {
         $this->assertAccountEnabled($user);
     }
 
+    /**
+     * Rejects disabled accounts after authentication.
+     */
     public function checkPostAuth(UserInterface $user, ?TokenInterface $token = null): void
     {
         $this->assertAccountEnabled($user);

@@ -60,16 +60,25 @@ trait UiPreferencesTrait
     #[ORM\Column(name: 'preferred_footer', type: Types::STRING, length: 16, nullable: true)]
     private ?string $preferredFooter = 'scroll';
 
+    /**
+     * Returns the preferred locale, falling back to the default when nothing is stored.
+     */
     public function getPreferredLocale(): string
     {
         return $this->preferredLocale ?? self::DEFAULT_LOCALE;
     }
 
+    /**
+     * Returns the stored preferred locale as-is (null when unset).
+     */
     public function getPreferredLocaleRaw(): ?string
     {
         return $this->preferredLocale;
     }
 
+    /**
+     * Sets the preferred locale (trimmed and lower-cased; an empty value is stored as null).
+     */
     public function setPreferredLocale(?string $preferredLocale): static
     {
         $normalized            = $preferredLocale !== null ? strtolower(trim($preferredLocale)) : null;
@@ -78,16 +87,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred theme, falling back to the default when nothing is stored.
+     */
     public function getPreferredTheme(): string
     {
         return (Theme::normalize($this->preferredTheme) ?? Theme::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred theme as-is (null when unset).
+     */
     public function getPreferredThemeRaw(): ?string
     {
         return $this->preferredTheme;
     }
 
+    /**
+     * Sets the preferred theme from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredTheme(Theme|string|null $preferredTheme): static
     {
         $this->preferredTheme = Theme::normalize($preferredTheme)?->value;
@@ -95,16 +113,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred content width, falling back to the default when nothing is stored.
+     */
     public function getPreferredContentWidth(): string
     {
         return (ContentWidth::normalize($this->preferredContentWidth) ?? ContentWidth::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred content width as-is (null when unset).
+     */
     public function getPreferredContentWidthRaw(): ?string
     {
         return $this->preferredContentWidth;
     }
 
+    /**
+     * Sets the preferred content width from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredContentWidth(ContentWidth|string|null $preferredContentWidth): static
     {
         $this->preferredContentWidth = ContentWidth::normalize($preferredContentWidth)?->value;
@@ -112,16 +139,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred UI density, falling back to the default when nothing is stored.
+     */
     public function getPreferredUiDensity(): string
     {
         return (UiDensity::normalize($this->preferredUiDensity) ?? UiDensity::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred UI density as-is (null when unset).
+     */
     public function getPreferredUiDensityRaw(): ?string
     {
         return $this->preferredUiDensity;
     }
 
+    /**
+     * Sets the preferred UI density from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredUiDensity(UiDensity|string|null $preferredUiDensity): static
     {
         $this->preferredUiDensity = UiDensity::normalize($preferredUiDensity)?->value;
@@ -129,16 +165,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred motion preference, falling back to the default when nothing is stored.
+     */
     public function getPreferredMotion(): string
     {
         return (Motion::normalize($this->preferredMotion) ?? Motion::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred motion preference as-is (null when unset).
+     */
     public function getPreferredMotionRaw(): ?string
     {
         return $this->preferredMotion;
     }
 
+    /**
+     * Sets the preferred motion preference from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredMotion(Motion|string|null $preferredMotion): static
     {
         $this->preferredMotion = Motion::normalize($preferredMotion)?->value;
@@ -146,16 +191,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred font scale, falling back to the default when nothing is stored.
+     */
     public function getPreferredFontScale(): string
     {
         return (FontScale::normalize($this->preferredFontScale) ?? FontScale::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred font scale as-is (null when unset).
+     */
     public function getPreferredFontScaleRaw(): ?string
     {
         return $this->preferredFontScale;
     }
 
+    /**
+     * Sets the preferred font scale from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredFontScale(FontScale|string|null $preferredFontScale): static
     {
         $this->preferredFontScale = FontScale::normalize($preferredFontScale)?->value;
@@ -163,16 +217,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred contrast mode, falling back to the default when nothing is stored.
+     */
     public function getPreferredContrast(): string
     {
         return (Contrast::normalize($this->preferredContrast) ?? Contrast::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred contrast mode as-is (null when unset).
+     */
     public function getPreferredContrastRaw(): ?string
     {
         return $this->preferredContrast;
     }
 
+    /**
+     * Sets the preferred contrast mode from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredContrast(Contrast|string|null $preferredContrast): static
     {
         $this->preferredContrast = Contrast::normalize($preferredContrast)?->value;
@@ -180,16 +243,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred sidebar mode, falling back to the default when nothing is stored.
+     */
     public function getPreferredSidebar(): string
     {
         return (SidebarMode::normalize($this->preferredSidebar) ?? SidebarMode::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred sidebar mode as-is (null when unset).
+     */
     public function getPreferredSidebarRaw(): ?string
     {
         return $this->preferredSidebar;
     }
 
+    /**
+     * Sets the preferred sidebar mode from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredSidebar(SidebarMode|string|null $preferredSidebar): static
     {
         $this->preferredSidebar = SidebarMode::normalize($preferredSidebar)?->value;
@@ -197,16 +269,25 @@ trait UiPreferencesTrait
         return $this;
     }
 
+    /**
+     * Returns the preferred footer mode, falling back to the default when nothing is stored.
+     */
     public function getPreferredFooter(): string
     {
         return (FooterMode::normalize($this->preferredFooter) ?? FooterMode::DEFAULT)->value;
     }
 
+    /**
+     * Returns the stored preferred footer mode as-is (null when unset).
+     */
     public function getPreferredFooterRaw(): ?string
     {
         return $this->preferredFooter;
     }
 
+    /**
+     * Sets the preferred footer mode from an enum case or a raw string; unknown values are stored as null.
+     */
     public function setPreferredFooter(FooterMode|string|null $preferredFooter): static
     {
         $this->preferredFooter = FooterMode::normalize($preferredFooter)?->value;

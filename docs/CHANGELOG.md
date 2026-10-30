@@ -36,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Worker reset (REQ-CS-006):** `ProfileRegistry` and `LastActivitySubscriber` implement `Symfony\Contracts\Service\ResetInterface` (autoconfigured `kernel.reset`). `ProfileRegistry::reset()` clears the per-class resolution memo; `LastActivitySubscriber::reset()` evicts only the throttle windows that already expired, so `update_throttle` keeps working across requests of a FrankenPHP worker. `phpstan.neon.dist` now has `ignoreErrors: []` (the two `frankenphp.worker.noMissingResetInterface` ignores are gone).
+- `symfony/service-contracts` (`^2.5 || ^3.0`) is now a direct requirement (it was already installed through Symfony).
+
+### Documentation
+
+- PHPDoc descriptions on every public class and public method in `src/` (REQ-CS-001).
+- `docs/FRANKENPHP-WORKER-AUDIT.md` updated for the new `reset()` methods.
+
 ## [1.8.0] - 2026-10-29
 
 UserKit: ContentWidth gains wider. See [UPGRADING](UPGRADING.md#to-180).

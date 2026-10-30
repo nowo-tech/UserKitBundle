@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Profile;
 
+/**
+ * Immutable settings of one configured profile.
+ */
 final readonly class ProfileSettings
 {
     /**
+     * Creates the settings of one profile.
+     *
      * @param class-string $userClass
      */
     public function __construct(
@@ -23,6 +28,8 @@ final readonly class ProfileSettings
     }
 
     /**
+     * Builds the settings from one processed `profiles.<name>` configuration array.
+     *
      * @param array<string, mixed> $config
      */
     public static function fromConfig(string $name, array $config): self

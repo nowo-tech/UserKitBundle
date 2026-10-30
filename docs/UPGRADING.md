@@ -32,6 +32,11 @@
 
 ## Unreleased
 
+No configuration or code change is required.
+
+- `ProfileRegistry` and `LastActivitySubscriber` now implement `ResetInterface`, so Symfony's `services_resetter` calls their `reset()` between requests (FrankenPHP worker / kernel reuse). Observable behaviour is unchanged: profile resolution is recomputed after a reset, and open last-activity throttle windows are kept (only expired ones are evicted).
+- If you build these services by hand (tests, custom DI), nothing changes: constructors are the same.
+
 ## To 1.8.0
 
 From **1.7.0**:

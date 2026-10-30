@@ -16,23 +16,34 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
  */
 final readonly class LastActivityExportProvider implements PersonalDataExportProviderInterface
 {
+    /**
+     * Receives the profile registry and the property accessor.
+     */
     public function __construct(
         private ProfileRegistry $registry,
         private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 
+    /**
+     * Returns the export section key.
+     */
     public function getSectionKey(): string
     {
         return 'last_activity';
     }
 
+    /**
+     * Whether the user implements LastActivityInterface or has a readable profile last-activity field.
+     */
     public function supports(object $user): bool
     {
         return $user instanceof LastActivityInterface || $this->field($user) !== null;
     }
 
     /**
+     * Exports the last activity timestamp of the user.
+     *
      * @return array{last_activity_at: ?DateTimeInterface}
      */
     public function export(object $user): array
