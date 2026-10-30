@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.8.1] - 2026-10-30](#181---2026-10-30)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-28](#170---2026-10-28)
 - [[1.6.0] - 2026-10-28](#160---2026-10-28)
@@ -36,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-30
+
+ResetInterface on ProfileRegistry and LastActivitySubscriber (worker mode), PHPDoc See [UPGRADING](UPGRADING.md#to-181).
+
 ### Changed
 
 - **Worker reset (REQ-CS-006):** `ProfileRegistry` and `LastActivitySubscriber` implement `Symfony\Contracts\Service\ResetInterface` (autoconfigured `kernel.reset`). `ProfileRegistry::reset()` clears the per-class resolution memo; `LastActivitySubscriber::reset()` evicts only the throttle windows that already expired, so `update_throttle` keeps working across requests of a FrankenPHP worker. `phpstan.neon.dist` now has `ignoreErrors: []` (the two `frankenphp.worker.noMissingResetInterface` ignores are gone).
@@ -45,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PHPDoc descriptions on every public class and public method in `src/` (REQ-CS-001).
 - `docs/FRANKENPHP-WORKER-AUDIT.md` updated for the new `reset()` methods.
+
+[1.8.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.8.1
 
 ## [1.8.0] - 2026-10-29
 
