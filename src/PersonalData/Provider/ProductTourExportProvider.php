@@ -14,17 +14,25 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataExportProviderInterface;
  */
 final class ProductTourExportProvider implements PersonalDataExportProviderInterface
 {
+    /**
+     * Returns the export section key.
+     */
     public function getSectionKey(): string
     {
         return 'product_tour';
     }
 
+    /**
+     * Whether a product-tour progress model can be resolved for the user.
+     */
     public function supports(object $user): bool
     {
         return ModelResolver::productTour($user) instanceof ProductTourProgressInterface;
     }
 
     /**
+     * Exports the product-tour progress of the user.
+     *
      * @return array{seen_at?: ?DateTimeImmutable, seen_pages?: list<string>}
      */
     public function export(object $user): array

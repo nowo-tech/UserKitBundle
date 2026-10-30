@@ -36,7 +36,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 |------|--------|-------|
 | Mutable state in shared services | ✅ | `LastActivitySubscriber::$throttledUntil` is pruned and capped (W-01 resolved); `ProfileRegistry::$resolveCache` is keyed by class name (bounded) |
 | Static properties / `static` locals | ✅ | None (only static closures in `Configuration`, compile time) |
-| `ResetInterface` / `kernel.reset` coverage | ✅ | No service implements `ResetInterface`; the throttle map is intentionally long-lived and now self-evicting |
+| `ResetInterface` / `kernel.reset` coverage | ✅ | `ProfileRegistry` and `LastActivitySubscriber` implement `ResetInterface` (autoconfigured `kernel.reset`). `ProfileRegistry::reset()` drops the resolution memo; `LastActivitySubscriber::reset()` evicts only expired throttle windows, so the throttle still spans requests (2026-10-30, REQ-CS-006) |
 | Request / user / locale captured in services | ✅ | User is read from `TokenStorage` inside `onKernelRequest()`, only on requests behind a security-enabled firewall; time comes from `ClockInterface` |
 | Superglobals, `$_ENV`, `putenv`, `ini_set`, `setlocale`, timezone | ✅ | None used |
 | Doctrine / EntityManager | ✅ | `LastActivitySubscriber` resolves the manager per request (`ManagerRegistry::getManagerForClass()`), resets it when closed and catches flush failures (W-02 resolved) |
@@ -51,8 +51,8 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 
 | Service | Shared | Mutable state | Scenario A | Scenario B |
 |---------|--------|---------------|------------|------------|
-| `Nowo\UserKitBundle\Profile\ProfileRegistry` | yes | `$resolveCache` (class-string → profile), filled lazily; `$byName` / `$byExactClass` set in constructor only | ✅ | ✅ (bounded by number of user classes and their proxies) |
-| `Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber` | yes (removed if no profile enables `last_activity`) | `$throttledUntil` (profile + user identifier → window end), pruned and capped | ✅ | ✅ |
+| `Nowo\UserKitBundle\Profile\ProfileRegistry` | yes | `$resolveCache` (class-string → profile), filled lazily and cleared by `reset()`; `$byName` / `$byExactClass` set in constructor only | ✅ | ✅ (bounded by number of user classes and their proxies) |
+| `Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber` | yes (removed if no profile enables `last_activity`) | `$throttledUntil` (profile + user identifier → window end), pruned and capped; `reset()` evicts expired windows | ✅ | ✅ |
 | `Nowo\UserKitBundle\Security\AccountStatusUserChecker` (`security.user_checker.<firewall>`) | yes | none (`readonly`) | ✅ | ✅ |
 | `Nowo\UserKitBundle\EventListener\AccountDisabledListener` (`doctrine.orm.entity_listener`, lazy) | yes | none (`readonly`) | ✅ | ✅ |
 | `Nowo\UserKitBundle\Presence\UserPresenceResolver` | yes | none (`readonly`, uses `ClockInterface`) | ✅ | ✅ |
@@ -70,7 +70,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
   - Under PHP-FPM the map is empty on every request, so the throttle never applies and every authenticated request writes. In worker mode the throttle actually works, but per worker thread, not globally.
   - Keys are the bare user identifier, so two profiles whose users share an identifier (for example `john` in `App\Entity\User` and in `App\Entity\Admin`) share a throttle slot; one of them may skip a write inside the window. This affects only freshness of `lastActivityAt`, not security.
 - **Recommendation:** drop entries older than `updateThrottle` before inserting (or cap the map size, e.g. LRU of a few thousand keys), and prefix keys with the profile name. Do **not** simply add `ResetInterface` that clears the map: that would restore FPM behaviour (a write on every request). Until fixed, set FrankenPHP `max_requests` (or `FRANKENPHP_LOOP_MAX`) to recycle workers periodically.
-- **Status:** Resolved — the map is now `$throttledUntil` (window end per `profile\0identifier`), kept in insertion order: expired entries at the head are dropped on every successful write, entries are only stored when `update_throttle > 0`, and the size is capped at `MAX_THROTTLE_ENTRIES` (10 000, constructor argument `$maxThrottleEntries`) by evicting the oldest entry. No `ResetInterface` was added, so the throttle keeps working across requests. The throttle remains per worker thread (accepted: it only limits write frequency). Tests: `testThrottleMapIsCappedAcrossManyUsers`, `testExpiredThrottleEntriesArePruned`, `testThrottleIsNotRecordedWhenDisabled`, `testSameIdentifierInTwoProfilesHasSeparateThrottleSlots`.
+- **Status:** Resolved — the map is now `$throttledUntil` (window end per `profile\0identifier`), kept in insertion order: expired entries at the head are dropped on every successful write, entries are only stored when `update_throttle > 0`, and the size is capped at `MAX_THROTTLE_ENTRIES` (10 000, constructor argument `$maxThrottleEntries`) by evicting the oldest entry. `ResetInterface` was added on 2026-10-30 (REQ-CS-006), but `reset()` only evicts windows that already expired, so the throttle keeps working across requests (`testResetEvictsExpiredWindowsAndKeepsOpenOnes`). The throttle remains per worker thread (accepted: it only limits write frequency). Tests: `testThrottleMapIsCappedAcrossManyUsers`, `testExpiredThrottleEntriesArePruned`, `testThrottleIsNotRecordedWhenDisabled`, `testSameIdentifierInTwoProfilesHasSeparateThrottleSlots`.
 
 ### W-02 — `flush()` on `kernel.request` depends on a healthy EntityManager (Medium)
 
@@ -87,6 +87,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 - **Where:** `src/Profile/ProfileRegistry.php:18` (`$resolveCache`), filled in `resolveForObject()` at lines 52-71.
 - **Worker impact:** the cache maps an object class to its profile (or `null`). Its size is bounded by the number of distinct classes passed in (user classes, Doctrine proxies, and any entity class seen by the lazy `AccountDisabledListener`). It holds no user data, so the user checker cannot make a decision for user Y based on user X.
 - **Recommendation:** none.
+- **Update 2026-10-30:** `ProfileRegistry` implements `ResetInterface`; `reset()` clears the memo between requests under scenario A (resolution is recomputed on first use, a few `instanceof` checks).
 
 No other findings. `AccountStatusUserChecker` reads the enabled flag from the user object on every call and caches nothing, which is the correct security behaviour in a long-lived worker.
 
@@ -100,4 +101,4 @@ No other findings. `AccountStatusUserChecker` reads the enabled flag from the us
 
 ## Re-audit triggers
 
-Re-run this audit when a change adds: new properties to any subscriber, listener, user checker or resolver; a new cache in `ProfileRegistry`; more Doctrine writes on kernel events; a `ResetInterface` on `LastActivitySubscriber`; or any use of `$_SERVER` / `$_ENV` / session globals at runtime.
+Re-run this audit when a change adds: new properties to any subscriber, listener, user checker or resolver; a new cache in `ProfileRegistry`; more Doctrine writes on kernel events; a `reset()` on `LastActivitySubscriber` that drops open throttle windows; or any use of `$_SERVER` / `$_ENV` / session globals at runtime.

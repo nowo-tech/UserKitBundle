@@ -12,6 +12,9 @@ namespace Nowo\UserKitBundle\Session;
  */
 final class DefaultSessionInvalidator implements SessionInvalidatorInterface
 {
+    /**
+     * Does nothing; replace the service to invalidate sessions in your session store.
+     */
     public function invalidateSessionsForUser(object $user): void
     {
     }

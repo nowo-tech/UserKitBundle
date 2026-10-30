@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Tests\Unit\Profile;
 use Nowo\UserKitBundle\Profile\UnknownProfileException;
 use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 final class ProfileRegistryTest extends TestCase
 {
@@ -40,6 +41,27 @@ final class ProfileRegistryTest extends TestCase
         $this->assertNotNull($resolved);
         $this->assertSame('app_user', $resolved->name);
         $this->assertSame('app_user', $registry->resolveForObject($child)?->name);
+    }
+
+    public function testResetDropsTheResolutionMemoOnly(): void
+    {
+        $registry = ProfileRegistryFactory::fromProfiles([
+            'app_user' => [
+                'user_class'     => BaseProfileUser::class,
+                'account_status' => ['enabled' => true, 'field' => 'enabled', 'invalidate_sessions_on_disable' => false],
+                'last_activity'  => ['enabled' => true, 'field' => 'lastActivityAt', 'online_threshold' => 300, 'update_throttle' => 0],
+            ],
+        ], 'app_user');
+
+        $registry->resolveForObject(new ChildProfileUser());
+        $memo = new ReflectionProperty($registry, 'resolveCache');
+        self::assertNotSame([], $memo->getValue($registry));
+
+        $registry->reset();
+
+        self::assertSame([], $memo->getValue($registry));
+        self::assertSame('app_user', $registry->getDefault()->name);
+        self::assertSame('app_user', $registry->resolveForObject(new ChildProfileUser())?->name);
     }
 
     public function testUnknownProfileThrows(): void

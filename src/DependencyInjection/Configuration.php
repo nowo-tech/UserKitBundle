@@ -8,10 +8,16 @@ use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
+/**
+ * Configuration tree of `nowo_user_kit` (profiles, Twig and personal data options).
+ */
 final class Configuration implements ConfigurationInterface
 {
     public const ALIAS = 'nowo_user_kit';
 
+    /**
+     * Builds the `nowo_user_kit` configuration tree.
+     */
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder(self::ALIAS);

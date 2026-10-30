@@ -32,6 +32,9 @@ use function is_array;
 use function is_string;
 use function sprintf;
 
+/**
+ * Loads the bundle services and exposes the processed configuration as container parameters.
+ */
 final class NowoUserKitExtension extends Extension implements PrependExtensionInterface
 {
     public const TAG_EXPORT_PROVIDER = 'nowo_user_kit.personal_data.export_provider';
@@ -60,6 +63,9 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         }
     }
 
+    /**
+     * Processes the configuration, registers parameters and removes the services of disabled features.
+     */
     public function load(array $configs, ContainerBuilder $container): void
     {
         $configuration = new Configuration();
@@ -146,6 +152,9 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         }
     }
 
+    /**
+     * Returns the configuration alias `nowo_user_kit`.
+     */
     public function getAlias(): string
     {
         return Configuration::ALIAS;

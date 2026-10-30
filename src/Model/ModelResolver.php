@@ -19,6 +19,8 @@ final class ModelResolver
     public const PRODUCT_TOUR_GETTERS = ['getProductTourProgress', 'getProductTour', 'getUiPreferences'];
 
     /**
+     * Returns the subject itself when it is a `$type`, otherwise the first getter result that is one, or null.
+     *
      * @template T of object
      *
      * @param class-string<T> $type
@@ -51,11 +53,17 @@ final class ModelResolver
         return null;
     }
 
+    /**
+     * Finds the UI preferences model of a user (or the subject itself).
+     */
     public static function uiPreferences(?object $subject): ?UiPreferencesInterface
     {
         return self::find($subject, UiPreferencesInterface::class, self::UI_PREFERENCES_GETTERS);
     }
 
+    /**
+     * Finds the product-tour progress model of a user (or the subject itself).
+     */
     public static function productTour(?object $subject): ?ProductTourProgressInterface
     {
         return self::find($subject, ProductTourProgressInterface::class, self::PRODUCT_TOUR_GETTERS);

@@ -79,6 +79,37 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         self::assertSame(['default' . "\0" . 'carol'], array_keys($this->throttleMap($subscriber)));
     }
 
+    public function testResetEvictsExpiredWindowsAndKeepsOpenOnes(): void
+    {
+        $tokenStorage = new TokenStorage();
+        $clock        = new MockClock('2026-09-23 10:00:00');
+        $em           = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->exactly(2))->method('flush');
+
+        $subscriber = $this->subscriber(
+            ProfileRegistryFactory::single(WorkerActivityUser::class, ['last_activity' => ['update_throttle' => 60]]),
+            $em,
+            $tokenStorage,
+            $clock,
+        );
+
+        $this->request($subscriber, $tokenStorage, new WorkerActivityUser('alice'));
+        $clock->sleep(30);
+        $this->request($subscriber, $tokenStorage, new WorkerActivityUser('bob'));
+
+        // services_resetter between requests: both windows are still open, nothing is dropped.
+        $subscriber->reset();
+        self::assertCount(2, $this->throttleMap($subscriber));
+
+        // Alice's window (10:01:00) has expired, Bob's (10:01:30) has not.
+        $clock->sleep(31);
+        $subscriber->reset();
+        self::assertSame(['default' . "\0" . 'bob'], array_keys($this->throttleMap($subscriber)));
+
+        // Bob is still throttled after the reset: no third flush.
+        $this->request($subscriber, $tokenStorage, new WorkerActivityUser('bob'));
+    }
+
     public function testThrottleIsNotRecordedWhenDisabled(): void
     {
         $tokenStorage = new TokenStorage();

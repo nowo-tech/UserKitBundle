@@ -29,6 +29,9 @@ use function is_string;
  */
 final class AccountStatusUserCheckerPass implements CompilerPassInterface
 {
+    /**
+     * Attaches the account status user checker to every security-enabled firewall.
+     */
     public function process(ContainerBuilder $container): void
     {
         if (!$container->hasDefinition(AccountStatusUserChecker::class) || !$container->hasParameter('security.firewalls')) {

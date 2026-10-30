@@ -27,6 +27,8 @@ use const ENT_SUBSTITUTE;
 final class UiPreferencesHtmlAttributes
 {
     /**
+     * Builds the `<html>` data-* attributes for the subject preferences.
+     *
      * @param object|null $subject a {@see UiPreferencesInterface}, or a user exposing `getUiPreferences()`
      *
      * @return array<string, string> attribute name => value (empty for guests / users without preferences)

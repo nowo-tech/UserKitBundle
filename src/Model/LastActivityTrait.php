@@ -8,16 +8,25 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\ORM\Mapping as ORM;
 
+/**
+ * Doctrine-mapped `lastActivityAt` column implementing {@see LastActivityInterface}.
+ */
 trait LastActivityTrait
 {
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $lastActivityAt = null;
 
+    /**
+     * Returns when the user was last active, or null when never recorded.
+     */
     public function getLastActivityAt(): ?DateTimeInterface
     {
         return $this->lastActivityAt;
     }
 
+    /**
+     * Records the last activity, converted to an immutable date.
+     */
     public function setLastActivityAt(DateTimeInterface $lastActivityAt): void
     {
         // @igor-ignore - Domain model value object; instance-scoped, not a shared service.

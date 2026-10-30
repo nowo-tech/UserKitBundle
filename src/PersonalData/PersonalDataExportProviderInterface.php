@@ -17,6 +17,9 @@ interface PersonalDataExportProviderInterface
     /** Unique key of the section in the `sections` map (e.g. `account`, `ui_preferences`). */
     public function getSectionKey(): string;
 
+    /**
+     * Whether this provider contributes a section for the given user.
+     */
     public function supports(object $user): bool;
 
     /**

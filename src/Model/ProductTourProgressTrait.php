@@ -34,17 +34,25 @@ trait ProductTourProgressTrait
     #[ORM\Column(name: 'product_tour_seen_pages', type: Types::JSON, nullable: true)]
     private ?array $productTourSeenPages = null;
 
+    /**
+     * Returns when every tour was marked as done or suppressed, or null.
+     */
     public function getProductTourSeenAt(): ?DateTimeImmutable
     {
         return $this->productTourSeenAt;
     }
 
+    /**
+     * Whether every tour is done or suppressed (global timestamp set).
+     */
     public function isProductTourSeen(): bool
     {
         return $this->productTourSeenAt instanceof DateTimeImmutable;
     }
 
     /**
+     * Returns the completed tour page ids (strings only, de-duplicated, restricted to the catalog when known).
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      *
      * @return list<string>
@@ -64,6 +72,8 @@ trait ProductTourProgressTrait
     }
 
     /**
+     * Whether the given tour page was completed (always true once every tour is seen).
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      */
     public function hasSeenPage(string|BackedEnum $page, ?array $knownPages = null): bool
@@ -120,6 +130,9 @@ trait ProductTourProgressTrait
         return $this;
     }
 
+    /**
+     * Forgets all product-tour progress.
+     */
     public function clearProductTourSeen(): static
     {
         $this->productTourSeenAt    = null;
@@ -129,6 +142,8 @@ trait ProductTourProgressTrait
     }
 
     /**
+     * Returns the catalog pages whose tour should still auto-start.
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      *
      * @return list<string>
@@ -144,6 +159,8 @@ trait ProductTourProgressTrait
     }
 
     /**
+     * Stores the complement of `$enabledPages` as seen (settings form "replay these tours").
+     *
      * @param array<array-key, mixed> $enabledPages
      * @param array<array-key, BackedEnum|string>|null $knownPages
      */

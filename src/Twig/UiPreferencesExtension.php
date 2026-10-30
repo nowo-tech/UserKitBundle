@@ -13,11 +13,17 @@ use Twig\TwigFunction;
  */
 final class UiPreferencesExtension extends AbstractExtension
 {
+    /**
+     * Receives the attribute builder.
+     */
     public function __construct(
         private readonly UiPreferencesHtmlAttributes $attributes,
     ) {
     }
 
+    /**
+     * Registers the `user_ui_html_attributes()` Twig function.
+     */
     public function getFunctions(): array
     {
         return [
@@ -26,6 +32,8 @@ final class UiPreferencesExtension extends AbstractExtension
     }
 
     /**
+     * Renders the `<html>` data-* attributes for a user (or preferences model).
+     *
      * @param array{resolved?: bool} $options
      */
     public function htmlAttributes(?object $subject, array $options = []): string

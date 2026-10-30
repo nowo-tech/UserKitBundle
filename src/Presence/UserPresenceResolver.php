@@ -11,8 +11,14 @@ use Nowo\UserKitBundle\Profile\ProfileSettings;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
+/**
+ * Tells whether a user is online from its last activity timestamp and the profile online threshold.
+ */
 final readonly class UserPresenceResolver
 {
+    /**
+     * Receives the profile registry, the property accessor and the clock.
+     */
     public function __construct(
         private ProfileRegistry $registry,
         private PropertyAccessorInterface $propertyAccessor,
@@ -20,6 +26,9 @@ final readonly class UserPresenceResolver
     ) {
     }
 
+    /**
+     * Whether the user was active within the online threshold of its (or the given) profile.
+     */
     public function isOnline(object $user, ?string $profileName = null): bool
     {
         $profile = $profileName !== null

@@ -15,23 +15,34 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
  */
 final readonly class AccountStatusExportProvider implements PersonalDataExportProviderInterface
 {
+    /**
+     * Receives the profile registry and the property accessor.
+     */
     public function __construct(
         private ProfileRegistry $registry,
         private PropertyAccessorInterface $propertyAccessor,
     ) {
     }
 
+    /**
+     * Returns the export section key.
+     */
     public function getSectionKey(): string
     {
         return 'account_status';
     }
 
+    /**
+     * Whether the user implements AccountStatusInterface or has a readable profile enabled field.
+     */
     public function supports(object $user): bool
     {
         return $user instanceof AccountStatusInterface || $this->field($user) !== null;
     }
 
     /**
+     * Exports the enabled flag of the user.
+     *
      * @return array{enabled: bool}
      */
     public function export(object $user): array

@@ -31,6 +31,8 @@ use const JSON_UNESCAPED_UNICODE;
 final readonly class PersonalDataExporter
 {
     /**
+     * Receives the tagged export providers, the clock and the document schema / version.
+     *
      * @param iterable<PersonalDataExportProviderInterface> $providers ordered by priority
      */
     public function __construct(
@@ -42,6 +44,8 @@ final readonly class PersonalDataExporter
     }
 
     /**
+     * Builds the personal data document of a user from every supporting provider.
+     *
      * @return array{schema: string, version: int, exported_at: string, sections: array<string, mixed>}
      */
     public function export(object $user): array
@@ -69,6 +73,8 @@ final readonly class PersonalDataExporter
     }
 
     /**
+     * Encodes {@see export()} as JSON.
+     *
      * @throws JsonException
      */
     public function exportJson(object $user, int $flags = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE): string

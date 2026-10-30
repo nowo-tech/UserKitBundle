@@ -16,7 +16,13 @@ interface PersonalDataEraserInterface
     /** Stable key reported in the erasure result (e.g. `ui_preferences`). */
     public function getKey(): string;
 
+    /**
+     * Whether this eraser handles the given user.
+     */
     public function supports(object $user): bool;
 
+    /**
+     * Erases this kind of personal data for the user in the request (no flush).
+     */
     public function erase(ErasureRequest $request): void;
 }

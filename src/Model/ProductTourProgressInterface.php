@@ -17,11 +17,19 @@ use DateTimeImmutable;
  */
 interface ProductTourProgressInterface
 {
+    /**
+     * Returns when every tour was marked as done or suppressed, or null.
+     */
     public function getProductTourSeenAt(): ?DateTimeImmutable;
 
+    /**
+     * Whether every tour is done or suppressed (global timestamp set).
+     */
     public function isProductTourSeen(): bool;
 
     /**
+     * Returns the completed tour page ids, filtered by the known catalog.
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      *
      * @return list<string>
@@ -29,20 +37,29 @@ interface ProductTourProgressInterface
     public function getProductTourSeenPages(?array $knownPages = null): array;
 
     /**
+     * Whether the given tour page was completed (always true once every tour is seen).
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      */
     public function hasSeenPage(string|BackedEnum $page, ?array $knownPages = null): bool;
 
     /**
+     * Records one tour page as completed.
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      */
     public function markPageSeen(string|BackedEnum $page, ?array $knownPages = null, ?DateTimeImmutable $at = null): static;
 
     /**
+     * Marks every tour as done or suppressed.
+     *
      * @param array<array-key, BackedEnum|string>|null $knownPages
      */
     public function markProductTourSeen(?DateTimeImmutable $at = null, ?array $knownPages = null): static;
 
+    /**
+     * Forgets all product-tour progress.
+     */
     public function clearProductTourSeen(): static;
 
     /**

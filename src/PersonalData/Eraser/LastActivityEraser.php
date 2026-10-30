@@ -14,16 +14,25 @@ use function is_callable;
  */
 final class LastActivityEraser implements PersonalDataEraserInterface
 {
+    /**
+     * Returns the stable key reported in the erasure result.
+     */
     public function getKey(): string
     {
         return 'last_activity';
     }
 
+    /**
+     * Whether the user exposes `clearLastActivityAt()`.
+     */
     public function supports(object $user): bool
     {
         return is_callable([$user, 'clearLastActivityAt']);
     }
 
+    /**
+     * Clears the last activity timestamp of the user.
+     */
     public function erase(ErasureRequest $request): void
     {
         $clear = [$request->user, 'clearLastActivityAt'];

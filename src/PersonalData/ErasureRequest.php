@@ -10,6 +10,8 @@ namespace Nowo\UserKitBundle\PersonalData;
 final readonly class ErasureRequest
 {
     /**
+     * Describes one erasure: the user, the optional acting user and free host context.
+     *
      * @param array<string, mixed> $context
      */
     public function __construct(
