@@ -155,10 +155,10 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.hash_secret` | string | `%kernel.secret%` | HMAC key of the stored session-id hashes (and of the `hash` IP mode). After a change each row is re-keyed on its session's next request. |
 | `sessions.idle_lifetime` | int (s, ≥ 60) | `86400` | A session idle longer than this is expired: signed out on its next request and purged. Keep it ≥ `framework.session.gc_maxlifetime`. |
 | `sessions.touch_interval` | int (s, ≥ 1, < `idle_lifetime`) | `300` | `last_seen_at` is written at most once per this many seconds per session (the time of the last write is kept in the session, so the requests in between cost no write). |
-| `sessions.remember_me_cookies` | list | `['REMEMBERME']` | Remember-me cookies removed from the request (no auto-login) and cleared on the response when a revoked session is signed out. |
+| `sessions.remember_me_cookies` | list | `[]` | **Extra** cookies removed from the request and cleared (path `/`) when a revoked session is signed out. The remember-me cookie of every firewall is read from the security configuration (name, path, domain, secure, SameSite; with a custom `remember_me.service`, the name from the firewall's authenticator, cleared by the handler) and needs no entry here; a cookie that cannot be resolved fails the compilation and must be listed here. |
 | `sessions.flash` | bool | `true` | Add a `warning` flash ("You were signed out because…", `sessions.signed_out.<reason>`) to the signed-out browser. |
-| `sessions.revocation.store` | `database` \| `cache` | `database` | Where each signed-in request checks its revocation. `database`: one indexed lookup of its row; works with any session handler and any number of servers. `cache`: a marker in `cache_pool`, no query per request; the pool **must be shared by every web server** (Redis, Memcached…); a lost marker is caught by the throttled touch within `touch_interval`. |
-| `sessions.revocation.cache_pool` | service id | `cache.app` | PSR-6 pool of the `cache` store. |
+| `sessions.revocation.store` | `database` \| `cache` | `database` | Where each signed-in request checks its revocation. `database`: one indexed lookup of its row; works with any session handler and any number of servers; a missing row fails closed. `cache`: a marker in `cache_pool`, no query per request; the pool **must be shared by every web server** (Redis, Memcached, PDO…); a lost marker is caught by the throttled touch, so `touch_interval` is the worst-case revocation delay. |
+| `sessions.revocation.cache_pool` | service id \| null | `null` | PSR-6 pool of the `cache` store. **Required** with `store: cache`; per-server adapters (filesystem — `cache.app` by default —, array, APCu, PHP files, null) are refused at compile time, also behind `TagAwareAdapter` / `ProxyAdapter` / `TraceableAdapter` / `ChainAdapter` when every tier is per-server. Unknown classes (custom pools, factories) are accepted: the check is a guard, not a proof. |
 | `sessions.client.user_agent` | `label` \| `none` | `label` | `label` keeps the browser and OS **names** only (no versions, no raw user agent). |
 | `sessions.client.ip` | `truncate` \| `hash` \| `none` | `truncate` | `truncate` keeps the network (`203.0.113.0/24`, `2001:db8:85a3::/48`); `hash` keeps `h:` + 16 hex of an HMAC of that network (not shown in the pages); `none` keeps nothing. |
 | `sessions.client.ipv4_prefix` | `8` \| `16` \| `24` | `24` | Network kept for IPv4. |
@@ -180,7 +180,7 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.security.access_roles` | list | `['ROLE_USER']` | Roles that open "My sessions" (any of them). Must not be empty (P1) unless `access_checker` is set or `allow_unauthenticated` is true. |
 | `sessions.security.manage_roles` | list | `['ROLE_ADMIN']` | Roles that open the administration page for **any** user (any of them). Same non-empty rule. |
 | `sessions.security.access_checker` | service id \| null | `null` | Service implementing `Sessions\Security\SessionsAccessCheckerInterface` (`canAccessOwn()`, `canManage(actor, subject)`) — e.g. "managers may not act on administrators". |
-| `sessions.security.allow_unauthenticated` | bool (literal) | `false` | DEV / DEMO only: skip the role checks. Refused at compile time unless `kernel.debug` is true. "My sessions" still needs a signed-in user. |
+| `sessions.security.allow_unauthenticated` | bool (literal) | `false` | DEV / DEMO only: skip the role checks. Refused at compile time unless `kernel.debug` is true. Both pages still need a signed-in user. |
 
 Invalid values fail the container compilation with the path and the allowed values (REQ-SF-006); environment
 placeholders are refused for the literal switches.
@@ -215,7 +215,8 @@ nowo_user_kit:
 One table, `user_kit_session` (prefixed: `<table_prefix>user_kit_session`, indexes and unique constraints prefixed
 too): `id`, `public_id` (32 hex, used in URLs), `user_type` / `user_id` (owner: Doctrine root class + identifier),
 `session_hash` (HMAC-SHA256 of the session id — the id itself is never stored), `browser`, `os`, `ip`, `device_id`,
-`created_at`, `last_seen_at`, `revoked_at`, `revoked_reason`. Create it with Doctrine Migrations
+`created_at`, `last_seen_at`, `revoked_at`, `revoked_reason`; one row per (session, owner), unique on
+`session_hash` + `user_type` + `user_id`. Create it with Doctrine Migrations
 (`doctrine:migrations:diff` after enabling the feature) or MigrationsKit; see [UPGRADING](UPGRADING.md#to-190).
 
 ### Routes and access control

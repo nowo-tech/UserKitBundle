@@ -8,7 +8,7 @@ services:
     container_name: user-kit-demo-symfony8-php
     working_dir: /app
     ports:
-      - "${PORT:-8023}:80"
+      - "127.0.0.1:${PORT:-8023}:80"
     volumes:
       - .:/app
       - ../..:/var/user-kit-bundle

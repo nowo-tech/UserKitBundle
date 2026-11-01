@@ -93,6 +93,17 @@ false`) and registers nothing until you enable it.
 
 4. Schedule the retention purge daily: `php bin/console nowo:user-kit:sessions:purge`.
 
+5. **1.9-dev testers** (who enabled the feature from `main` before the release): the unique key changed from
+   `uniq_user_kit_session_hash` (`session_hash`) to `uniq_user_kit_session_owner` (`session_hash`, `user_type`,
+   `user_id`) and the session marker became one entry per firewall context. Regenerate the migration
+   (`doctrine:migrations:diff`) — or drop and recreate `user_kit_session`; existing sessions are registered again on
+   their next request (old markers are ignored).
+
+6. With `revocation.store: cache`, set `revocation.cache_pool` to a pool shared by every web server (Redis,
+   Memcached, PDO); per-server pools such as the default `cache.app` are refused, also behind tag-aware / chain /
+   proxy wrappers. Remember-me cookies are read from your firewalls (also with a custom `remember_me.service`); list
+   only extra cookies under `sessions.remember_me_cookies`.
+
 Sessions that were already signed in are registered on their next request. With the feature on, a password change of a
 profile user signs out its other sessions (`sessions.password_change.revoke_sessions: false` to keep the old
 behaviour), and `RegistrySessionInvalidator` replaces the no-op `DefaultSessionInvalidator` unless you aliased your own

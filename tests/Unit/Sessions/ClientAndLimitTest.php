@@ -9,6 +9,7 @@ use Nowo\UserKitBundle\Sessions\Client\DeviceIdResolverInterface;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Limit\ConfiguredSessionLimitResolver;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimitPolicy;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\CacheRevocationStore;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -97,12 +98,23 @@ final class ClientAndLimitTest extends TestCase
 
     public function testCacheRevocationStore(): void
     {
+        $owner = new SessionUser('App\\User', '1');
         $store = new CacheRevocationStore(new ArrayAdapter(), 60);
-        self::assertNull($store->reason('h1'));
+        self::assertNull($store->reason('h1', $owner));
         $store->mark(['h1', 'h2'], 'admin');
-        self::assertSame('admin', $store->reason('h1'));
-        $store->forget('h1');
-        self::assertNull($store->reason('h1'));
-        self::assertSame('admin', $store->reason('h2'));
+        self::assertSame('admin', $store->reason('h1', $owner));
+        self::assertSame('admin', $store->reason('h2', new SessionUser('App\\Other', '9')), 'The marker is per session (any owner).');
+    }
+
+    public function testEmbeddedIpv4IsTruncatedAsIpv4(): void
+    {
+        $factory = new SessionClientFactory();
+        self::assertSame('203.0.113.0/24', $factory->ip('::ffff:203.0.113.77'));
+        self::assertSame('203.0.113.0/24', $factory->ip('::203.0.113.77'));
+        self::assertSame('::1/48', $factory->ip('::1'), 'Loopback is not an embedded IPv4 address.');
+        self::assertSame('2001:db8:85a3::/48', $factory->ip('2001:db8:85a3:1234:5678:8a2e:370:7334'));
+        self::assertNull(SessionClientFactory::embeddedIpv4('203.0.113.77'));
+        $hash = new SessionClientFactory('hash', secret: 's');
+        self::assertSame($hash->ip('203.0.113.1'), $hash->ip('::ffff:203.0.113.77'));
     }
 }

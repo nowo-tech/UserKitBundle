@@ -70,8 +70,7 @@ final class SessionsController extends AbstractController
         $user = $this->ownUser();
 
         return $this->noStore($this->render($this->pages->template('index'), [
-            'page'         => $this->pages->ownPage($this->sessions->listFor($user), $this->sessions->currentHash($request)),
-            'current_hash' => $this->sessions->currentHash($request),
+            'page' => $this->pages->ownPage($this->sessions->listFor($user), $this->sessions->currentHash($request)),
         ]));
     }
 
@@ -82,7 +81,7 @@ final class SessionsController extends AbstractController
     public function revoke(Request $request, string $id): RedirectResponse
     {
         $user = $this->ownUser();
-        $this->requireCsrf($request, SessionsPages::CSRF_REVOKE . '_' . $id);
+        $this->requireCsrf($request, SessionsPages::revokeTokenId($id));
         if (!$this->sessions->revoke($user, $id)) {
             throw new NotFoundHttpException('Unknown session.');
         }
@@ -126,7 +125,7 @@ final class SessionsController extends AbstractController
     public function adminRevoke(Request $request, string $profile, string $user, string $id): RedirectResponse
     {
         $subject = $this->managedUser($profile, $user);
-        $this->requireCsrf($request, SessionsPages::CSRF_ADMIN_REVOKE . '_' . $id);
+        $this->requireCsrf($request, SessionsPages::adminRevokeTokenId($profile, $user, $id));
         if (!$this->sessions->revoke($subject, $id, $this->guard->user())) {
             throw new NotFoundHttpException('Unknown session.');
         }
@@ -142,7 +141,7 @@ final class SessionsController extends AbstractController
     public function adminRevokeAll(Request $request, string $profile, string $user): RedirectResponse
     {
         $subject = $this->managedUser($profile, $user);
-        $this->requireCsrf($request, SessionsPages::CSRF_ADMIN_REVOKE_ALL);
+        $this->requireCsrf($request, SessionsPages::adminRevokeAllTokenId($profile, $user));
         $count = $this->sessions->revokeAll($subject, $this->guard->user());
         $this->flash('sessions.flash.revoked_all', ['%count%' => $count]);
 
@@ -169,17 +168,23 @@ final class SessionsController extends AbstractController
 
     private function managedUser(string $profile, string $id): object
     {
+        // Anonymous first: nothing about the users is revealed before a sign-in.
+        if ($this->guard->user() === null) {
+            $this->guard->deny('Access denied to the sessions of this user.');
+        }
         try {
             $class = $this->profiles->getByName($profile)->userClass;
         } catch (UnknownProfileException) {
             throw new NotFoundHttpException('Unknown user.');
         }
         $subject = $this->doctrine?->getManagerForClass($class)?->find($class, $id);
-        if (!is_object($subject)) {
+        // Strict id: "2abc" is not user 2 (no lax cast of the route value).
+        if (!is_object($subject) || $this->sessions->owner($subject)?->id !== $id) {
             throw new NotFoundHttpException('Unknown user.');
         }
+        // A user the checker does not let the actor manage is "unknown" too (no probing of other tenants' ids).
         if (!$this->guard->canManage($subject)) {
-            $this->guard->deny('Access denied to the sessions of this user.');
+            throw new NotFoundHttpException('Unknown user.');
         }
 
         return $subject;

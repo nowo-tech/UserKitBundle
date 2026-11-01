@@ -42,11 +42,13 @@ abstract class SessionsKernelTestCase extends TestCase
     /**
      * @param array<string, mixed> $sessions `nowo_user_kit.sessions` (merged over enabled + pages)
      * @param array<string, mixed> $userKit other `nowo_user_kit` keys
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options test kernel options
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options test kernel options
      */
-    protected function boot(array $sessions = [], array $userKit = [], bool $debug = false, ?Closure $services = null, ?Closure $routes = null): SessionsTestKernel
+    protected function boot(array $sessions = [], array $userKit = [], bool $debug = false, ?Closure $services = null, ?Closure $routes = null, array $options = []): SessionsTestKernel
     {
         $config       = $userKit + ['sessions' => array_replace_recursive(['enabled' => true, 'web_ui' => ['enabled' => true]], $sessions)];
-        $this->kernel = new SessionsTestKernel(md5(serialize([$config, $debug, static::class, $this->name()])), $config, $routes, [], $debug, $services);
+        $this->kernel = new SessionsTestKernel(md5(serialize([$config, $debug, $options, static::class, $this->name()])), $config, $routes, [], $debug, $services, $options);
         $this->kernel->boot();
         $em = $this->em();
         (new SchemaTool($em))->createSchema([$em->getClassMetadata(Member::class), $em->getClassMetadata(UserSession::class)]);

@@ -6,7 +6,7 @@ namespace Nowo\UserKitBundle\Sessions\Security;
 
 /**
  * DEV / DEMO only (`security.allow_unauthenticated: true`, refused without kernel.debug): the role checks are skipped.
- * "My sessions" still needs a signed-in user (there is nothing to list otherwise).
+ * Both pages still need a signed-in user (the controller denies anonymous requests before any lookup).
  */
 final class AllowAllSessionsAccessChecker implements SessionsAccessCheckerInterface
 {

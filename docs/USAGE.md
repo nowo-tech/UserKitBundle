@@ -388,13 +388,18 @@ sequenceDiagram
   applied, the new session is registered (browser / OS names, network, optional device id).
 - **Each request, before the firewall**: a session whose row is revoked (or gone), or that stayed idle longer than
   `idle_lifetime`, is signed out — session invalidated, token dropped, remember-me cookies removed from the request and
-  cleared on the response, `sessions.signed_out.<reason>` flash. The request goes on as a guest, so your firewall
+  cleared on the response, `sessions.signed_out.<reason>` flash (on `_stateless` routes too). The request goes on as a guest, so your firewall
   answers as usual (login redirect, 401…).
 - **Each request, after the firewall**: `last_seen_at` is written at most once per `touch_interval`. A session that was
   signed in before the feature was enabled is registered on its next request.
 - **Logout** (`LogoutEvent`): the row is deleted.
-- Stateless firewalls and `_stateless` routes are ignored; while impersonating (`_switch_user`) the original user's
-  session is the one tracked.
+- Stateless firewalls are ignored. `_stateless` routes of a stateful firewall are **checked** (revocation, idle
+  expiry) before the firewall, without counting as a session use, but never write the session: activity there does
+  not refresh `last_seen_at`. While impersonating (`_switch_user`) the original user's session is the one tracked.
+- One marker per firewall context and one row per (session, owner): a session signed in on two firewalls with
+  separate contexts shows up for both owners, and revoking either row ends the whole session.
+- Remember-me cookies: the cookie of every firewall is read from its `remember_me` configuration (name, path,
+  domain, secure, SameSite) and cleared with those options; `sessions.remember_me_cookies` adds extra ones.
 
 ### Pages
 
