@@ -34,10 +34,12 @@ use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
 use Symfony\Component\Security\Http\Event\CheckPassportEvent;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
+use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function in_array;
 use function is_object;
+use function ltrim;
 use function str_contains;
 
 use const PHP_INT_MIN;
@@ -77,10 +79,14 @@ final readonly class SessionRegistryListener
     public const DEFAULT_CONTEXT = 'main';
 
     /**
-     * @param list<array{name: string, path: string, domain: string|null, secure: bool|string|null, httponly: bool, samesite: string|null}> $rememberMeCookies
-     *                                                                                                                                                         the remember-me cookies of every firewall (read from the security configuration by SessionsPass) plus
-     *                                                                                                                                                         `sessions.remember_me_cookies`
+     * `$rememberMeCookies`: the remember-me cookies of every firewall (read from the security configuration by
+     * SessionsPass) plus `sessions.remember_me_cookies`; `path: null` means "only strip it from the request" (its
+     * custom handler clears it). `$rememberMeHandlers`: the custom handlers (`remember_me.service`), which clear their
+     * own cookie with their own path and domain.
+     *
+     * @param list<array{name: string, path: string|null, domain: string|null, secure: bool|string|null, httponly: bool, samesite: string|null}> $rememberMeCookies
      * @param bool $flash `sessions.flash`: add the signed-out message to the new session
+     * @param iterable<RememberMeHandlerInterface> $rememberMeHandlers
      */
     public function __construct(
         private UserSessionManager $sessions,
@@ -95,6 +101,7 @@ final readonly class SessionRegistryListener
         private ?EventDispatcherInterface $dispatcher = null,
         private array $rememberMeCookies = [],
         private bool $flash = true,
+        private iterable $rememberMeHandlers = [],
     ) {
     }
 
@@ -254,6 +261,10 @@ final readonly class SessionRegistryListener
             return;
         }
         foreach ($this->rememberMeCookies as $cookie) {
+            if ($cookie['path'] === null) {
+                // Cleared by its custom handler (clearRememberMeCookie()), which knows its path and domain.
+                continue;
+            }
             $secure = $cookie['secure'] === null || $cookie['secure'] === 'auto' ? $request->isSecure() : (bool) $cookie['secure'];
             $event->getResponse()->headers->clearCookie($cookie['name'], $cookie['path'], $cookie['domain'], $secure, $cookie['httponly'], $cookie['samesite']);
         }
@@ -268,7 +279,7 @@ final readonly class SessionRegistryListener
     {
         $now = $this->sessions->now()->getTimestamp();
         foreach ($markers as $marker) {
-            if ($now - $marker['s'] > $this->sessions->idleLifetime() + $this->sessions->touchInterval()) {
+            if ($now - $marker['s'] >= $this->sessions->idleLifetime() + $this->sessions->touchInterval()) {
                 return RevocationReason::Expired->value;
             }
             $owner  = SessionUser::fromKey($marker['u']);
@@ -331,6 +342,9 @@ final readonly class SessionRegistryListener
         foreach ($this->rememberMeCookies as $cookie) {
             $request->cookies->remove($cookie['name']);
         }
+        foreach ($this->rememberMeHandlers as $handler) {
+            $handler->clearRememberMeCookie();
+        }
         $request->attributes->set(self::SIGNED_OUT_ATTRIBUTE, true);
         if ($this->flash && $session instanceof FlashBagAwareSessionInterface) {
             $case = RevocationReason::tryFrom($reason) ?? RevocationReason::SignedOut;
@@ -339,13 +353,16 @@ final readonly class SessionRegistryListener
     }
 
     /**
-     * After the firewall the request was already authenticated: answer with a redirect to the same path (GET / HEAD;
-     * path only, never the Host header) or a 401, so nothing runs as the signed-out user.
+     * After the firewall the request was already authenticated: answer with a redirect to the same path (GET / HEAD)
+     * or a 401, so nothing runs as the signed-out user. The target is the base URL + `/` + the path without leading
+     * slashes / backslashes + the query: never the Host header, never a protocol-relative `//host` URL.
      */
     private function afterSignOut(Request $request): Response
     {
         if (in_array($request->getMethod(), ['GET', 'HEAD'], true) && !$this->wantsJson($request)) {
-            return new RedirectResponse($request->getRequestUri());
+            $query = $request->getQueryString();
+
+            return new RedirectResponse($request->getBaseUrl() . '/' . ltrim($request->getPathInfo(), '/\\') . ($query !== null ? '?' . $query : ''));
         }
 
         return new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);

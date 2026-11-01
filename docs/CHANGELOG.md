@@ -71,8 +71,8 @@ test (`SessionSecurityRegressionTest`):
 - **M2** — the remember-me cookie name / path / domain were hard-coded (`REMEMBERME`, `/`): the cookie of every
   firewall is now read from its `remember_me` configuration and cleared with its name, path, domain, secure and
   SameSite; `sessions.remember_me_cookies` (default now `[]`) only adds extra cookies.
-- **L1** — the administration CSRF token ids are bound to the user (`…_admin_revoke_all_<profile>_<user>`,
-  `…_admin_revoke_<profile>_<user>_<row>`): a "Sign out everywhere" token of one user no longer signs out another.
+- **L1** — the administration CSRF token ids are bound to the user (see N3 for the final format): a "Sign out
+  everywhere" token of one user no longer signs out another.
 - **L2** — the `cache` store no longer deletes the revocation marker on sign-out (it expires with its TTL), so session
   data written back under the old id is still refused.
 - **L3** — `revocation.cache_pool` has no default and is required with `store: cache`; per-server pools (filesystem
@@ -81,6 +81,19 @@ test (`SessionSecurityRegressionTest`):
 - **L5** — one marker per firewall context and one row per (session, owner) (unique key on `session_hash`,
   `user_type`, `user_id`): a sign-in on a second firewall in the same session no longer takes over the first owner's
   row; revoking any row of a session ends the whole session.
+- **N1** (re-verification) — a firewall with a custom `remember_me.service` had no cookie collected, so a revoked
+  browser logged back in: the cookie name is now read from the firewall's remember-me authenticator, the request is
+  stripped of it and the custom handler clears it (`clearRememberMeCookie()`); a cookie that cannot be resolved fails
+  the compilation and asks for `sessions.remember_me_cookies`.
+- **N2** (re-verification) — the shared-pool check unwraps `TagAwareAdapter`, `ProxyAdapter`, `TraceableAdapter` and
+  `ChainAdapter` and refuses the pool when every tier is per-server (a tag-aware filesystem pool, an array + filesystem
+  chain…).
+- **N3** (re-verification) — the administration token ids use `/` as separator (`…_admin_revoke_all/<profile>/<user>`,
+  `…_admin_revoke/<profile>/<user>/<row>`), so profile or user ids containing `_` cannot collide.
+- **N4** (re-verification) — the late sign-out redirect is built from the base URL + `/` + the path without leading
+  slashes / backslashes + the query, so a request to `//evil.example/x` (host catch-all route) redirects to
+  `/evil.example/x`, never to a protocol-relative URL. The idle bound is now inclusive (`>=`), closing a one-second edge
+  with the cache marker TTL.
 - `{user}` of the administration routes must equal the identifier exactly (`2abc` → 404); a user the actor may not
   manage is a 404 like an unknown one; anonymous requests are denied before any lookup.
 - Templates receive `Sessions\Ui\SessionRow` view models instead of the entity and `current_hash` (the session hash

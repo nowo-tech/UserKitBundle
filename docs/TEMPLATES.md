@@ -39,8 +39,8 @@ sessions are listed, administration).
 | --- | --- | --- | --- |
 | My sessions | "Sign out all other sessions" (`nowo-user-kit-sessions-revoke-others`) | `POST nowo_user_kit_sessions_revoke_others` | `nowo_user_kit_sessions_revoke_others` |
 | My sessions | "Sign out" (`nowo-user-kit-sessions-revoke`) | `POST nowo_user_kit_sessions_revoke` | `nowo_user_kit_sessions_revoke_<public id>` (`SessionsPages::revokeTokenId()`) |
-| Administration | "Sign out everywhere" (`nowo-user-kit-sessions-revoke-all`) | `POST nowo_user_kit_sessions_admin_revoke_all` | `nowo_user_kit_sessions_admin_revoke_all_<profile>_<user id>` (bound to the user) |
-| Administration | "Sign out" (`nowo-user-kit-sessions-admin-revoke`) | `POST nowo_user_kit_sessions_admin_revoke` | `nowo_user_kit_sessions_admin_revoke_<profile>_<user id>_<public id>` |
+| Administration | "Sign out everywhere" (`nowo-user-kit-sessions-revoke-all`) | `POST nowo_user_kit_sessions_admin_revoke_all` | `nowo_user_kit_sessions_admin_revoke_all/<profile>/<user id>` (bound to the user) |
+| Administration | "Sign out" (`nowo-user-kit-sessions-admin-revoke`) | `POST nowo_user_kit_sessions_admin_revoke` | `nowo_user_kit_sessions_admin_revoke/<profile>/<user id>/<public id>` |
 
 Each action is a `Nowo\UiKitBundle\View\Action` (kind `delete`, POST) with a FormKit CSRF-only `FormView`
 (`CsrfOnlyFormFactory::createNamed()`) and a UiKit `Confirm` dialog; the UiKit action partial renders the form

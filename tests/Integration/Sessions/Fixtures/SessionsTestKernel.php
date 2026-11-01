@@ -48,8 +48,8 @@ final class SessionsTestKernel extends Kernel
      * @param array<string, mixed> $userKit `nowo_user_kit` configuration
      * @param Closure(RoutingConfigurator): void|null $routes routes (null = the bundle loader + the test pages)
      * @param list<string> $without bundles / features to leave out (twig)
-     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool} $options extra `remember_me` options of the
-     *                                                                                 main firewall; a second stateful firewall with its own context under /back
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options extra `remember_me` options of the
+     *                                                                                                   main firewall; a second stateful firewall with its own context under /back
      */
     public function __construct(
         private readonly string $id,
@@ -232,6 +232,10 @@ final class SessionsTestKernel extends Kernel
         $routes->add('page_stateless', '/page/stateless')->controller('kernel::statelessPage')->defaults(['_stateless' => true]);
         $routes->add('back_page', '/back/page')->controller('kernel::page');
         $routes->add('back_login', '/back/login')->controller('kernel::login');
+        if ($this->options['catch_all'] ?? false) {
+            // A host catch-all route (CMS / SPA fallback): `//host/x` reaches the controller.
+            $routes->add('catch_all', '/{path}')->controller('kernel::statelessPage')->requirements(['path' => '.+']);
+        }
         $routes->add('logout', '/logout');
     }
 }

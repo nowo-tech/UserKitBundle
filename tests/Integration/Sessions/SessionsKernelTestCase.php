@@ -42,8 +42,8 @@ abstract class SessionsKernelTestCase extends TestCase
     /**
      * @param array<string, mixed> $sessions `nowo_user_kit.sessions` (merged over enabled + pages)
      * @param array<string, mixed> $userKit other `nowo_user_kit` keys
-     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool} $options test kernel options
-     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool} $options test kernel options
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options test kernel options
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options test kernel options
      */
     protected function boot(array $sessions = [], array $userKit = [], bool $debug = false, ?Closure $services = null, ?Closure $routes = null, array $options = []): SessionsTestKernel
     {

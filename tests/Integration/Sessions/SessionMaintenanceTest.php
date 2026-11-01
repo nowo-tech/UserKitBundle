@@ -10,15 +10,12 @@ use Nowo\UserKitBundle\Sessions\Command\PurgeSessionsCommand;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\HeaderDeviceIdResolver;
+use Nowo\UserKitBundle\Tests\Support\SharedMemoryPool;
 use stdClass;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
-use Symfony\Component\Cache\Adapter\ProxyAdapter;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Request;
-
-use function Symfony\Component\DependencyInjection\Loader\Configurator\inline_service;
 
 /**
  * Touch throttle, idle expiry, cache revocation store (and a lost marker), rows gone, remember-me cookies, the
@@ -195,7 +192,7 @@ final class SessionMaintenanceTest extends SessionsKernelTestCase
     private function arrayPool(): Closure
     {
         return static function (ContainerConfigurator $c): void {
-            $c->services()->set('test.revocations', ProxyAdapter::class)->args([inline_service(ArrayAdapter::class)])->public();
+            $c->services()->set('test.revocations', SharedMemoryPool::class)->public();
         };
     }
 }

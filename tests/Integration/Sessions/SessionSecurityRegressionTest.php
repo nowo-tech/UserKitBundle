@@ -8,9 +8,8 @@ use Closure;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
+use Nowo\UserKitBundle\Tests\Support\SharedMemoryPool;
 use Symfony\Component\BrowserKit\Cookie;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
-use Symfony\Component\Cache\Adapter\ProxyAdapter;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,8 +17,6 @@ use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
-
-use function Symfony\Component\DependencyInjection\Loader\Configurator\inline_service;
 
 /**
  * Regression tests of the REQ-SEC-004 audit (Appendix CC, 2026-11-01): M1, M2, L1, L2, L3, L5 and the info items on
@@ -193,7 +190,7 @@ final class SessionSecurityRegressionTest extends SessionsKernelTestCase
         $this->tearDown();
 
         $this->expectException(InvalidConfigurationException::class);
-        $this->expectExceptionMessage('per-server pool');
+        $this->expectExceptionMessage('only stores on one server');
         $this->boot(['revocation' => ['store' => 'cache', 'cache_pool' => 'cache.app']]);
     }
 
@@ -284,7 +281,7 @@ final class SessionSecurityRegressionTest extends SessionsKernelTestCase
     private function sharedPool(): Closure
     {
         return static function (ContainerConfigurator $c): void {
-            $c->services()->set('test.revocations', ProxyAdapter::class)->args([inline_service(ArrayAdapter::class)])->public();
+            $c->services()->set('test.revocations', SharedMemoryPool::class)->public();
         };
     }
 }

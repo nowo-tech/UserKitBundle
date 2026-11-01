@@ -80,11 +80,12 @@ final readonly class SessionsPages
     }
 
     /**
-     * CSRF token id of the administration "Sign out" of one session (bound to the user and the row).
+     * CSRF token id of the administration "Sign out" of one session (bound to the user and the row; `/` separates the
+     * parts, which neither route requirement allows, so the id is unambiguous).
      */
     public static function adminRevokeTokenId(string $profile, string $userId, string $publicId): string
     {
-        return self::CSRF_ADMIN_REVOKE . '_' . $profile . '_' . $userId . '_' . $publicId;
+        return self::CSRF_ADMIN_REVOKE . '/' . $profile . '/' . $userId . '/' . $publicId;
     }
 
     /**
@@ -92,7 +93,7 @@ final readonly class SessionsPages
      */
     public static function adminRevokeAllTokenId(string $profile, string $userId): string
     {
-        return self::CSRF_ADMIN_REVOKE_ALL . '_' . $profile . '_' . $userId;
+        return self::CSRF_ADMIN_REVOKE_ALL . '/' . $profile . '/' . $userId;
     }
 
     /**

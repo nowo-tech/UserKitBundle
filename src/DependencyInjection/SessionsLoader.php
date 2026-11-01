@@ -213,6 +213,7 @@ final class SessionsLoader
             $dispatcher,
             self::extraCookies($sessions['remember_me_cookies']),
             $sessions['flash'],
+            [],
         ]);
         $listener
             ->addTag('kernel.event_listener', ['event' => KernelEvents::REQUEST, 'method' => 'onRequestEarly', 'priority' => self::PRIORITY_EARLY])
