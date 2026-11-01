@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
   - [Enabling the session registry](#enabling-the-session-registry)
 - [To 1.8.1](#to-181)
@@ -34,6 +35,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.9.1
+
+From **1.9.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.9.0**:
 

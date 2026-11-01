@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.9.1] - 2026-11-01](#191---2026-11-01)
 - [[1.9.0] - 2026-11-01](#190---2026-11-01)
 - [[1.8.1] - 2026-10-30](#181---2026-10-30)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
@@ -37,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+## [1.9.1] - 2026-11-01
+
+twig/extra-bundle and string-extra required, demo e2e and screenshots for sessions, Spec Kit inventory, PHPUnit 11.5 schema See [UPGRADING](UPGRADING.md#to-191).
 
 ### Changed
 
@@ -69,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spec Kit baseline (REQ-SPECKIT-003): `code-inventory.md` maps the 44 session-registry files under a new Sessions
   category (FR-SES-003 … FR-SES-010 = 004 FR-001 … FR-008); total 105 production sources, Last audited 2026-11-01.
   `spec.md` and `docs/SPEC-DRIVEN-DEVELOPMENT.md` describe the session registry scope.
+
+[1.9.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.9.1
 
 ## [1.9.0] - 2026-11-01
 
