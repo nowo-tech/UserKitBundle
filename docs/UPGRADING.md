@@ -93,6 +93,10 @@ false`) and registers nothing until you enable it.
 
 4. Schedule the retention purge daily: `php bin/console nowo:user-kit:sessions:purge`.
 
+5. With `revocation.store: cache`, set `revocation.cache_pool` to a pool shared by every web server (Redis,
+   Memcached, PDO); per-server pools such as the default `cache.app` are refused. Remember-me cookies are read from
+   your firewalls; list only extra cookies under `sessions.remember_me_cookies`.
+
 Sessions that were already signed in are registered on their next request. With the feature on, a password change of a
 profile user signs out its other sessions (`sessions.password_change.revoke_sessions: false` to keep the old
 behaviour), and `RegistrySessionInvalidator` replaces the no-op `DefaultSessionInvalidator` unless you aliased your own

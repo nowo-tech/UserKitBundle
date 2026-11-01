@@ -22,6 +22,8 @@ final class SessionsConfigurationTest extends TestCase
         self::assertSame(86400, $sessions['idle_lifetime']);
         self::assertSame(300, $sessions['touch_interval']);
         self::assertSame('database', $sessions['revocation']['store']);
+        self::assertNull($sessions['revocation']['cache_pool']);
+        self::assertSame([], $sessions['remember_me_cookies']);
         self::assertSame('truncate', $sessions['client']['ip']);
         self::assertSame('label', $sessions['client']['user_agent']);
         self::assertNull($sessions['limit']['max_sessions']);
@@ -55,6 +57,7 @@ final class SessionsConfigurationTest extends TestCase
         yield 'same paths' => [['web_ui' => ['path_prefix' => '/s', 'admin_path_prefix' => '/s/']], 'must differ'];
         yield 'policy' => [['limit' => ['policy' => 'kick']], 'policy'];
         yield 'ip mode' => [['client' => ['ip' => 'full']], 'ip'];
+        yield 'cache store without pool (L3)' => [['revocation' => ['store' => 'cache']], 'cache_pool is required'];
     }
 
     /**

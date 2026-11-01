@@ -10,5 +10,5 @@
 {% extends '@NowoUiKit/page/list.html.twig' %}
 
 {% block nowo_ui_list_row %}
-    {{- include('@NowoUserKitBundle/sessions/_cells.html.twig', {row: row, page: page, current_hash: null}, with_context = false) -}}
+    {{- include('@NowoUserKitBundle/sessions/_cells.html.twig', {row: row, page: page}, with_context = false) -}}
 {% endblock %}

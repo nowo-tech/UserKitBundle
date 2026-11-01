@@ -107,8 +107,9 @@ final class SessionPagesTest extends SessionsKernelTestCase
         $alice = $this->signIn('alice@example.com');
         $alice->request('GET', '/account/sessions');
         self::assertSame(403, $alice->getResponse()->getStatusCode());
+        // A user the actor may not manage is a 404 (no probing of other users' ids).
         $alice->request('GET', '/admin/user-sessions/default/1');
-        self::assertSame(403, $alice->getResponse()->getStatusCode());
+        self::assertSame(404, $alice->getResponse()->getStatusCode());
     }
 
     public function testAdministratorListsAndSignsOutAUser(): void

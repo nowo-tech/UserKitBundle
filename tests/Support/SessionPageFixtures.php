@@ -35,7 +35,7 @@ final class SessionPageFixtures
     {
         $list = $rows ? [self::row('a', 'Firefox', 'Linux', '203.0.113.0/24'), self::row('b', 'Safari', 'iOS', 'h:0123456789abcdef'), self::row('c', '', '', null)] : [];
 
-        return ['page' => self::pages()->ownPage($list, $rows ? self::hash('a') : null), 'current_hash' => $rows ? self::hash('a') : null];
+        return ['page' => self::pages()->ownPage($list, $rows ? self::hash('a') : null)];
     }
 
     /**

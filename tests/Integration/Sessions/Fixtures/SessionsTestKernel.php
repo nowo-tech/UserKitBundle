@@ -48,6 +48,8 @@ final class SessionsTestKernel extends Kernel
      * @param array<string, mixed> $userKit `nowo_user_kit` configuration
      * @param Closure(RoutingConfigurator): void|null $routes routes (null = the bundle loader + the test pages)
      * @param list<string> $without bundles / features to leave out (twig)
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool} $options extra `remember_me` options of the
+     *                                                                                 main firewall; a second stateful firewall with its own context under /back
      */
     public function __construct(
         private readonly string $id,
@@ -56,6 +58,7 @@ final class SessionsTestKernel extends Kernel
         private readonly array $without = [],
         bool $debug = false,
         private readonly ?Closure $services = null,
+        private readonly array $options = [],
     ) {
         parent::__construct('test', $debug);
     }
@@ -105,6 +108,17 @@ final class SessionsTestKernel extends Kernel
         $flashes = $session instanceof FlashBagAwareSessionInterface ? $session->getFlashBag()->all() : [];
 
         return new Response(($user?->getUserIdentifier() ?? 'anonymous') . "\n" . json_encode($flashes, JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * `_stateless` test page: the signed-in user identifier only (never touches the session itself).
+     */
+    public function statelessPage(): Response
+    {
+        $tokens = $this->service('security.token_storage');
+        $user   = $tokens instanceof TokenStorageInterface ? $tokens->getToken()?->getUser() : null;
+
+        return new Response($user?->getUserIdentifier() ?? 'anonymous');
     }
 
     /**
@@ -171,12 +185,19 @@ final class SessionsTestKernel extends Kernel
             'providers'        => ['members' => ['entity' => ['class' => Member::class, 'property' => 'email']]],
             'role_hierarchy'   => ['ROLE_ADMIN' => ['ROLE_USER', 'ROLE_ALLOWED_TO_SWITCH']],
             'firewalls'        => [
-                'api'  => ['pattern' => '^/api', 'stateless' => true, 'http_basic' => true, 'provider' => 'members'],
+                'api' => ['pattern' => '^/api', 'stateless' => true, 'http_basic' => true, 'provider' => 'members'],
+            ] + (($this->options['back_firewall'] ?? false) ? ['back' => [
+                'pattern'    => '^/back',
+                'context'    => 'back',
+                'lazy'       => true,
+                'provider'   => 'members',
+                'form_login' => ['login_path' => '/back/login', 'check_path' => '/back/login', 'enable_csrf' => false, 'default_target_path' => '/back/page'],
+            ]] : []) + [
                 'main' => [
                     'lazy'        => true,
                     'provider'    => 'members',
                     'form_login'  => ['login_path' => '/login', 'check_path' => '/login', 'enable_csrf' => false, 'default_target_path' => '/page'],
-                    'remember_me' => ['secret' => 'test-secret'],
+                    'remember_me' => ['secret' => 'test-secret'] + ($this->options['remember_me'] ?? []),
                     'logout'      => ['path' => '/logout'],
                     'switch_user' => true,
                 ],
@@ -208,6 +229,9 @@ final class SessionsTestKernel extends Kernel
         $routes->add('api_page', '/api/page')->controller('kernel::page');
         $routes->add('login', '/login')->controller('kernel::login');
         $routes->add('password', '/page/password')->controller('kernel::password');
+        $routes->add('page_stateless', '/page/stateless')->controller('kernel::statelessPage')->defaults(['_stateless' => true]);
+        $routes->add('back_page', '/back/page')->controller('kernel::page');
+        $routes->add('back_login', '/back/login')->controller('kernel::login');
         $routes->add('logout', '/logout');
     }
 }

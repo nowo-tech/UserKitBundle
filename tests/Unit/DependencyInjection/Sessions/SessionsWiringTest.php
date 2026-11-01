@@ -13,13 +13,17 @@ use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
+use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
 use Nowo\UserKitBundle\Sessions\Security\AllowAllSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Tests\Support\FakeExtension;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\FilesystemAdapter;
+use Symfony\Component\Cache\Adapter\RedisAdapter;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\Filesystem\Filesystem;
@@ -135,6 +139,55 @@ final class SessionsWiringTest extends TestCase
         $container->setParameter('kernel.debug', true);
         (new SessionsPass())->process($container);
         $this->addToAssertionCount(1);
+    }
+
+    public function testPassRefusesPerServerCachePools(): void
+    {
+        $container = $this->passContainer(false);
+        $container->setParameter(SessionsLoader::CACHE_POOL_PARAMETER, 'app.pool');
+        $container->setDefinition('cache.adapter.filesystem', new Definition(FilesystemAdapter::class));
+        $container->setDefinition('cache.app', new ChildDefinition('cache.adapter.filesystem'));
+        $container->setAlias('app.pool', 'cache.app');
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('per-server pool');
+        (new SessionsPass())->process($container);
+    }
+
+    public function testPassAcceptsSharedOrUnknownPools(): void
+    {
+        foreach ([
+            'redis'    => [new ChildDefinition('cache.adapter.redis'), new Definition(RedisAdapter::class)],
+            'orphan'   => [new ChildDefinition('missing.parent'), null],
+            'factory'  => [(new Definition())->setFactory(['App\\Pools', 'create']), null],
+            'resolved' => [new Definition('%app.pool.class%'), null],
+        ] as $id => [$pool, $parent]) {
+            $container = $this->passContainer(false);
+            $container->setParameter(SessionsLoader::CACHE_POOL_PARAMETER, $id);
+            if ($parent instanceof Definition) {
+                $container->setDefinition('cache.adapter.redis', $parent);
+            }
+            $container->setDefinition($id, $pool);
+            (new SessionsPass())->process($container);
+        }
+        $this->addToAssertionCount(1);
+    }
+
+    public function testPassHandsTheFirewallRememberMeCookiesToTheListener(): void
+    {
+        $container = $this->passContainer(false);
+        $container->setDefinition(SessionRegistryListener::class, new Definition(SessionRegistryListener::class, array_fill(0, 12, null)))
+            ->replaceArgument(10, SessionsLoader::extraCookies(['LEGACY', 'REMEMBERME']));
+        $handler = new ChildDefinition('security.authenticator.signature_remember_me_handler');
+        $handler->replaceArgument(3, ['name' => 'APP_REMEMBER', 'path' => '/app', 'domain' => '.example.com', 'secure' => true, 'httponly' => true, 'samesite' => 'strict']);
+        $container->setDefinition('security.authenticator.remember_me_handler.main', $handler->addTag('security.remember_me_handler', ['firewall' => 'main']));
+        $default = new Definition('stdClass', [null, null, null, ['name' => 'REMEMBERME', 'path' => '/']]);
+        $container->setDefinition('security.authenticator.remember_me_handler.admin', $default->addTag('security.remember_me_handler', ['firewall' => 'admin']));
+        $container->setDefinition('security.authenticator.remember_me_handler.odd', (new Definition('stdClass'))->addTag('security.remember_me_handler', ['firewall' => 'odd']));
+        (new SessionsPass())->process($container);
+
+        $cookies = $container->getDefinition(SessionRegistryListener::class)->getArgument(10);
+        self::assertSame(['LEGACY', 'REMEMBERME', 'APP_REMEMBER'], array_column($cookies, 'name'));
+        self::assertSame(['name' => 'APP_REMEMBER', 'path' => '/app', 'domain' => '.example.com', 'secure' => true, 'httponly' => true, 'samesite' => 'strict'], $cookies[2]);
     }
 
     public function testTwigPathsPass(): void

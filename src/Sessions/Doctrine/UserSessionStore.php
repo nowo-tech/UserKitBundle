@@ -44,7 +44,7 @@ final readonly class UserSessionStore
     /**
      * Registers a session.
      *
-     * @return bool false when the hash is already registered (a parallel first request won)
+     * @return bool false when the owner's row of that session already exists (a parallel first request won)
      */
     public function insert(SessionUser $user, string $hash, SessionClient $client, DateTimeImmutable $now): bool
     {
@@ -69,27 +69,30 @@ final readonly class UserSessionStore
     }
 
     /**
-     * Records activity of a live session (and its device id when it was unknown).
+     * Records activity of the owner's live row of a session (and its device id when it was unknown).
      *
      * @return bool whether a live (not revoked) row was touched
      */
-    public function touch(string $hash, DateTimeImmutable $now, ?string $deviceId = null): bool
+    public function touch(string $hash, SessionUser $owner, DateTimeImmutable $now, ?string $deviceId = null): bool
     {
         return $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND revoked_at IS NULL',
-            ['now' => $now, 'device' => $deviceId, 'hash' => $hash],
+            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            ['now' => $now, 'device' => $deviceId, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
             ['now' => Types::DATETIME_IMMUTABLE],
         ) > 0;
     }
 
     /**
-     * State of a registered session.
+     * State of the owner's row of a session.
      *
      * @return array{revoked: bool, reason: string|null}|null null when the row does not exist
      */
-    public function state(string $hash): ?array
+    public function state(string $hash, SessionUser $owner): ?array
     {
-        $row = $this->connection()->fetchAssociative('SELECT revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+        $row = $this->connection()->fetchAssociative(
+            'SELECT revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id',
+            ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+        );
         if ($row === false) {
             return null;
         }
@@ -99,19 +102,33 @@ final readonly class UserSessionStore
     }
 
     /**
-     * The session id changed (migrated): the row follows it.
+     * The session id changed (migrated): the owner's row follows it.
      */
-    public function rekey(string $from, string $to): void
+    public function rekey(string $from, string $to, SessionUser $owner): void
     {
-        $this->connection()->executeStatement('UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from', ['to' => $to, 'from' => $from]);
+        $this->connection()->executeStatement(
+            'UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from AND user_type = :type AND user_id = :id',
+            ['to' => $to, 'from' => $from, 'type' => $owner->type, 'id' => $owner->id],
+        );
     }
 
     /**
-     * Deletes the row of a session (sign-out, or a revoked session that came back).
+     * Deletes every row of a session (the whole session was signed out).
      */
     public function deleteByHash(string $hash): void
     {
         $this->connection()->executeStatement('DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+    }
+
+    /**
+     * Deletes the owner's row of a session (logout, sign-in, owner switch in one firewall context).
+     */
+    public function deleteRow(string $hash, SessionUser $owner): void
+    {
+        $this->connection()->executeStatement(
+            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id',
+            ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+        );
     }
 
     /**

@@ -46,7 +46,6 @@ use Symfony\Component\Security\Http\Event\LogoutEvent;
 use function array_filter;
 use function array_key_exists;
 use function array_replace_recursive;
-use function array_values;
 use function is_array;
 use function is_bool;
 use function is_string;
@@ -60,6 +59,9 @@ final class SessionsLoader
 {
     /** FormKit profile of the session pages (`nowo_form_kit.profiles.user_kit`). */
     public const FORM_KIT_PROFILE = 'user_kit';
+
+    /** Container parameter holding the pool of the `cache` revocation store (null with the database store). */
+    public const CACHE_POOL_PARAMETER = 'nowo_user_kit.sessions.revocation.cache_pool';
 
     /** Container parameter holding `sessions.security.allow_unauthenticated` (checked by {@see SessionsPass}). */
     public const ALLOW_UNAUTHENTICATED_PARAMETER = 'nowo_user_kit.sessions.security.allow_unauthenticated';
@@ -138,7 +140,7 @@ final class SessionsLoader
     public static function load(ContainerBuilder $container, array $sessions, array $profiles, bool $personalData): void
     {
         self::assertLiteralBooleans($sessions);
-        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, revocation: array{store: string, cache_pool: string}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
+        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
         $webUi   = $sessions['web_ui'];
         $enabled = $sessions['enabled'];
         $container->setParameter('nowo_user_kit.sessions.enabled', $enabled);
@@ -161,9 +163,11 @@ final class SessionsLoader
         $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager']]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
 
-        $ttl = $sessions['idle_lifetime'] + $sessions['touch_interval'];
-        $container->setDefinition(RevocationStoreInterface::class, $sessions['revocation']['store'] === 'cache'
-            ? new Definition(CacheRevocationStore::class, [new Reference($sessions['revocation']['cache_pool']), $ttl])
+        $ttl       = $sessions['idle_lifetime'] + $sessions['touch_interval'];
+        $cachePool = $sessions['revocation']['store'] === 'cache' ? (string) $sessions['revocation']['cache_pool'] : null;
+        $container->setParameter(self::CACHE_POOL_PARAMETER, $cachePool);
+        $container->setDefinition(RevocationStoreInterface::class, $cachePool !== null
+            ? new Definition(CacheRevocationStore::class, [new Reference($cachePool), $ttl])
             : new Definition(DatabaseRevocationStore::class, [new Reference(UserSessionStore::class)]));
 
         $dispatcher = new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE);
@@ -207,7 +211,7 @@ final class SessionsLoader
             new Reference('request_stack', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             new Reference('translator', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             $dispatcher,
-            array_values(array_filter($sessions['remember_me_cookies'], static fn (string $c): bool => $c !== '')),
+            self::extraCookies($sessions['remember_me_cookies']),
             $sessions['flash'],
         ]);
         $listener
@@ -325,6 +329,23 @@ final class SessionsLoader
             ]);
         }
         $container->setDefinition(PasswordChangeListener::class, $definition);
+    }
+
+    /**
+     * `sessions.remember_me_cookies` as cookie specs (path `/`, host-only); SessionsPass adds the firewall ones.
+     *
+     * @param list<string> $names
+     *
+     * @return list<array{name: string, path: string, domain: string|null, secure: bool|string|null, httponly: bool, samesite: string|null}>
+     */
+    public static function extraCookies(array $names): array
+    {
+        $cookies = [];
+        foreach ($names as $name) {
+            $cookies[] = ['name' => $name, 'path' => '/', 'domain' => null, 'secure' => 'auto', 'httponly' => true, 'samesite' => 'lax'];
+        }
+
+        return $cookies;
     }
 
     /**

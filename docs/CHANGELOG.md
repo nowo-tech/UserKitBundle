@@ -61,6 +61,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `UserSessionsPurgedEvent`; retention command `nowo:user-kit:sessions:purge`; `sessions` personal data export section
   and eraser; `sessions.doctrine.table_prefix` (REQ-ORM-002).
 
+### Security
+
+Fixes of the independent REQ-SEC-004 audit of the session registry (Appendix CC, 2026-11-01), each with a regression
+test (`SessionSecurityRegressionTest`):
+
+- **M1** — `_stateless` routes of a stateful firewall skipped the revocation and idle checks while the firewall still
+  authenticated them from the session: the early check now runs there too (without counting as a session use).
+- **M2** — the remember-me cookie name / path / domain were hard-coded (`REMEMBERME`, `/`): the cookie of every
+  firewall is now read from its `remember_me` configuration and cleared with its name, path, domain, secure and
+  SameSite; `sessions.remember_me_cookies` (default now `[]`) only adds extra cookies.
+- **L1** — the administration CSRF token ids are bound to the user (`…_admin_revoke_all_<profile>_<user>`,
+  `…_admin_revoke_<profile>_<user>_<row>`): a "Sign out everywhere" token of one user no longer signs out another.
+- **L2** — the `cache` store no longer deletes the revocation marker on sign-out (it expires with its TTL), so session
+  data written back under the old id is still refused.
+- **L3** — `revocation.cache_pool` has no default and is required with `store: cache`; per-server pools (filesystem
+  — `cache.app` —, array, APCu, PHP files, null) are refused at compile time.
+- **L4** — IPv4-mapped / IPv4-compatible IPv6 addresses are truncated (or hashed) as IPv4.
+- **L5** — one marker per firewall context and one row per (session, owner) (unique key on `session_hash`,
+  `user_type`, `user_id`): a sign-in on a second firewall in the same session no longer takes over the first owner's
+  row; revoking any row of a session ends the whole session.
+- `{user}` of the administration routes must equal the identifier exactly (`2abc` → 404); a user the actor may not
+  manage is a 404 like an unknown one; anonymous requests are denied before any lookup.
+- Templates receive `Sessions\Ui\SessionRow` view models instead of the entity and `current_hash` (the session hash
+  never reaches a template); the late sign-out redirect is path-only (no `Host` header); the demo binds to
+  `127.0.0.1`; SECURITY.md documents the residual risks (copied remember-me cookie, concurrent sign-ins, `reject_new`
+  lock-out, manager vs. administrators, cache-store delay).
+
 ### Changed
 
 - `composer.json` now requires `nowo-tech/ui-kit-bundle` ^2.20, `nowo-tech/form-kit-bundle` ^2.17, `symfony/twig-bundle`,

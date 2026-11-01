@@ -40,8 +40,10 @@ import.
   (class + identifier), browser / OS names, IP per `client.ip` (truncate / hash / none), optional device id; created
   at sign-in (or on the next request of a session signed in before), `last_seen_at` at most once per `touch_interval`,
   deleted at logout, purged after `idle_lifetime` + `touch_interval`.
-- **FR-002** A revoked, missing or idle session is signed out on its next request, before the firewall, with any
-  session handler: session invalidated, token dropped, remember-me cookies removed and cleared, reason flash.
+- **FR-002** A revoked, missing or idle session is signed out on its next request, before the firewall (`_stateless`
+  routes of stateful firewalls included), with any session handler: session invalidated, token dropped, the
+  remember-me cookie of every firewall removed and cleared with its configured options, reason flash. One marker per
+  firewall context, one row per (session, owner).
 - **FR-003** "My sessions": list, *This session*, sign out one, sign out all others. Administration: one user's
   sessions, sign out one, sign out everywhere. CSRF-only FormKit forms (token per action and row), UiKit list
   scaffold, confirm dialogs, `no-store`.
@@ -61,6 +63,7 @@ import.
 - **SC-002** Both limit policies and a host resolver are tested.
 - **SC-003** Requests between two touches write nothing; the `cache` store costs no query per request.
 - **SC-004** A kernel whose routing is only `routing.controllers` has no bundle route.
+- **SC-006** The REQ-SEC-004 Appendix CC findings have regression tests (`SessionSecurityRegressionTest`).
 - **SC-005** 100% line coverage, PHPStan, Rector, Igor, CS, page contract test green.
 
 ## Out of scope

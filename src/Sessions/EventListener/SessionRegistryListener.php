@@ -25,6 +25,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface;
+use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
@@ -39,35 +40,46 @@ use function in_array;
 use function is_object;
 use function str_contains;
 
+use const PHP_INT_MIN;
+
 /**
  * Keeps the session registry in step with the signed-in (stateful) sessions. Works with any session handler: the
- * registry is the source of truth, the session only carries a marker {h: hash, u: owner, s: last touch}.
+ * registry is the source of truth, the session only carries one marker per firewall context
+ * `{h: hash, u: owner, s: last touch}` (and the registry one row per session and owner).
  *
- * - `kernel.request` priority 9 (**before the firewall**, so a revoked session is never refreshed): a session whose
- *   marker is revoked ({@see RevocationStoreInterface}) or idle longer than `idle_lifetime` is signed out — session
- *   invalidated, token dropped, remember-me cookies removed from the request (no auto-login) and cleared on the
- *   response, flash `sessions.signed_out.<reason>`. The request then goes on anonymous, so the firewall answers as for
- *   any guest (login redirect, 401…).
- * - `kernel.request` priority 6 (after the firewall): a signed-in session without marker is registered; then
- *   `last_seen_at` is written at most once per `touch_interval` (the time of the last write lives in the marker, so
- *   requests in between cost no write); a touch that finds the row revoked (a lost cache marker) or gone
- *   (erased, purged, deleted by the host) signs the session out: the registry is the source of truth.
+ * - `kernel.request` priority 9 (**before the firewall**, so a revoked session is never refreshed — `_stateless`
+ *   routes included, since the firewall's ContextListener reads the session there too): a session with any marker that
+ *   is revoked ({@see RevocationStoreInterface}), whose row is gone (database store) or that stayed idle longer than
+ *   `idle_lifetime` is signed out as a whole — session invalidated, token dropped, remember-me cookies of every
+ *   firewall removed from the request (no auto-login) and cleared on the response with their configured name, path,
+ *   domain, secure and SameSite, flash `sessions.signed_out.<reason>`. The request then goes on anonymous, so the
+ *   firewall answers as for any guest (login redirect, 401…).
+ * - `kernel.request` priority 6 (after the firewall, stateful routes only): a signed-in session without a marker for
+ *   this firewall context is registered; then `last_seen_at` is written at most once per `touch_interval` (the time
+ *   of the last write lives in the marker, so requests in between cost no write); a touch that finds the row revoked
+ *   (a lost cache marker) or gone signs the session out. `_stateless` routes never write the session, so activity
+ *   there does not refresh `last_seen_at`.
  * - `CheckPassportEvent` priority -128 (after the credentials check): `reject_new` refuses a sign-in that would
  *   exceed the concurrent-session limit ({@see SessionLimitReachedException}).
  * - `LoginSuccessEvent` priority -256 (after the session id migration and the remember-me cookie): the previous row
- *   of the session goes, `evict_oldest` revokes the least recently active sessions over the limit, the new session is
- *   registered.
- * - `LogoutEvent` priority 64 (before the session is invalidated): the row goes.
+ *   of this firewall context goes, `evict_oldest` revokes the least recently active sessions over the limit, the new
+ *   session is registered.
+ * - `LogoutEvent` priority 64 (before the session is invalidated): the row of this firewall context goes.
  *
- * Stateless firewalls and `_stateless` routes are ignored. Holds no state between requests (worker mode).
+ * Stateless firewalls are ignored. Holds no state between requests (worker mode).
  */
 final readonly class SessionRegistryListener
 {
     /** Request attribute set when this request signed its session out (the response clears the cookies). */
     public const SIGNED_OUT_ATTRIBUTE = '_nowo_user_kit_session_signed_out';
 
+    /** Marker key of requests outside any firewall context. */
+    public const DEFAULT_CONTEXT = 'main';
+
     /**
-     * @param list<string> $rememberMeCookies `sessions.remember_me_cookies`
+     * @param list<array{name: string, path: string, domain: string|null, secure: bool|string|null, httponly: bool, samesite: string|null}> $rememberMeCookies
+     *                                                                                                                                                         the remember-me cookies of every firewall (read from the security configuration by SessionsPass) plus
+     *                                                                                                                                                         `sessions.remember_me_cookies`
      * @param bool $flash `sessions.flash`: add the signed-out message to the new session
      */
     public function __construct(
@@ -81,79 +93,85 @@ final readonly class SessionRegistryListener
         private ?RequestStack $requestStack = null,
         private ?TranslatorInterface $translator = null,
         private ?EventDispatcherInterface $dispatcher = null,
-        private array $rememberMeCookies = ['REMEMBERME'],
+        private array $rememberMeCookies = [],
         private bool $flash = true,
     ) {
     }
 
     /**
-     * Before the firewall: signs out a revoked or expired session.
+     * Before the firewall: signs out a revoked, missing or expired session (`_stateless` routes included).
      */
     public function onRequestEarly(RequestEvent $event): void
     {
         $request = $event->getRequest();
-        $session = $this->previousSession($event);
-        $marker  = $this->sessions->marker($session);
-        if (!$session instanceof SessionInterface || $marker === null) {
+        if (!$event->isMainRequest() || !$request->hasPreviousSession()) {
             return;
         }
-        if ($this->sessions->now()->getTimestamp() - $marker['s'] > $this->sessions->idleLifetime() + $this->sessions->touchInterval()) {
-            $this->store->deleteByHash($marker['h']);
-            $this->signOut($request, $session, RevocationReason::Expired->value);
-
-            return;
+        $session = $request->getSession();
+        // Like the firewall's ContextListener, reading (and ending) the session of a `_stateless` route must not count
+        // as a use: the usage index is parked below zero meanwhile, then restored.
+        $tracked = $request->attributes->getBoolean('_stateless') && $session instanceof Session;
+        if ($tracked) {
+            $index = &$session->getUsageIndex();
+            $saved = $index;
+            $index = PHP_INT_MIN;
         }
-        $reason = $this->revocations->reason($marker['h']);
+        $markers = $this->sessions->markers($session);
+        $reason  = $this->revocationOf($markers);
         if ($reason !== null) {
-            $this->revocations->forget($marker['h']);
-            $this->store->deleteByHash($marker['h']);
+            foreach ($markers as $marker) {
+                $this->store->deleteByHash($marker['h']);
+            }
             $this->signOut($request, $session, $reason);
+        }
+        if ($tracked) {
+            $index = $saved;
         }
     }
 
     /**
-     * After the firewall: registers or touches the session of the signed-in user.
+     * After the firewall: registers or touches the session of the signed-in user (stateful routes).
      */
     public function onRequest(RequestEvent $event): void
     {
-        $session = $this->previousSession($event);
-        if (!$session instanceof SessionInterface || !$this->stateful($event->getRequest())) {
+        $request = $event->getRequest();
+        if (!$event->isMainRequest() || !$request->hasPreviousSession() || !$this->stateful($request)) {
             return;
         }
-        $user  = $this->currentUser();
-        $owner = $user !== null ? $this->sessions->owner($user) : null;
+        $session = $request->getSession();
+        $user    = $this->currentUser();
+        $owner   = $user !== null ? $this->sessions->owner($user) : null;
         if ($user === null || !$owner instanceof SessionUser) {
             return;
         }
-        $request = $event->getRequest();
-        $marker  = $this->sessions->marker($session);
+        $context = $this->context($request);
+        $markers = $this->sessions->markers($session);
+        $marker  = $markers[$context] ?? null;
         if ($marker === null || $marker['u'] !== $owner->key()) {
-            if ($marker !== null) {
-                $this->store->deleteByHash($marker['h']);
+            $previous = $marker !== null ? SessionUser::fromKey($marker['u']) : null;
+            if ($marker !== null && $previous instanceof SessionUser) {
+                $this->store->deleteRow($marker['h'], $previous);
             }
-            $this->register($request, $session, $user, $owner, false);
+            $this->register($request, $session, $context, $user, $owner, false);
 
             return;
         }
         $now  = $this->sessions->now();
         $hash = $this->sessions->hash($session->getId());
         if ($hash !== $marker['h']) {
-            $this->store->rekey($marker['h'], $hash);
-            // @igor-ignore - The request's own session (not an injected service): the marker belongs to this session.
-            $session->set(UserSessionManager::ATTRIBUTE, ['h' => $hash, 'u' => $marker['u'], 's' => $marker['s']]);
+            $this->store->rekey($marker['h'], $hash, $owner);
+            $this->setMarker($session, $context, ['h' => $hash, 'u' => $marker['u'], 's' => $marker['s']]);
         }
         if ($now->getTimestamp() - $marker['s'] < $this->sessions->touchInterval()) {
             return;
         }
-        if ($this->store->touch($hash, $now, $this->clients->deviceId($request))) {
-            // @igor-ignore - The request's own session (not an injected service): the marker belongs to this session.
-            $session->set(UserSessionManager::ATTRIBUTE, ['h' => $hash, 'u' => $marker['u'], 's' => $now->getTimestamp()]);
+        if ($this->store->touch($hash, $owner, $now, $this->clients->deviceId($request))) {
+            $this->setMarker($session, $context, ['h' => $hash, 'u' => $marker['u'], 's' => $now->getTimestamp()]);
 
             return;
         }
         // Revoked (its cache marker was lost) or gone (erased, purged, deleted by the host): the session ends.
-        $state = $this->store->state($hash);
-        $this->revocations->forget($hash);
+        $state = $this->store->state($hash, $owner);
         $this->store->deleteByHash($hash);
         $this->signOut($request, $session, $state['reason'] ?? RevocationReason::SignedOut->value);
         $event->setResponse($this->afterSignOut($request));
@@ -194,7 +212,8 @@ final readonly class SessionRegistryListener
             return;
         }
         $session = $request->getSession();
-        $this->forget($session);
+        $context = $this->context($request);
+        $this->forget($session, $context);
         $user  = $event->getUser();
         $owner = $this->sessions->owner($user);
         if (!$owner instanceof SessionUser) {
@@ -211,17 +230,17 @@ final readonly class SessionRegistryListener
             }
         }
         // forget() read the session, so it is started and its id is the migrated one.
-        $this->register($request, $session, $user, $owner, true);
+        $this->register($request, $session, $context, $user, $owner, true);
     }
 
     /**
-     * Signing out deletes the row (before the session is invalidated).
+     * Signing out deletes the row of this firewall context (before the session is invalidated).
      */
     public function onLogout(LogoutEvent $event): void
     {
         $request = $event->getRequest();
         if ($request->hasSession()) {
-            $this->forget($request->getSession());
+            $this->forget($request->getSession(), $this->context($request));
         }
     }
 
@@ -230,35 +249,75 @@ final readonly class SessionRegistryListener
      */
     public function onResponse(ResponseEvent $event): void
     {
-        if (!$event->isMainRequest() || $event->getRequest()->attributes->get(self::SIGNED_OUT_ATTRIBUTE) !== true) {
+        $request = $event->getRequest();
+        if (!$event->isMainRequest() || $request->attributes->get(self::SIGNED_OUT_ATTRIBUTE) !== true) {
             return;
         }
         foreach ($this->rememberMeCookies as $cookie) {
-            $event->getResponse()->headers->clearCookie($cookie, '/');
+            $secure = $cookie['secure'] === null || $cookie['secure'] === 'auto' ? $request->isSecure() : (bool) $cookie['secure'];
+            $event->getResponse()->headers->clearCookie($cookie['name'], $cookie['path'], $cookie['domain'], $secure, $cookie['httponly'], $cookie['samesite']);
         }
     }
 
-    private function register(Request $request, SessionInterface $session, object $user, SessionUser $owner, bool $atLogin): void
+    /**
+     * Reason to end the session: the first marker that is idle, revoked or (database store) without a row.
+     *
+     * @param array<string, array{h: string, u: string, s: int}> $markers
+     */
+    private function revocationOf(array $markers): ?string
     {
-        $now    = $this->sessions->now();
-        $hash   = $this->sessions->hash($session->getId());
-        $client = $this->clients->fromRequest($request);
-        $this->revocations->forget($hash);
+        $now = $this->sessions->now()->getTimestamp();
+        foreach ($markers as $marker) {
+            if ($now - $marker['s'] > $this->sessions->idleLifetime() + $this->sessions->touchInterval()) {
+                return RevocationReason::Expired->value;
+            }
+            $owner  = SessionUser::fromKey($marker['u']);
+            $reason = $owner instanceof SessionUser ? $this->revocations->reason($marker['h'], $owner) : RevocationReason::SignedOut->value;
+            if ($reason !== null) {
+                return $reason;
+            }
+        }
+
+        return null;
+    }
+
+    private function register(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner, bool $atLogin): void
+    {
+        $now      = $this->sessions->now();
+        $hash     = $this->sessions->hash($session->getId());
+        $client   = $this->clients->fromRequest($request);
         $inserted = $this->store->insert($owner, $hash, $client, $now);
-        $session->set(UserSessionManager::ATTRIBUTE, ['h' => $hash, 'u' => $owner->key(), 's' => $now->getTimestamp()]);
+        $this->setMarker($session, $context, ['h' => $hash, 'u' => $owner->key(), 's' => $now->getTimestamp()]);
         if ($inserted) {
             $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, $atLogin));
         }
     }
 
-    private function forget(SessionInterface $session): void
+    private function forget(SessionInterface $session, string $context): void
     {
-        $hash = $this->sessions->currentHash($session);
-        if ($hash !== null) {
-            $this->store->deleteByHash($hash);
-            $this->revocations->forget($hash);
-            $session->remove(UserSessionManager::ATTRIBUTE);
+        $markers = $this->sessions->markers($session);
+        $marker  = $markers[$context] ?? null;
+        if ($marker === null) {
+            return;
         }
+        $owner = SessionUser::fromKey($marker['u']);
+        if ($owner instanceof SessionUser) {
+            $this->store->deleteRow($marker['h'], $owner);
+        }
+        unset($markers[$context]);
+        // @igor-ignore - The request's own session (not an injected service): the markers belong to this session.
+        $session->set(UserSessionManager::ATTRIBUTE, $markers);
+    }
+
+    /**
+     * @param array{h: string, u: string, s: int} $marker
+     */
+    private function setMarker(SessionInterface $session, string $context, array $marker): void
+    {
+        $markers           = $this->sessions->markers($session);
+        $markers[$context] = $marker;
+        // @igor-ignore - The request's own session (not an injected service): the markers belong to this session.
+        $session->set(UserSessionManager::ATTRIBUTE, $markers);
     }
 
     /**
@@ -270,7 +329,7 @@ final readonly class SessionRegistryListener
         $this->tokens->setToken(null);
         $session->invalidate();
         foreach ($this->rememberMeCookies as $cookie) {
-            $request->cookies->remove($cookie);
+            $request->cookies->remove($cookie['name']);
         }
         $request->attributes->set(self::SIGNED_OUT_ATTRIBUTE, true);
         if ($this->flash && $session instanceof FlashBagAwareSessionInterface) {
@@ -280,13 +339,13 @@ final readonly class SessionRegistryListener
     }
 
     /**
-     * After the firewall the request was already authenticated: answer with a redirect to the same page (GET / HEAD)
-     * or a 401, so nothing runs as the signed-out user.
+     * After the firewall the request was already authenticated: answer with a redirect to the same path (GET / HEAD;
+     * path only, never the Host header) or a 401, so nothing runs as the signed-out user.
      */
     private function afterSignOut(Request $request): Response
     {
         if (in_array($request->getMethod(), ['GET', 'HEAD'], true) && !$this->wantsJson($request)) {
-            return new RedirectResponse($request->getUri());
+            return new RedirectResponse($request->getRequestUri());
         }
 
         return new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);
@@ -297,16 +356,6 @@ final readonly class SessionRegistryListener
         return $request->isXmlHttpRequest() || $request->getPreferredFormat() === 'json' || str_contains((string) $request->headers->get('Accept'), 'application/json');
     }
 
-    private function previousSession(RequestEvent $event): ?SessionInterface
-    {
-        $request = $event->getRequest();
-        if (!$event->isMainRequest() || $request->attributes->getBoolean('_stateless') || !$request->hasPreviousSession()) {
-            return null;
-        }
-
-        return $request->getSession();
-    }
-
     private function stateful(Request $request): bool
     {
         if ($request->attributes->getBoolean('_stateless')) {
@@ -315,6 +364,16 @@ final readonly class SessionRegistryListener
         $config = $this->firewalls?->getFirewallConfig($request);
 
         return !$config instanceof FirewallConfig || !$config->isStateless();
+    }
+
+    /**
+     * Firewall context of the request (one marker and one row per context).
+     */
+    private function context(Request $request): string
+    {
+        $config = $this->firewalls?->getFirewallConfig($request);
+
+        return $config?->getContext() ?? $config?->getName() ?? self::DEFAULT_CONTEXT;
     }
 
     /**

@@ -30,7 +30,8 @@ nowo_user_kit:
         revocation:
             # database (one query per signed-in request, works everywhere) | cache (shared pool, no query).
             store: database
-            cache_pool: cache.app
+            # Required with store: cache — a pool shared by every web server (per-server pools are refused).
+            # cache_pool: cache.sessions_redis
         client:
             # label: browser / OS names only | none
             user_agent: label

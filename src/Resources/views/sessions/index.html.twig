@@ -2,7 +2,7 @@
   "My sessions" (REQ-UI-003): UiKit list scaffold. Variables: page (Nowo\UiKitBundle\View\ListPage from
   Sessions\Ui\SessionsPages::ownPage(): header with the "Sign out all other sessions" POST action (FormKit CSRF-only
   form + UiKit confirm), one row per live session, "Sign out" row action on every row but the current one, empty
-  state), current_hash (registry hash of this browser's session). This template fills only the row cells.
+  state; rows are Sessions\Ui\SessionRow, the current one flagged). This template fills only the row cells.
 
   Override: a template that extends '@!NowoUserKitBundle/sessions/index.html.twig' (sessions.web_ui.templates.index)
   and overrides nowo_ui_list_row (or another scaffold data block). Restyle through nowo_ui_kit.theme, never here.
@@ -10,5 +10,5 @@
 {% extends '@NowoUiKit/page/list.html.twig' %}
 
 {% block nowo_ui_list_row %}
-    {{- include('@NowoUserKitBundle/sessions/_cells.html.twig', {row: row, page: page, current_hash: current_hash}, with_context = false) -}}
+    {{- include('@NowoUserKitBundle/sessions/_cells.html.twig', {row: row, page: page}, with_context = false) -}}
 {% endblock %}

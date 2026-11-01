@@ -12,11 +12,14 @@ use Symfony\Component\HttpFoundation\Request;
 use function filter_var;
 use function hash_hmac;
 use function in_array;
+use function inet_ntop;
+use function inet_pton;
 use function intdiv;
 use function mb_substr;
 use function preg_match;
 use function sprintf;
 use function str_contains;
+use function str_repeat;
 use function substr;
 
 use const FILTER_VALIDATE_IP;
@@ -110,11 +113,34 @@ final readonly class SessionClientFactory
         if ($this->ipMode === 'none' || $ip === null || filter_var($ip, FILTER_VALIDATE_IP) === false) {
             return null;
         }
+        $ip      = self::embeddedIpv4($ip) ?? $ip;
         $v6      = str_contains($ip, ':');
         $network = IpUtils::anonymize($ip, $v6 ? 0 : intdiv(32 - $this->ipv4Prefix, 8), $v6 ? intdiv(128 - $this->ipv6Prefix, 8) : 0)
             . sprintf('/%d', $v6 ? $this->ipv6Prefix : $this->ipv4Prefix);
 
         return $this->ipMode === 'hash' ? 'h:' . substr(hash_hmac('sha256', $network, $this->secret), 0, 16) : $network;
+    }
+
+    /**
+     * The IPv4 address carried by an IPv4-mapped (`::ffff:a.b.c.d`) or IPv4-compatible (`::a.b.c.d`) IPv6 address, so
+     * it is truncated as IPv4 (otherwise the full address would survive the IPv6 mask).
+     */
+    public static function embeddedIpv4(string $ip): ?string
+    {
+        if (!str_contains($ip, ':')) {
+            return null;
+        }
+        // Validated by the caller (filter_var): a 16-byte IPv6 address.
+        $packed = (string) inet_pton($ip);
+        $prefix = substr($packed, 0, 12);
+        $mapped = $prefix === str_repeat("\0", 10) . "\xff\xff";
+        // IPv4-compatible: 96 zero bits and a first IPv4 byte that is not 0 (leaves ::, ::1 and other low addresses alone).
+        $compatible = $prefix === str_repeat("\0", 12) && $packed[12] !== "\0";
+        if (!$mapped && !$compatible) {
+            return null;
+        }
+
+        return inet_ntop(substr($packed, 12)) ?: null;
     }
 
     /**

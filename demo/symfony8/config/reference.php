@@ -1559,8 +1559,8 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         remember_me_cookies?: list<scalar|Param|null>,
  *         flash?: bool|Param, // Add a "You were signed out because…" warning flash to the browser of a revoked session. // Default: true
  *         revocation?: array{
- *             store?: "database"|"cache"|Param, // database: one indexed query per signed-in request, works everywhere. cache: no query; needs a pool shared by every web server (cache_pool). // Default: "database"
- *             cache_pool?: scalar|Param|null, // PSR-6 pool service id of the "cache" store (e.g. a Redis pool). // Default: "cache.app"
+ *             store?: "database"|"cache"|Param, // database: one indexed query per signed-in request, works everywhere. cache: no query; needs a pool shared by every web server (cache_pool); touch_interval is then the worst-case revocation delay. // Default: "database"
+ *             cache_pool?: scalar|Param|null, // PSR-6 pool service id of the "cache" store, shared by every web server (e.g. a Redis or Memcached pool). Required with store: cache; per-server pools (filesystem, array, APCu, PHP files) are refused. // Default: null
  *         },
  *         client?: array{ // What is kept about the client (data minimisation).
  *             user_agent?: "label"|"none"|Param, // label: browser and OS names only (no versions, no raw user agent). none: nothing. // Default: "label"

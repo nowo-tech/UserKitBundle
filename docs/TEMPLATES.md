@@ -28,17 +28,19 @@ and `layout: SessionsPages::layout()`. Labels are `NowoUserKitBundle` translatio
 | My sessions (`index`) | `sessions/index.html.twig` | `page/list` | `ListPage` from `SessionsPages::ownPage()`: header `sessions.index.title` + `sessions.index.intro`, header action "Sign out all other sessions" (only when other sessions exist); columns device, network (priority 2), signed in (priority 3), last active; row action "Sign out" on every row but the current one; `EmptyState` `sessions.index.empty`; caption `sessions.index.caption`; root `data-testid="nowo-user-kit-sessions"` | `nowo_ui_list_row` → `sessions/_cells.html.twig` |
 | User sessions (`admin`) | `sessions/admin.html.twig` | `page/list` | `ListPage` from `SessionsPages::adminPage()`: header `sessions.admin.title` / `intro` (`%user%`), breadcrumb, header action "Sign out everywhere" (when the user has sessions); same columns; row action "Sign out" on every row; `EmptyState` `sessions.admin.empty`; root `data-testid="nowo-user-kit-sessions-admin"` | `nowo_ui_list_row` → `sessions/_cells.html.twig` |
 
-Other variables passed by the controller: `current_hash` (registry hash of the viewer's session, "My sessions") and
-`subject` (the user whose sessions are listed, administration).
+Rows are `Nowo\UserKitBundle\Sessions\Ui\SessionRow` view models (`publicId`, `browser`, `os`, `ip` — displayable
+network or null —, `deviceId`, `createdAt`, `lastSeenAt`, `current`): the session hash never reaches a template, so a
+`dump()` in a host override cannot print it. Other variable passed by the controller: `subject` (the user whose
+sessions are listed, administration).
 
 ## Actions and CSRF
 
 | Page | Action (`data-testid`) | Route | CSRF token id (form `csrf_only`) |
 | --- | --- | --- | --- |
 | My sessions | "Sign out all other sessions" (`nowo-user-kit-sessions-revoke-others`) | `POST nowo_user_kit_sessions_revoke_others` | `nowo_user_kit_sessions_revoke_others` |
-| My sessions | "Sign out" (`nowo-user-kit-sessions-revoke`) | `POST nowo_user_kit_sessions_revoke` | `nowo_user_kit_sessions_revoke_<public id>` |
-| Administration | "Sign out everywhere" (`nowo-user-kit-sessions-revoke-all`) | `POST nowo_user_kit_sessions_admin_revoke_all` | `nowo_user_kit_sessions_admin_revoke_all` |
-| Administration | "Sign out" (`nowo-user-kit-sessions-admin-revoke`) | `POST nowo_user_kit_sessions_admin_revoke` | `nowo_user_kit_sessions_admin_revoke_<public id>` |
+| My sessions | "Sign out" (`nowo-user-kit-sessions-revoke`) | `POST nowo_user_kit_sessions_revoke` | `nowo_user_kit_sessions_revoke_<public id>` (`SessionsPages::revokeTokenId()`) |
+| Administration | "Sign out everywhere" (`nowo-user-kit-sessions-revoke-all`) | `POST nowo_user_kit_sessions_admin_revoke_all` | `nowo_user_kit_sessions_admin_revoke_all_<profile>_<user id>` (bound to the user) |
+| Administration | "Sign out" (`nowo-user-kit-sessions-admin-revoke`) | `POST nowo_user_kit_sessions_admin_revoke` | `nowo_user_kit_sessions_admin_revoke_<profile>_<user id>_<public id>` |
 
 Each action is a `Nowo\UiKitBundle\View\Action` (kind `delete`, POST) with a FormKit CSRF-only `FormView`
 (`CsrfOnlyFormFactory::createNamed()`) and a UiKit `Confirm` dialog; the UiKit action partial renders the form
@@ -79,7 +81,8 @@ bundle templates. A full override also works under `templates/bundles/NowoUserKi
 
 ## Bundle partials
 
-- `sessions/_cells.html.twig` — the row cells of both lists (keep their order in line with `SessionsPages::columns()`).
+- `sessions/_cells.html.twig` — the row cells of both lists (`row` is a `SessionRow`; keep their order in line with
+  `SessionsPages::columns()`).
 
 No local copies of UiKit partials (pagination, flashes, confirm, modal) are shipped.
 

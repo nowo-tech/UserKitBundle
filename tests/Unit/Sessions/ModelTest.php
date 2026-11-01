@@ -13,6 +13,7 @@ use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimitPolicy;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
@@ -35,6 +36,28 @@ final class ModelTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         new SessionUser('App\User', '');
+    }
+
+    public function testSessionUserKeys(): void
+    {
+        $owner = SessionUser::fromKey('App\\User#7#x');
+        self::assertNotNull($owner);
+        self::assertSame('App\\User', $owner->type);
+        self::assertSame('7#x', $owner->id);
+        self::assertNull(SessionUser::fromKey('no-separator'));
+        self::assertNull(SessionUser::fromKey('#7'));
+    }
+
+    public function testSessionRowHidesTheHash(): void
+    {
+        $now     = new DateTimeImmutable('2026-11-01 10:00:00');
+        $session = new UserSession(str_repeat('a', 32), 'App\\User', '7', str_repeat('b', 64), $now, $now, 'Firefox', 'Linux', 'h:0123456789abcdef', 'd-1');
+        $row     = SessionRow::of($session, str_repeat('b', 64));
+        self::assertTrue($row->current);
+        self::assertNull($row->ip);
+        self::assertSame('d-1', $row->deviceId);
+        self::assertFalse(SessionRow::of($session)->current);
+        self::assertArrayNotHasKey('sessionHash', get_object_vars($row));
     }
 
     public function testSessionUserRejectsLongIds(): void

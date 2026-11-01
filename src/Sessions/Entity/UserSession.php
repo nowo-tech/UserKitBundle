@@ -17,6 +17,8 @@ use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
  * {@see UserSessionStore} (the request listeners never flush the entity
  * manager) and read through the ORM for the pages; the entity is read-only.
  *
+ * One row per (session, owner): a session signed in on two firewalls with separate contexts has one row per owner.
+ *
  * Table `user_kit_session`, prefixed with `sessions.doctrine.table_prefix`
  * ({@see TablePrefixListener}). Column names are explicit so the raw DBAL
  * statements do not depend on the host naming strategy.
@@ -24,7 +26,7 @@ use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 #[ORM\Entity(readOnly: true)]
 #[ORM\Table(name: self::TABLE)]
 #[ORM\UniqueConstraint(name: 'uniq_user_kit_session_public_id', columns: ['public_id'])]
-#[ORM\UniqueConstraint(name: 'uniq_user_kit_session_hash', columns: ['session_hash'])]
+#[ORM\UniqueConstraint(name: 'uniq_user_kit_session_owner', columns: ['session_hash', 'user_type', 'user_id'])]
 #[ORM\Index(name: 'idx_user_kit_session_user', columns: ['user_type', 'user_id', 'revoked_at', 'last_seen_at'])]
 #[ORM\Index(name: 'idx_user_kit_session_last_seen', columns: ['last_seen_at'])]
 class UserSession

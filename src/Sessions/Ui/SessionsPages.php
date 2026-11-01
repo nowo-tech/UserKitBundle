@@ -18,6 +18,7 @@ use Nowo\UserKitBundle\NowoUserKitBundle;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
+use function array_map;
 use function is_string;
 
 /**
@@ -49,7 +50,7 @@ final readonly class SessionsPages
 
     public const ROUTE_ADMIN_REVOKE_ALL = 'nowo_user_kit_sessions_admin_revoke_all';
 
-    /** CSRF token ids (the per-row actions append `_<public id>`, so a token only works for its own row). */
+    /** CSRF token id prefixes (see the *TokenId() helpers: bound to the row and, on the administration page, to the user). */
     public const CSRF_REVOKE = 'nowo_user_kit_sessions_revoke';
 
     public const CSRF_REVOKE_OTHERS = 'nowo_user_kit_sessions_revoke_others';
@@ -68,6 +69,30 @@ final readonly class SessionsPages
         private ?string $layoutTemplate = null,
         private array $templates = [],
     ) {
+    }
+
+    /**
+     * CSRF token id of "Sign out" of one of the viewer's sessions.
+     */
+    public static function revokeTokenId(string $publicId): string
+    {
+        return self::CSRF_REVOKE . '_' . $publicId;
+    }
+
+    /**
+     * CSRF token id of the administration "Sign out" of one session (bound to the user and the row).
+     */
+    public static function adminRevokeTokenId(string $profile, string $userId, string $publicId): string
+    {
+        return self::CSRF_ADMIN_REVOKE . '_' . $profile . '_' . $userId . '_' . $publicId;
+    }
+
+    /**
+     * CSRF token id of "Sign out everywhere" (bound to the user: a token for one user never signs out another).
+     */
+    public static function adminRevokeAllTokenId(string $profile, string $userId): string
+    {
+        return self::CSRF_ADMIN_REVOKE_ALL . '_' . $profile . '_' . $userId;
     }
 
     /**
@@ -117,13 +142,14 @@ final readonly class SessionsPages
      * "My sessions": the user's live sessions, "Sign out" on every row but the current one, "Sign out all other
      * sessions" in the header when there are others.
      *
-     * @param list<UserSession> $rows
+     * @param list<UserSession> $sessions
      */
-    public function ownPage(array $rows, ?string $currentHash): ListPage
+    public function ownPage(array $sessions, ?string $currentHash): ListPage
     {
+        $rows   = array_map(static fn (UserSession $s): SessionRow => SessionRow::of($s, $currentHash), $sessions);
         $others = false;
         foreach ($rows as $row) {
-            $others = $others || $row->getSessionHash() !== $currentHash;
+            $others = $others || !$row->current;
         }
         $actions = $others ? [$this->post(
             self::ROUTE_REVOKE_OTHERS,
@@ -136,10 +162,10 @@ final readonly class SessionsPages
 
         $rowActions = [];
         foreach ($rows as $row) {
-            $rowActions[$row->getPublicId()] = $row->getSessionHash() === $currentHash ? [] : [$this->post(
+            $rowActions[$row->publicId] = $row->current ? [] : [$this->post(
                 self::ROUTE_REVOKE,
-                ['id' => $row->getPublicId()],
-                self::CSRF_REVOKE . '_' . $row->getPublicId(),
+                ['id' => $row->publicId],
+                self::revokeTokenId($row->publicId),
                 self::label('sessions.action.revoke'),
                 new Confirm(self::label('sessions.confirm.revoke_title'), self::label('sessions.confirm.revoke'), self::label('sessions.action.revoke')),
                 'nowo-user-kit-sessions-revoke',
@@ -163,16 +189,17 @@ final readonly class SessionsPages
     /**
      * Administration page of one user's sessions: "Sign out" per row and "Sign out everywhere".
      *
-     * @param list<UserSession> $rows
+     * @param list<UserSession> $sessions
      * @param string $subject display name of the user (security user identifier)
      */
-    public function adminPage(array $rows, string $profile, string $userId, string $subject): ListPage
+    public function adminPage(array $sessions, string $profile, string $userId, string $subject): ListPage
     {
+        $rows    = array_map(static fn (UserSession $s): SessionRow => SessionRow::of($s), $sessions);
         $params  = ['profile' => $profile, 'user' => $userId];
         $actions = $rows !== [] ? [$this->post(
             self::ROUTE_ADMIN_REVOKE_ALL,
             $params,
-            self::CSRF_ADMIN_REVOKE_ALL,
+            self::adminRevokeAllTokenId($profile, $userId),
             self::label('sessions.action.revoke_all'),
             new Confirm(self::label('sessions.confirm.revoke_all_title'), self::label('sessions.confirm.revoke_all', ['%user%' => $subject]), self::label('sessions.action.revoke_all')),
             'nowo-user-kit-sessions-revoke-all',
@@ -180,10 +207,10 @@ final readonly class SessionsPages
         $title      = self::label('sessions.admin.title', ['%user%' => $subject]);
         $rowActions = [];
         foreach ($rows as $row) {
-            $rowActions[$row->getPublicId()] = [$this->post(
+            $rowActions[$row->publicId] = [$this->post(
                 self::ROUTE_ADMIN_REVOKE,
-                $params + ['id' => $row->getPublicId()],
-                self::CSRF_ADMIN_REVOKE . '_' . $row->getPublicId(),
+                $params + ['id' => $row->publicId],
+                self::adminRevokeTokenId($profile, $userId, $row->publicId),
                 self::label('sessions.action.revoke'),
                 new Confirm(self::label('sessions.confirm.revoke_title'), self::label('sessions.confirm.admin_revoke', ['%user%' => $subject]), self::label('sessions.action.revoke')),
                 'nowo-user-kit-sessions-admin-revoke',
@@ -209,11 +236,11 @@ final readonly class SessionsPages
      *
      * @param array<string, list<Action>> $actions public id => actions
      *
-     * @return Closure(UserSession): list<Action>
+     * @return Closure(SessionRow): list<Action>
      */
     private function perRow(array $actions): Closure
     {
-        return static fn (UserSession $row): array => $actions[$row->getPublicId()] ?? [];
+        return static fn (SessionRow $row): array => $actions[$row->publicId] ?? [];
     }
 
     /**

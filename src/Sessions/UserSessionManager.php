@@ -35,7 +35,10 @@ use function sprintf;
  */
 final readonly class UserSessionManager
 {
-    /** Session attribute: {h: registry hash, u: owner key, s: last touch (unix time)}. */
+    /**
+     * Session attribute: one marker per firewall context, `context => {h: registry hash, u: owner key, s: last touch}`
+     * (a session signed in on two firewalls with separate contexts has two markers and two rows).
+     */
     public const ATTRIBUTE = '_nowo_user_kit_session';
 
     /**
@@ -64,31 +67,40 @@ final readonly class UserSessionManager
     }
 
     /**
-     * Registry hash recorded on the session (null before its first registered request).
+     * Registry hash of the session (null before its first registered request).
      */
     public function currentHash(Request|SessionInterface|null $session): ?string
     {
-        $marker = $this->marker($session);
+        $session = $this->session($session);
 
-        return $marker['h'] ?? null;
+        return $session instanceof SessionInterface && $this->markers($session) !== [] ? $this->hash($session->getId()) : null;
     }
 
     /**
-     * The session marker, when well formed.
+     * The well-formed markers of the session, by firewall context.
      *
-     * @return array{h: string, u: string, s: int}|null
+     * @return array<string, array{h: string, u: string, s: int}>
      */
-    public function marker(Request|SessionInterface|null $session): ?array
+    public function markers(Request|SessionInterface|null $session): array
     {
-        if ($session instanceof Request) {
-            $session = $session->hasSession() ? $session->getSession() : null;
-        }
-        $marker = $session?->get(self::ATTRIBUTE);
-        if (!is_array($marker) || !is_string($marker['h'] ?? null) || !is_string($marker['u'] ?? null) || !is_int($marker['s'] ?? null)) {
-            return null;
+        $all     = $this->session($session)?->get(self::ATTRIBUTE);
+        $markers = [];
+        foreach (is_array($all) ? $all : [] as $context => $marker) {
+            if (is_string($context) && is_array($marker) && is_string($marker['h'] ?? null) && is_string($marker['u'] ?? null) && is_int($marker['s'] ?? null)) {
+                $markers[$context] = ['h' => $marker['h'], 'u' => $marker['u'], 's' => $marker['s']];
+            }
         }
 
-        return ['h' => $marker['h'], 'u' => $marker['u'], 's' => $marker['s']];
+        return $markers;
+    }
+
+    private function session(Request|SessionInterface|null $session): ?SessionInterface
+    {
+        if ($session instanceof Request) {
+            return $session->hasSession() ? $session->getSession() : null;
+        }
+
+        return $session;
     }
 
     /**

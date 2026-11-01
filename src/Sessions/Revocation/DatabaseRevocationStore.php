@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Sessions\Revocation;
 
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 
 /**
  * Reads the revocation from the registry row itself (the row is marked by {@see UserSessionStore::revoke()}): one
@@ -29,20 +30,13 @@ final readonly class DatabaseRevocationStore implements RevocationStoreInterface
     /**
      * Revocation reason stored on the row (`signed_out` when the row is gone).
      */
-    public function reason(string $hash): ?string
+    public function reason(string $hash, SessionUser $owner): ?string
     {
-        $state = $this->store->state($hash);
+        $state = $this->store->state($hash, $owner);
         if ($state === null) {
             return RevocationReason::SignedOut->value;
         }
 
         return $state['revoked'] ? $state['reason'] : null;
-    }
-
-    /**
-     * Nothing to do: the row is deleted by the caller.
-     */
-    public function forget(string $hash): void
-    {
     }
 }
