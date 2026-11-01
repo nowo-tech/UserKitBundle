@@ -4,7 +4,7 @@
 
 > ⭐ **Found this useful?** Install from [Packagist](https://packagist.org/packages/nowo-tech/user-kit-bundle) and give the repo a star on GitHub.
 
-Symfony bundle for **user account lifecycle and presence**: enable/disable accounts (`UserChecker`), throttled `lastActivityAt` updates, and configurable online detection.
+Symfony bundle for **user account lifecycle and presence**: enable/disable accounts (`UserChecker`), throttled `lastActivityAt` updates, configurable online detection and an opt-in **session registry** (where am I signed in, sign out a device, concurrent-session limits).
 Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tech/AuthKitBundle) without a hard Composer dependency.
 
 ![FrankenPHP Friendly Worker Mode](docs/images/frankenphp-friendly.png)
@@ -22,6 +22,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **UI preferences** — `UiPreferences` embeddable / `UiPreferencesTrait` (locale, theme, width, density, motion, font scale, contrast, sidebar, footer) and the Twig `user_ui_html_attributes()` helper for `<html>` `data-*` attributes
 - **Product tour progress** — `ProductTourProgress` embeddable / trait (`markPageSeen()`, `hasSeenPage()`, `syncEnabledPages()`)
 - **GDPR self-service SPI** (opt-in) — tagged export providers / erasers / erasure guards, versioned JSON `PersonalDataExporter`, transactional `PersonalDataEraser` with veto hook
+- **Session registry and limits** (opt-in, `sessions.enabled`) — one row per signed-in session (HMAC of the id only, browser / OS names, truncated IP), revoked sessions signed out on their next request with any session handler, "My sessions" and admin pages (UiKit + FormKit CSRF-only actions), sign out one / all others / everywhere, concurrent-session limit (`evict_oldest` / `reject_new`, per-user resolver), automatic sign-out on password change and account disable, audit events, retention purge command, GDPR export / erasure
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 
 ## Quick start
@@ -46,10 +47,21 @@ nowo_user_kit:
 
 The legacy flat layout (`user_class` at root) remains supported. See [Configuration](docs/CONFIGURATION.md).
 
+Session registry (opt-in; create the `user_kit_session` table with Doctrine Migrations, see [Upgrading](docs/UPGRADING.md#to-190)):
+
+```yaml
+nowo_user_kit:
+    sessions:
+        enabled: true
+        limit: { max_sessions: 5, policy: evict_oldest }
+        web_ui: { enabled: true }   # routes: type nowo_user_kit_sessions
+```
+
 ## Requirements
 
 - PHP 8.2+
 - Symfony 7.4 | 8.x
+- Doctrine ORM; `nowo-tech/ui-kit-bundle` and `nowo-tech/form-kit-bundle` (installed with the bundle; used by the session pages)
 
 ## AuthKit coexistence
 
@@ -81,6 +93,7 @@ make igor
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Usage](docs/USAGE.md)
+- [Templates](docs/TEMPLATES.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)
@@ -101,6 +114,7 @@ make igor
 - [Code inventory](specs/001-baseline/code-inventory.md)
 - [UI preferences spec (002)](specs/002-ui-preferences/spec.md)
 - [Personal data (GDPR) spec (003)](specs/003-personal-data/spec.md)
+- [Session registry spec (004)](specs/004-sessions/spec.md)
 
 ## Tests and coverage
 

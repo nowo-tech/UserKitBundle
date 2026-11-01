@@ -1,2 +1,53 @@
 account:
     disabled: 'Dit account is uitgeschakeld.'
+sessions:
+    signed_out:
+        signed_out: 'Je bent afgemeld omdat deze sessie vanuit een andere sessie is beëindigd.'
+        others: 'Je bent afgemeld omdat alle andere sessies vanaf een ander apparaat zijn beëindigd.'
+        everywhere: 'Je bent afgemeld omdat alle sessies van je account zijn beëindigd.'
+        admin: 'Je bent afgemeld door een beheerder.'
+        evicted: 'Je bent afgemeld omdat je elders bent aangemeld (sessielimiet).'
+        device: 'Je bent afgemeld omdat dit apparaat niet langer vertrouwd wordt.'
+        password_changed: 'Je bent afgemeld omdat je wachtwoord is gewijzigd.'
+        account_disabled: 'Je bent afgemeld omdat je account is uitgeschakeld.'
+        account_changed: 'Je bent afgemeld omdat je toegang is gewijzigd.'
+        expired: 'Je bent afgemeld na een periode van inactiviteit.'
+    limit:
+        rejected: 'Je bent al aangemeld op %count% apparaten, het maximum voor je account. Meld je eerst af op een ervan.'
+    current: 'Deze sessie'
+    client:
+        browser_os: '%browser% op %os%'
+        unknown: 'Onbekende browser'
+    column:
+        device: 'Apparaat'
+        network: 'Netwerk'
+        created_at: 'Aangemeld'
+        last_seen_at: 'Laatst actief'
+        actions: 'Acties'
+    index:
+        title: 'Sessies'
+        intro: 'Waar je account op dit moment is aangemeld. Meld elke sessie af die je niet herkent.'
+        empty: 'Geen actieve sessies.'
+        caption: 'Je actieve sessies'
+    admin:
+        title: 'Sessies van %user%'
+        intro: 'Waar %user% op dit moment is aangemeld. Afgemelde sessies eindigen bij hun volgende verzoek.'
+        empty: '%user% heeft geen actieve sessies.'
+        caption: 'Actieve sessies van %user%'
+    action:
+        revoke: 'Afmelden'
+        revoke_others: 'Alle andere sessies afmelden'
+        revoke_all: 'Overal afmelden'
+    confirm:
+        revoke_title: 'Deze sessie afmelden?'
+        revoke: 'Het volgende verzoek van die browser gaat naar de aanmeldpagina.'
+        revoke_others_title: 'Alle andere sessies afmelden?'
+        revoke_others: 'Alle sessies behalve deze worden beëindigd, ook onthouden aanmeldingen in die browsers.'
+        revoke_all_title: 'Overal afmelden?'
+        revoke_all: 'Elke sessie van %user% wordt bij het volgende verzoek beëindigd.'
+        admin_revoke: 'Deze sessie van %user% wordt bij het volgende verzoek beëindigd.'
+    flash:
+        revoked: 'De sessie is afgemeld.'
+        no_others: 'Er waren geen andere sessies om af te melden.'
+        revoked_others: '%count% andere sessie(s) afgemeld.'
+        revoked_all: '%count% sessie(s) afgemeld.'

@@ -53,7 +53,8 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
     private const AUTH_KIT_USER_CLASS_PARAMETER = '.nowo_user_kit.auth_kit_user_class';
 
     /**
-     * Captures the AuthKit user class from its raw configuration (independent of bundle order).
+     * Captures the AuthKit user class from its raw configuration (independent of bundle order) and prepends the
+     * session registry mapping / FormKit profile.
      */
     public function prepend(ContainerBuilder $container): void
     {
@@ -61,6 +62,8 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         if ($userClass !== null) {
             $container->setParameter(self::AUTH_KIT_USER_CLASS_PARAMETER, $userClass);
         }
+
+        SessionsLoader::prepend($container);
     }
 
     /**
@@ -113,6 +116,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         }
 
         $this->loadPersonalData($config['personal_data'], $loader, $container);
+        SessionsLoader::load($container, $config['sessions'], $profiles, $config['personal_data']['enabled']);
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);

@@ -1,2 +1,53 @@
 account:
     disabled: 'Esta conta foi desativada.'
+sessions:
+    signed_out:
+        signed_out: 'A tua sessão foi terminada porque foi encerrada a partir de outra sessão.'
+        others: 'A tua sessão foi terminada porque todas as outras sessões foram encerradas a partir de outro dispositivo.'
+        everywhere: 'A tua sessão foi terminada porque todas as sessões da tua conta foram encerradas.'
+        admin: 'A tua sessão foi terminada por um administrador.'
+        evicted: 'A tua sessão foi terminada porque iniciaste sessão noutro local (limite de sessões).'
+        device: 'A tua sessão foi terminada porque este dispositivo já não é de confiança.'
+        password_changed: 'A tua sessão foi terminada porque a tua palavra-passe mudou.'
+        account_disabled: 'A tua sessão foi terminada porque a tua conta foi desativada.'
+        account_changed: 'A tua sessão foi terminada porque o teu acesso mudou.'
+        expired: 'A tua sessão foi terminada após um período de inatividade.'
+    limit:
+        rejected: 'Já tens sessão iniciada em %count% dispositivos, o máximo para a tua conta. Termina primeiro a sessão num deles.'
+    current: 'Esta sessão'
+    client:
+        browser_os: '%browser% em %os%'
+        unknown: 'Navegador desconhecido'
+    column:
+        device: 'Dispositivo'
+        network: 'Rede'
+        created_at: 'Início de sessão'
+        last_seen_at: 'Última atividade'
+        actions: 'Ações'
+    index:
+        title: 'Sessões'
+        intro: 'Onde a tua conta tem sessão iniciada neste momento. Termina qualquer sessão que não reconheças.'
+        empty: 'Não há sessões ativas.'
+        caption: 'As tuas sessões ativas'
+    admin:
+        title: 'Sessões de %user%'
+        intro: 'Onde %user% tem sessão iniciada neste momento. As sessões terminadas acabam no pedido seguinte.'
+        empty: '%user% não tem sessões ativas.'
+        caption: 'Sessões ativas de %user%'
+    action:
+        revoke: 'Terminar sessão'
+        revoke_others: 'Terminar todas as outras sessões'
+        revoke_all: 'Terminar sessão em todo o lado'
+    confirm:
+        revoke_title: 'Terminar esta sessão?'
+        revoke: 'O próximo pedido desse navegador vai para a página de início de sessão.'
+        revoke_others_title: 'Terminar todas as outras sessões?'
+        revoke_others: 'Todas as sessões exceto esta são terminadas, incluindo os inícios de sessão memorizados nesses navegadores.'
+        revoke_all_title: 'Terminar sessão em todo o lado?'
+        revoke_all: 'Cada sessão de %user% é terminada no seu pedido seguinte.'
+        admin_revoke: 'Esta sessão de %user% é terminada no seu pedido seguinte.'
+    flash:
+        revoked: 'A sessão foi terminada.'
+        no_others: 'Não havia outras sessões para terminar.'
+        revoked_others: '%count% outra(s) sessão(ões) terminada(s).'
+        revoked_all: '%count% sessão(ões) terminada(s).'

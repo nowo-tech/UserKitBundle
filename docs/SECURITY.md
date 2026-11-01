@@ -6,6 +6,7 @@
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
 - [Logging](#logging)
+- [CSRF (REQ-SEC-005)](#csrf-req-sec-005)
 - [Dependencies](#dependencies)
 - [Supported Versions](#supported-versions)
 - [Reporting a Vulnerability](#reporting-a-vulnerability)
@@ -20,8 +21,10 @@
 
 UserKit adds account-level building blocks to a host user entity: an account-status user checker, last-activity
 tracking and online presence, UI preferences rendered as `<html>` data attributes, product-tour progress, session
-invalidation on disable and a GDPR export / erasure SPI. It has **no HTTP routes, controllers or forms of its own**;
-authentication, firewalls and the admin UI stay in the host (or AuthKit).
+invalidation on disable, a GDPR export / erasure SPI and, since 1.9.0, an **opt-in session registry** (`sessions.*`,
+off by default) with two optional pages ("My sessions" and an administration page) and CSRF-protected sign-out
+actions. Without `sessions.web_ui.enabled` the bundle has no HTTP routes or controllers; authentication and firewalls
+stay in the host (or AuthKit).
 
 ## Attack surface
 
@@ -30,7 +33,12 @@ authentication, firewalls and the admin UI stay in the host (or AuthKit).
 - `AccountDisabledListener` (Doctrine `postUpdate`) calling `SessionInvalidatorInterface`.
 - Twig helpers `user_is_online()` and `user_ui_html_attributes()` (attribute values come from stored user preferences).
 - `PersonalDataExporter` / `PersonalDataEraser` services and their tagged providers / erasers / guards.
-- Bundle configuration (`nowo_user_kit.profiles.*`).
+- Bundle configuration (`nowo_user_kit.profiles.*`, `nowo_user_kit.sessions.*`).
+- Session registry (`sessions.enabled`): `SessionRegistryListener` on `kernel.request` (before and after the firewall),
+  `kernel.response`, `CheckPassportEvent`, `LoginSuccessEvent`, `LogoutEvent`; `PasswordChangeListener` (Doctrine);
+  the `user_kit_session` table; the `nowo:user-kit:sessions:purge` command.
+- Session pages (`sessions.web_ui.enabled`): `GET` / `POST` routes under `web_ui.path_prefix` and
+  `web_ui.admin_path_prefix`, mounted only by the `nowo_user_kit_sessions` route loader.
 
 ## Threat model
 
@@ -43,15 +51,36 @@ authentication, firewalls and the admin UI stay in the host (or AuthKit).
 | Over-disclosure in GDPR export | Export providers | Fixed sections; providers tagged by the host; documents contain only the listed fields |
 | Partial / vetoed erasure | Eraser | Guards run before any change; erasers run in one transaction, rolled back on failure |
 | Presence as personal data | Online status | Derived from last activity; hosts decide who may see it |
+| Session id disclosure | Registry | Only `HMAC-SHA256(hash_secret, session id)` is stored; the hash is never printed, exported or put in an event; URLs use a random 128-bit public id |
+| Revoked session keeps working | Registry listener | Checked on **every** signed-in request before the firewall (`database` store: the row itself; `cache` store: a marker in a pool that must be shared by all servers, plus the row at every touch); a revoked, missing or idle (`idle_lifetime`) row ends the session: session invalidated, token dropped, remember-me cookies removed from the request (no auto-login) and cleared. Works with any session handler |
+| Remember-me cookie copied to another device | Registry | Out of scope of session revocation: the copied cookie creates a **new** session (subject to the limit and listed on the page). Hosts that need to void every remember-me cookie add a changing property (password, a "session epoch") to `remember_me.signature_properties`; a password change does both |
+| IDOR on sign-out | Pages | Every revocation is scoped to the owner (`user_type` + `user_id`) in the `UPDATE`, so another user's public id never matches (403 without that row's own CSRF token, 404 otherwise); administration needs `canManage(actor, subject)` on the loaded user |
+| CSRF on sign-out | Pages | Every POST is a FormKit CSRF-only form; one token id per action **and row** (a token for one row does not sign another out); invalid / missing token → 403; the container refuses the pages without form CSRF (`SessionsPass`, P2 fail-closed) |
+| Open access to the pages | Pages | `security.access_roles` / `manage_roles` must not be empty (P1, compile error) unless a custom checker is set; anonymous users denied; `allow_unauthenticated` refused outside `kernel.debug`; host `access_control` on both prefixes recommended |
+| Routes exposed without the host's consent | Routing | Controller not autoconfigured: the host's `routing.controllers` import mounts nothing (REQ-SF-004 rule 7, kernel test); only the explicit loader import does |
+| Personal data minimisation (GDPR art. 5(1)(c)) | Registry | Browser / OS **names** only (no raw user agent, no versions), IP truncated to /24 – /48 by default (or a keyed hash, or nothing), optional host device id; no geolocation |
+| Storage limitation (GDPR art. 5(1)(e)) | Purge | `nowo:user-kit:sessions:purge` deletes rows idle for `idle_lifetime` + `touch_interval`; logout deletes the row; erasure deletes every row of the user |
+| Limit bypass | Sign-in | `reject_new` is checked after the credentials (no user enumeration / lock-out by unauthenticated requests); two simultaneous sign-ins may both pass (no lock) — documented residual risk |
+| Session fixation / owner switch | Registry | The row follows the session id when it migrates (re-keyed); a session that changes owner without a login event gets a new row (the old one goes); impersonation keeps the original user's row |
+| Cross-request state in workers | Listeners | Services hold no request state; `PasswordChangeListener` pending changes are cleared on `kernel.reset` |
 
 ## Logging
 
 `LastActivitySubscriber` logs a `warning` with the exception class and message when the timestamp cannot be stored; no
-user identifiers, tokens or session ids are logged. Nothing else in the bundle logs.
+user identifiers, tokens or session ids are logged. Nothing else in the bundle logs: the session registry reports
+through events (`UserSessionStartedEvent`, `UserSessionsRevokedEvent`, `SessionLimitReachedEvent`,
+`UserSessionsPurgedEvent`) that carry the owner reference, actor, reason and public ids — never a session id or hash.
+
+## CSRF (REQ-SEC-005)
+
+The only session mutations are the session pages' sign-out actions: FormKit CSRF-only forms validated server-side
+(fail closed). Sign-out is never a GET.
 
 ## Dependencies
 
-Runtime dependencies are Symfony components (security, http-kernel, property-access, clock, …) and Doctrine ORM.
+Runtime dependencies are Symfony components (security, http-kernel, property-access, clock, form, security-csrf,
+routing, twig-bundle, …), Doctrine ORM / DBAL, and since 1.9.0 `nowo-tech/ui-kit-bundle` and `nowo-tech/form-kit-bundle`
+(session pages).
 `composer audit` runs on the bundle and the demo before every release; Dependabot alerts are triaged and security fixes
 ship as patch releases listed under *Security* in the [CHANGELOG](CHANGELOG.md).
 

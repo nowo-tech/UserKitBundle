@@ -20,6 +20,41 @@ nowo_user_kit:
         # Built-in erasers: last_activity, ui_preferences, product_tour.
         builtin_erasers: true
 
+    # Session registry: list / revoke sessions, concurrent-session limit. Opt-in (needs the user_kit_session table).
+    sessions:
+        enabled: false
+        # Seconds after which an idle session is expired (keep it >= framework.session.gc_maxlifetime).
+        idle_lifetime: 86400
+        # Write last_seen_at at most once per this many seconds per session.
+        touch_interval: 300
+        revocation:
+            # database (one query per signed-in request, works everywhere) | cache (shared pool, no query).
+            store: database
+            cache_pool: cache.app
+        client:
+            # label: browser / OS names only | none
+            user_agent: label
+            # truncate (network /24, /48) | hash | none
+            ip: truncate
+        limit:
+            # null = unlimited
+            max_sessions: null
+            # evict_oldest | reject_new
+            policy: evict_oldest
+        password_change:
+            # Sign out the other sessions when the password changes.
+            revoke_sessions: true
+        doctrine:
+            table_prefix: ''
+        web_ui:
+            # "My sessions" + administration pages (import the nowo_user_kit_sessions route loader).
+            enabled: false
+            path_prefix: /account/sessions
+            admin_path_prefix: /admin/user-sessions
+        security:
+            access_roles: [ROLE_USER]
+            manage_roles: [ROLE_ADMIN]
+
     profiles:
         default:
             # FQCN of the application user entity (required unless nowo_auth_kit.user_class is set).

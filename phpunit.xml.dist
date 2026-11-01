@@ -11,6 +11,7 @@
          displayDetailsOnTestsThatTriggerWarnings="true">
     <php>
         <!-- REQ-SF-005: fail on direct deprecations from this package -->
+        <ini name="memory_limit" value="1G"/>
         <env name="SYMFONY_DEPRECATIONS_HELPER" value="max[direct]=0"/>
     </php>
     <testsuites>

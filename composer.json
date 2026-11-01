@@ -1,6 +1,6 @@
 {
     "name": "nowo-tech/user-kit-bundle",
-    "description": "Symfony bundle for user account enable/disable, last activity tracking, and online presence detection.",
+    "description": "Symfony bundle for user account enable/disable, last activity tracking, online presence, UI preferences, GDPR self-service and an opt-in session registry (list, revoke, concurrent-session limits).",
     "type": "symfony-bundle",
     "license": "MIT",
     "keywords": [
@@ -12,7 +12,10 @@
         "presence",
         "last-activity",
         "disabled-account",
-        "frankenphp"
+        "frankenphp",
+        "sessions",
+        "session-limit",
+        "gdpr"
     ],
     "homepage": "https://packagist.org/packages/nowo-tech/user-kit-bundle",
     "support": {
@@ -22,7 +25,7 @@
     },
     "authors": [
         {
-            "name": "H\u00e9ctor Franco Aceituno",
+            "name": "Héctor Franco Aceituno",
             "email": "hectorfranco@nowo.tech",
             "homepage": "https://github.com/HecFranco",
             "role": "Developer"
@@ -34,20 +37,32 @@
     ],
     "require": {
         "php": ">=8.2 <8.6",
+        "doctrine/dbal": "^3.8 || ^4.0",
         "doctrine/doctrine-bundle": "^2.10 || ^3.0",
         "doctrine/orm": "^2.15 || ^3.0",
+        "nowo-tech/form-kit-bundle": "^2.17",
+        "nowo-tech/ui-kit-bundle": "^2.20",
+        "psr/cache": "^2.0 || ^3.0",
+        "psr/clock": "^1.0",
         "symfony/clock": "^7.4 || ^8.0",
         "symfony/config": "^7.4 || ^8.0",
+        "symfony/console": "^7.4 || ^8.0",
         "symfony/dependency-injection": "^7.4 || ^8.0",
+        "symfony/event-dispatcher": "^7.4 || ^8.0",
+        "symfony/form": "^7.4 || ^8.0",
         "symfony/framework-bundle": "^7.4 || ^8.0",
+        "symfony/http-foundation": "^7.4 || ^8.0",
         "symfony/http-kernel": "^7.4 || ^8.0",
         "symfony/property-access": "^7.4 || ^8.0",
+        "symfony/routing": "^7.4 || ^8.0",
         "symfony/security-bundle": "^7.4 || ^8.0",
         "symfony/security-core": "^7.4 || ^8.0",
-        "symfony/service-contracts": "^2.5 || ^3.0"
-    },
-    "suggest": {
-        "symfony/twig-bundle": "Required for the user_is_online Twig helper."
+        "symfony/security-csrf": "^7.4 || ^8.0",
+        "symfony/security-http": "^7.4 || ^8.0",
+        "symfony/service-contracts": "^2.5 || ^3.0",
+        "symfony/translation-contracts": "^3.5",
+        "symfony/twig-bundle": "^7.4 || ^8.0",
+        "twig/twig": "^3.12"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.0",
@@ -59,7 +74,11 @@
         "phpstan/phpstan-symfony": "^2.0",
         "phpunit/phpunit": "^11.0",
         "rector/rector": "^2.0",
-        "symfony/twig-bundle": "^7.4 || ^8.0",
+        "symfony/browser-kit": "^7.4 || ^8.0",
+        "symfony/cache": "^7.4 || ^8.0",
+        "symfony/css-selector": "^7.4 || ^8.0",
+        "symfony/dom-crawler": "^7.4 || ^8.0",
+        "symfony/translation": "^7.4 || ^8.0",
         "symfony/yaml": "^7.4 || ^8.0"
     },
     "autoload": {

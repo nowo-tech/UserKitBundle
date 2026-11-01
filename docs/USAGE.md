@@ -15,6 +15,17 @@
 - [Personal data export and erasure (GDPR)](#personal-data-export-and-erasure-gdpr)
   - [Export](#export)
   - [Erasure](#erasure)
+- [Session registry and limits](#session-registry-and-limits)
+  - [How it works](#how-it-works)
+  - [Pages](#pages)
+  - [PHP API](#php-api)
+  - [Audit events](#audit-events)
+  - [Concurrent-session limit](#concurrent-session-limit)
+  - [Device ids](#device-ids)
+  - [Automatic sign-outs](#automatic-sign-outs)
+  - [AuthKit hook points](#authkit-hook-points)
+  - [Retention purge](#retention-purge)
+  - [Personal data](#personal-data)
 - [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
   - [Override in the application](#override-in-the-application)
 - [AuthKit coexistence](#authkit-coexistence)
@@ -348,6 +359,190 @@ try {
 
 Built-in erasers: `last_activity` (`clearLastActivityAt()`, provided by `LastActivityTrait` since 1.5.0), `ui_preferences` (`resetUiPreferences()` from `UiPreferencesTrait`), `product_tour` (`clearProductTourSeen()`). Account status is not changed by the kit: disabling / anonymising the account itself is a host eraser.
 
+## Session registry and limits
+
+Since **1.9.0**, opt-in (`sessions.enabled: true`, see [CONFIGURATION](CONFIGURATION.md#session-registry-sessions)).
+One row per signed-in browser session: users see where they are signed in and sign sessions out, administrators do the
+same for any user, and an optional concurrent-session limit applies at sign-in. Revocation works with **any session
+handler** (files, Redis, database, Memcached…): the registry is the source of truth, the session only carries a small
+marker.
+
+### How it works
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant L as SessionRegistryListener
+    participant R as Registry (user_kit_session)
+    B->>L: POST /login (credentials OK)
+    L->>R: reject_new? count live sessions (CheckPassportEvent)
+    L->>R: evict_oldest? revoke oldest; insert row (LoginSuccessEvent)
+    B->>L: GET /page (before the firewall)
+    L->>R: revoked / gone / idle? → invalidate session, drop remember-me, flash
+    B->>L: GET /page (after the firewall)
+    L->>R: touch last_seen_at (at most once per touch_interval)
+    Note over B,R: Revoking (page, API, password change…) marks the row;<br/>the session ends on its next request
+```
+
+- **Sign-in** (`LoginSuccessEvent`, stateful firewalls only): the previous row of the session goes, the limit is
+  applied, the new session is registered (browser / OS names, network, optional device id).
+- **Each request, before the firewall**: a session whose row is revoked (or gone), or that stayed idle longer than
+  `idle_lifetime`, is signed out — session invalidated, token dropped, remember-me cookies removed from the request and
+  cleared on the response, `sessions.signed_out.<reason>` flash. The request goes on as a guest, so your firewall
+  answers as usual (login redirect, 401…).
+- **Each request, after the firewall**: `last_seen_at` is written at most once per `touch_interval`. A session that was
+  signed in before the feature was enabled is registered on its next request.
+- **Logout** (`LogoutEvent`): the row is deleted.
+- Stateless firewalls and `_stateless` routes are ignored; while impersonating (`_switch_user`) the original user's
+  session is the one tracked.
+
+### Pages
+
+Enable `sessions.web_ui.enabled` and import the routes (see [CONFIGURATION](CONFIGURATION.md#routes-and-access-control)):
+
+- **My sessions** (`{path_prefix}`): device (browser on OS), network, signed in, last active, *This session* badge;
+  *Sign out* on every other row and *Sign out all other sessions* in the header.
+- **Administration** (`{admin_path_prefix}/{profile}/{user}`): one user's sessions, *Sign out* per row and
+  *Sign out everywhere*. Link to it from your user page:
+
+```twig
+{% set sessions_url = user_kit_sessions_admin_path(user) %}
+{% if sessions_url %}<a href="{{ sessions_url }}">{{ 'Sessions'|trans }}</a>{% endif %}
+```
+
+Both pages are UiKit list scaffolds; every action is a POST with a FormKit CSRF-only form (one token per action and
+row) behind the UiKit confirm dialog, checked server-side (invalid or missing token → 403). Templates, view models and
+overrides: [TEMPLATES](TEMPLATES.md).
+
+### PHP API
+
+`Nowo\UserKitBundle\Sessions\UserSessionManager` (public service):
+
+```php
+use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
+use Nowo\UserKitBundle\Sessions\UserSessionManager;
+
+final class AccountSecurity
+{
+    public function __construct(private readonly UserSessionManager $sessions) {}
+
+    public function afterTwoFactorChange(User $user, Request $request): void
+    {
+        // Everything but the current browser.
+        $this->sessions->revokeOthers($user, $this->sessions->currentHash($request));
+    }
+
+    public function suspend(User $user, User $admin): void
+    {
+        $this->sessions->revokeAll($user, $admin);                              // reason "admin"
+        // or: $this->sessions->revokeAll($user, null, RevocationReason::AccountChanged);
+    }
+}
+```
+
+| Method | Effect |
+| --- | --- |
+| `listFor($user)` | Live sessions (`Sessions\Entity\UserSession`), most recent first (≤ 200). |
+| `revoke($user, $publicId, $actor = null)` | One session (reason `signed_out`, or `admin` when `$actor` is someone else). |
+| `revokeOthers($user, $currentHash, $actor = null)` | Every session but `$currentHash` (reason `others`). |
+| `revokeAll($user, $actor = null, $reason = Everywhere, $except = null)` | Every session (reason `everywhere`, `admin` when `$actor` is someone else, or yours). |
+| `revokeDevice($user, $deviceId, $except = null)` | The sessions of one device (reason `device`). |
+| `currentHash($requestOrSession)` | Registry hash of the current session (null before it is registered). |
+
+`RegistrySessionInvalidator` implements the existing `SessionInvalidatorInterface`: with `sessions.enabled` it becomes
+the default invalidator (unless you aliased your own), so `account_status.invalidate_sessions_on_disable` really signs
+a disabled account out.
+
+### Audit events
+
+Every mutation dispatches an event **after** the rows are written (the session id is never part of an event):
+
+| Event | When |
+| --- | --- |
+| `Sessions\Event\UserSessionStartedEvent` | A session was registered (`atLogin` true at sign-in). |
+| `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `user`, `actor` (null for automatic ones), `reason`, `publicIds`. Explicit user actions dispatch it even when nothing matched. |
+| `Sessions\Event\SessionLimitReachedEvent` | A sign-in hit the limit (`isRejected()`, `evicted` public ids). |
+| `Sessions\Event\UserSessionsPurgedEvent` | The retention purge ran (`before`, `deleted`). |
+
+```php
+#[AsEventListener]
+final class AuditSessionRevocations
+{
+    public function __construct(private readonly UserActionRecorder $audit) {}
+
+    public function __invoke(UserSessionsRevokedEvent $event): void
+    {
+        $this->audit->record('sessions.revoked', $event->actor, $event->user, ['reason' => $event->reason->value, 'count' => $event->count()]);
+    }
+}
+```
+
+### Concurrent-session limit
+
+`sessions.limit.max_sessions` / `policy` apply to everyone; for per-user limits implement
+`SessionLimitResolverInterface` and set `sessions.limit.resolver` (called at sign-in only, never per request):
+
+```php
+final class PlanSessionLimits implements SessionLimitResolverInterface
+{
+    public function resolve(object $user): SessionLimit
+    {
+        return $user instanceof User && $user->isOnFreePlan()
+            ? new SessionLimit(1, SessionLimitPolicy::RejectNew)
+            : SessionLimit::unlimited();
+    }
+}
+```
+
+- `evict_oldest`: the sign-in succeeds; the least recently active sessions are revoked (reason `evicted`, their browsers
+  see "You were signed out because you signed in elsewhere").
+- `reject_new`: after the credentials are checked, the authenticator fails with `SessionLimitReachedException` (an
+  already translated message, shown by `error.messageKey|trans(error.messageData, 'security')`). Signing in again from
+  an already registered browser replaces its own session and is not refused. A `SessionLimitReachedEvent` listener may
+  e-mail the user a signed link that calls `revokeAll()`, and replace the message with `setMessage()`.
+
+Two sign-ins at exactly the same time may both pass the check (no lock); the next sign-in applies the limit again.
+
+### Device ids
+
+Implement `DeviceIdResolverInterface` (for example from a device-fingerprinting bundle) and set
+`sessions.client.device_id_resolver`; then `revokeDevice($user, $deviceId)` ends that device's sessions (e.g. when its
+trust is revoked). A device id is never a credential.
+
+### Automatic sign-outs
+
+- **Password change** (`sessions.password_change.revoke_sessions`, default on): a Doctrine `preUpdate` on the profile
+  user classes notices the password field change (account page, reset by e-mail, admin, CLI); after the flush every
+  other session of that user is revoked (reason `password_changed`); the session that changed it stays.
+- **Account disabled**: with `account_status.invalidate_sessions_on_disable: true`, every session (reason
+  `account_disabled`).
+- **Anything else** (roles removed, membership suspended…): call `revokeAll($user, null, RevocationReason::AccountChanged)`.
+
+### AuthKit hook points
+
+AuthKit needs no change for the core features: its form login / remember-me / logout go through the Symfony security
+events the registry listens to, and its password reset changes the password field (automatic sign-out). Optional
+integrations an AuthKit (or host) release can add on top:
+
+- after enabling / disabling 2FA, offer "sign out the other sessions" → `revokeOthers($user, $currentHash)`;
+- on `SessionLimitReachedEvent` (`reject_new`), render "you are signed in on N devices" with a signed e-mail link whose
+  controller calls `revokeAll($user)`;
+- when a trusted device is revoked, `revokeDevice($user, $deviceId)`.
+
+### Retention purge
+
+Run the purge daily (cron or Symfony Scheduler); it deletes the rows not seen for `idle_lifetime` + `touch_interval`
+(expired sessions, and revoked sessions that never came back), in batches:
+
+```bash
+php bin/console nowo:user-kit:sessions:purge --batch-size=1000
+```
+
+### Personal data
+
+With `personal_data.enabled`, the export gets a `sessions` section (browser, OS, stored IP form, device id, dates,
+revocation; never the hash) and the eraser `sessions` signs every session out and deletes the rows.
+
 ## Translation overrides (REQ-I18N-001)
 
 Domain: **`NowoUserKitBundle`**
@@ -370,7 +565,7 @@ Symfony uses app translations first; missing keys fall back to the bundle.
 Login (AuthKit) → form_login → UserProvider → UserChecker (UserKit) → OK / blocked
 ```
 
-Install both bundles with the same `user_class`. UserKit does not provide login routes or forms — it complements AuthKit's authentication UI with account status and presence features.
+Install both bundles with the same `user_class`. UserKit does not provide login routes or forms — it complements AuthKit's authentication UI with account status, presence and (opt-in) the session registry pages.
 
 ## Forms in Twig (REQ-TWIG-005)
 

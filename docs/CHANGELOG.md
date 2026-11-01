@@ -37,6 +37,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Session registry and limits** (`nowo_user_kit.sessions`, opt-in, off by default): one `user_kit_session` row per
+  signed-in (stateful) session — HMAC of the session id only, browser / OS names, truncated (or hashed, or no) IP,
+  optional host device id (`DeviceIdResolverInterface`) — registered at sign-in, touched at most once per
+  `touch_interval`, deleted at logout; `Sessions\UserSessionManager` API (`listFor`, `revoke`, `revokeOthers`,
+  `revokeAll`, `revokeDevice`). A revoked, missing or idle session is signed out on its **next request** with any session
+  handler (`revocation.store`: `database` or a shared `cache` pool): session invalidated, remember-me cookies dropped,
+  "You were signed out because…" flash.
+- Concurrent-session limit (`sessions.limit.max_sessions`, `policy: evict_oldest | reject_new`, or a host
+  `SessionLimitResolverInterface`); `reject_new` fails the sign-in with `SessionLimitReachedException` after the
+  credentials check.
+- Automatic sign-outs: password change of a profile user (other sessions; `sessions.password_change`), account disabled
+  (`RegistrySessionInvalidator` becomes the default `SessionInvalidatorInterface`).
+- Pages (`sessions.web_ui.enabled`, routes only through the `nowo_user_kit_sessions` loader): "My sessions" (sign out one,
+  sign out all others) and an administration page (one user's sessions, sign out one, sign out everywhere) on the
+  UiKit list scaffold with FormKit CSRF-only actions (one token per action and row) and UiKit confirm dialogs; REQ-UI-002
+  `security.access_roles` / `manage_roles` / `access_checker` / `allow_unauthenticated`; Twig
+  `user_kit_sessions_admin_path(user)`; FormKit profile `user_kit`; translations in `de`, `en`, `es`, `fr`, `it`, `nl`,
+  `pt`.
+- Audit events `UserSessionStartedEvent`, `UserSessionsRevokedEvent`, `SessionLimitReachedEvent`,
+  `UserSessionsPurgedEvent`; retention command `nowo:user-kit:sessions:purge`; `sessions` personal data export section
+  and eraser; `sessions.doctrine.table_prefix` (REQ-ORM-002).
+
+### Changed
+
+- `composer.json` now requires `nowo-tech/ui-kit-bundle` ^2.20, `nowo-tech/form-kit-bundle` ^2.17, `symfony/twig-bundle`,
+  `symfony/form`, `symfony/security-csrf`, `symfony/routing`, `symfony/console` and `doctrine/dbal` (REQ-TWIG-005 rule 11:
+  the bundle now ships pages). Nothing is registered or changed for hosts that keep `sessions.enabled: false`.
+
 ## [1.8.1] - 2026-10-30
 
 ResetInterface on ProfileRegistry and LastActivitySubscriber (worker mode), PHPDoc See [UPGRADING](UPGRADING.md#to-181).

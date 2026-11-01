@@ -11,6 +11,8 @@ services:
             - '../../DependencyInjection/'
             - '../../Model/'
             - '../../PersonalData/'
+            # Opt-in session registry: wired by DependencyInjection\SessionsLoader only when sessions.enabled is true.
+            - '../../Sessions/'
             - '../../NowoUserKitBundle.php'
 
     Nowo\UserKitBundle\Profile\ProfileRegistry:
