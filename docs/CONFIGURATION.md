@@ -11,6 +11,12 @@ A commented default template ships at `src/Resources/config/packages/nowo_user_k
 - [Legacy flat configuration](#legacy-flat-configuration)
 - [Doctrine mapping for the kit embeddables](#doctrine-mapping-for-the-kit-embeddables)
 - [Personal data (GDPR)](#personal-data-gdpr)
+- [Session registry (sessions)](#session-registry-sessions)
+  - [Keys](#keys)
+  - [Example](#example)
+  - [Tables](#tables)
+  - [Routes and access control](#routes-and-access-control)
+  - [FormKit profile](#formkit-profile)
 - [AuthKit integration](#authkit-integration)
 - [Translations](#translations)
 
@@ -135,6 +141,121 @@ nowo_user_kit:
         schema: 'acme-account-export'
         version: 2
 ```
+
+## Session registry (sessions)
+
+Since **1.9.0**. Opt-in (`sessions.enabled: false` by default: hosts that do not enable it get no listener, table,
+route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING](UPGRADING.md#to-190).
+
+### Keys
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `sessions.enabled` | bool (literal) | `false` | Register the registry, its request / login / logout listeners, the purge command, the Doctrine mapping of `user_kit_session`. |
+| `sessions.hash_secret` | string | `%kernel.secret%` | HMAC key of the stored session-id hashes (and of the `hash` IP mode). After a change each row is re-keyed on its session's next request. |
+| `sessions.idle_lifetime` | int (s, ≥ 60) | `86400` | A session idle longer than this is expired: signed out on its next request and purged. Keep it ≥ `framework.session.gc_maxlifetime`. |
+| `sessions.touch_interval` | int (s, ≥ 1, < `idle_lifetime`) | `300` | `last_seen_at` is written at most once per this many seconds per session (the time of the last write is kept in the session, so the requests in between cost no write). |
+| `sessions.remember_me_cookies` | list | `['REMEMBERME']` | Remember-me cookies removed from the request (no auto-login) and cleared on the response when a revoked session is signed out. |
+| `sessions.flash` | bool | `true` | Add a `warning` flash ("You were signed out because…", `sessions.signed_out.<reason>`) to the signed-out browser. |
+| `sessions.revocation.store` | `database` \| `cache` | `database` | Where each signed-in request checks its revocation. `database`: one indexed lookup of its row; works with any session handler and any number of servers. `cache`: a marker in `cache_pool`, no query per request; the pool **must be shared by every web server** (Redis, Memcached…); a lost marker is caught by the throttled touch within `touch_interval`. |
+| `sessions.revocation.cache_pool` | service id | `cache.app` | PSR-6 pool of the `cache` store. |
+| `sessions.client.user_agent` | `label` \| `none` | `label` | `label` keeps the browser and OS **names** only (no versions, no raw user agent). |
+| `sessions.client.ip` | `truncate` \| `hash` \| `none` | `truncate` | `truncate` keeps the network (`203.0.113.0/24`, `2001:db8:85a3::/48`); `hash` keeps `h:` + 16 hex of an HMAC of that network (not shown in the pages); `none` keeps nothing. |
+| `sessions.client.ipv4_prefix` | `8` \| `16` \| `24` | `24` | Network kept for IPv4. |
+| `sessions.client.ipv6_prefix` | `8` … `64` (multiple of 8) | `48` | Network kept for IPv6. |
+| `sessions.client.device_id_resolver` | service id \| null | `null` | Service implementing `Sessions\Client\DeviceIdResolverInterface` (device id stored per session; enables `UserSessionManager::revokeDevice()`). |
+| `sessions.limit.max_sessions` | int ≥ 1 \| null | `null` | Live sessions a user may hold at once (`null` = unlimited). |
+| `sessions.limit.policy` | `evict_oldest` \| `reject_new` | `evict_oldest` | Over the limit: sign the least recently active sessions out, or refuse the sign-in (authentication failure on the login form). |
+| `sessions.limit.resolver` | service id \| null | `null` | Service implementing `Sessions\Limit\SessionLimitResolverInterface` (per-user limits: roles, plans, organizations…); replaces `max_sessions` / `policy`. |
+| `sessions.password_change.revoke_sessions` | bool | `true` | When the password field of a profile user changes, sign out its other sessions (the session that changed it stays). |
+| `sessions.password_change.field` | string | `password` | Mapped password field of the profile user classes. |
+| `sessions.doctrine.table_prefix` | string `[A-Za-z0-9_]{0,32}` | `''` | Prefix of the bundle table **and** index names (REQ-ORM-002). |
+| `sessions.doctrine.entity_manager` | string \| null | `null` | Entity manager that maps the registry (`null` = the default one). |
+| `sessions.web_ui.enabled` | bool (literal) | `false` | Register the "My sessions" and administration pages (needs Twig, UiKit, FormKit and form CSRF; the container refuses to compile otherwise). |
+| `sessions.web_ui.path_prefix` | path | `/account/sessions` | "My sessions" (`nowo_user_kit_sessions*` routes). |
+| `sessions.web_ui.admin` | bool (literal) | `true` | Register the administration page of a user's sessions. |
+| `sessions.web_ui.admin_path_prefix` | path | `/admin/user-sessions` | Administration routes (`nowo_user_kit_sessions_admin*`); must differ from `path_prefix`. |
+| `sessions.web_ui.layout_template` | string \| null | `null` | Layout the pages extend (`null` = `nowo_ui_kit.layouts.admin`). |
+| `sessions.web_ui.templates.index` / `.admin` | string \| null | `null` | Per-page template override (see [TEMPLATES](TEMPLATES.md)). |
+| `sessions.security.access_roles` | list | `['ROLE_USER']` | Roles that open "My sessions" (any of them). Must not be empty (P1) unless `access_checker` is set or `allow_unauthenticated` is true. |
+| `sessions.security.manage_roles` | list | `['ROLE_ADMIN']` | Roles that open the administration page for **any** user (any of them). Same non-empty rule. |
+| `sessions.security.access_checker` | service id \| null | `null` | Service implementing `Sessions\Security\SessionsAccessCheckerInterface` (`canAccessOwn()`, `canManage(actor, subject)`) — e.g. "managers may not act on administrators". |
+| `sessions.security.allow_unauthenticated` | bool (literal) | `false` | DEV / DEMO only: skip the role checks. Refused at compile time unless `kernel.debug` is true. "My sessions" still needs a signed-in user. |
+
+Invalid values fail the container compilation with the path and the allowed values (REQ-SF-006); environment
+placeholders are refused for the literal switches.
+
+### Example
+
+```yaml
+# config/packages/nowo_user_kit.yaml
+nowo_user_kit:
+    user_class: App\Entity\User
+    sessions:
+        enabled: true
+        idle_lifetime: 86400          # >= framework.session.gc_maxlifetime
+        limit:
+            max_sessions: 5
+            policy: evict_oldest      # or reject_new
+        client:
+            ip: truncate              # truncate | hash | none
+        doctrine:
+            table_prefix: 'app_'      # → app_user_kit_session
+        web_ui:
+            enabled: true
+            path_prefix: /account/sessions
+            admin_path_prefix: /admin/user-sessions
+        security:
+            access_roles: [ROLE_USER]
+            manage_roles: [ROLE_ADMIN]
+```
+
+### Tables
+
+One table, `user_kit_session` (prefixed: `<table_prefix>user_kit_session`, indexes and unique constraints prefixed
+too): `id`, `public_id` (32 hex, used in URLs), `user_type` / `user_id` (owner: Doctrine root class + identifier),
+`session_hash` (HMAC-SHA256 of the session id — the id itself is never stored), `browser`, `os`, `ip`, `device_id`,
+`created_at`, `last_seen_at`, `revoked_at`, `revoked_reason`. Create it with Doctrine Migrations
+(`doctrine:migrations:diff` after enabling the feature) or MigrationsKit; see [UPGRADING](UPGRADING.md#to-190).
+
+### Routes and access control
+
+The routes are **opt-in** (REQ-SF-004 rule 7): they are never loaded by the host's `routing.controllers` import, only by
+the bundle route loader:
+
+```yaml
+# config/routes/nowo_user_kit_sessions.yaml
+nowo_user_kit_sessions:
+    resource: .
+    type: nowo_user_kit_sessions
+```
+
+| Route | Method | Path |
+| --- | --- | --- |
+| `nowo_user_kit_sessions` | GET | `{path_prefix}` |
+| `nowo_user_kit_sessions_revoke` | POST | `{path_prefix}/{id}/revoke` |
+| `nowo_user_kit_sessions_revoke_others` | POST | `{path_prefix}/revoke-others` |
+| `nowo_user_kit_sessions_admin` | GET | `{admin_path_prefix}/{profile}/{user}` |
+| `nowo_user_kit_sessions_admin_revoke` | POST | `{admin_path_prefix}/{profile}/{user}/{id}/revoke` |
+| `nowo_user_kit_sessions_admin_revoke_all` | POST | `{admin_path_prefix}/{profile}/{user}/revoke-all` |
+
+`{profile}` is a UserKit profile name and `{user}` the Doctrine identifier of that profile's user class (use the Twig
+helper `user_kit_sessions_admin_path(user)` to link to it). Protect both prefixes in the host firewall as well (layer 1
+of REQ-UI-002):
+
+```yaml
+# config/packages/security.yaml
+security:
+    access_control:
+        - { path: ^/account/sessions, roles: ROLE_USER }
+        - { path: ^/admin/user-sessions, roles: ROLE_ADMIN }
+```
+
+### FormKit profile
+
+The page actions are FormKit CSRF-only forms themed through the FormKit profile `nowo_form_kit.profiles.user_kit`,
+prepended by the bundle (translation domain `NowoUserKitBundle`). Define that profile in your `nowo_form_kit`
+configuration to override it; the bundle then keeps yours.
 
 ## AuthKit integration
 

@@ -9,7 +9,7 @@ use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 /**
- * Configuration tree of `nowo_user_kit` (profiles, Twig and personal data options).
+ * Configuration tree of `nowo_user_kit` (profiles, Twig, personal data and session registry options).
  */
 final class Configuration implements ConfigurationInterface
 {
@@ -74,6 +74,7 @@ final class Configuration implements ConfigurationInterface
                     ->info('Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.')
                 ->end()
                 ->append($this->createPersonalDataNode())
+                ->append((new SessionsConfiguration())->node())
             ->end();
 
         return $treeBuilder;

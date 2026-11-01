@@ -1,0 +1,14 @@
+{#
+  Administration: one user's sessions (REQ-UI-003): UiKit list scaffold. Variables: page (Nowo\UiKitBundle\View\ListPage
+  from Sessions\Ui\SessionsPages::adminPage(): header with the "Sign out everywhere" POST action, "Sign out" row
+  action on every session, empty state), subject (the user whose sessions are listed). This template fills only the
+  row cells.
+
+  Override: a template that extends '@!NowoUserKitBundle/sessions/admin.html.twig' (sessions.web_ui.templates.admin)
+  and overrides nowo_ui_list_row (or another scaffold data block). Restyle through nowo_ui_kit.theme, never here.
+#}
+{% extends '@NowoUiKit/page/list.html.twig' %}
+
+{% block nowo_ui_list_row %}
+    {{- include('@NowoUserKitBundle/sessions/_cells.html.twig', {row: row, page: page, current_hash: null}, with_context = false) -}}
+{% endblock %}

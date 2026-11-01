@@ -4,6 +4,19 @@ nowo_user_kit:
     default_profile: app_user
     twig: true
 
+    # Session registry showcase (UserKit 1.9+): sign in from two browsers, then open "My sessions" (/account/sessions)
+    # and sign the other one out — it is signed out on its next request. Limit: 3 sessions, the oldest is signed out.
+    sessions:
+        enabled: true
+        limit:
+            max_sessions: 3
+            policy: evict_oldest
+        web_ui:
+            enabled: true
+        security:
+            access_roles: [ROLE_USER]
+            manage_roles: [ROLE_ADMIN]
+
     profiles:
         app_user:
             user_class: App\Entity\User

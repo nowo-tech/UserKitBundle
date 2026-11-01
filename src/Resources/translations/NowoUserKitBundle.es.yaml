@@ -1,2 +1,53 @@
 account:
     disabled: 'Esta cuenta ha sido deshabilitada.'
+sessions:
+    signed_out:
+        signed_out: 'Se ha cerrado tu sesión porque se cerró desde otra sesión.'
+        others: 'Se ha cerrado tu sesión porque se cerraron todas las demás sesiones desde otro dispositivo.'
+        everywhere: 'Se ha cerrado tu sesión porque se cerraron todas las sesiones de tu cuenta.'
+        admin: 'Un administrador ha cerrado tu sesión.'
+        evicted: 'Se ha cerrado tu sesión porque iniciaste sesión en otro lugar (límite de sesiones).'
+        device: 'Se ha cerrado tu sesión porque este dispositivo ya no es de confianza.'
+        password_changed: 'Se ha cerrado tu sesión porque tu contraseña ha cambiado.'
+        account_disabled: 'Se ha cerrado tu sesión porque tu cuenta se ha desactivado.'
+        account_changed: 'Se ha cerrado tu sesión porque tu acceso ha cambiado.'
+        expired: 'Se ha cerrado tu sesión tras un periodo de inactividad.'
+    limit:
+        rejected: 'Ya has iniciado sesión en %count% dispositivos, el máximo para tu cuenta. Cierra antes la sesión en alguno de ellos.'
+    current: 'Esta sesión'
+    client:
+        browser_os: '%browser% en %os%'
+        unknown: 'Navegador desconocido'
+    column:
+        device: 'Dispositivo'
+        network: 'Red'
+        created_at: 'Inicio de sesión'
+        last_seen_at: 'Última actividad'
+        actions: 'Acciones'
+    index:
+        title: 'Sesiones'
+        intro: 'Dónde está abierta tu cuenta ahora mismo. Cierra cualquier sesión que no reconozcas.'
+        empty: 'No hay sesiones activas.'
+        caption: 'Tus sesiones activas'
+    admin:
+        title: 'Sesiones de %user%'
+        intro: 'Dónde tiene %user% la sesión abierta ahora mismo. Las sesiones cerradas terminan en su siguiente petición.'
+        empty: '%user% no tiene sesiones activas.'
+        caption: 'Sesiones activas de %user%'
+    action:
+        revoke: 'Cerrar sesión'
+        revoke_others: 'Cerrar todas las demás sesiones'
+        revoke_all: 'Cerrar sesión en todas partes'
+    confirm:
+        revoke_title: '¿Cerrar esta sesión?'
+        revoke: 'La siguiente petición desde ese navegador irá a la página de inicio de sesión.'
+        revoke_others_title: '¿Cerrar todas las demás sesiones?'
+        revoke_others: 'Se cierran todas las sesiones salvo esta, incluidos los inicios de sesión recordados en esos navegadores.'
+        revoke_all_title: '¿Cerrar sesión en todas partes?'
+        revoke_all: 'Todas las sesiones de %user% se cierran en su siguiente petición.'
+        admin_revoke: 'Esta sesión de %user% se cierra en su siguiente petición.'
+    flash:
+        revoked: 'Se ha cerrado la sesión.'
+        no_others: 'No había otras sesiones que cerrar.'
+        revoked_others: 'Se han cerrado %count% sesiones más.'
+        revoked_all: 'Se han cerrado %count% sesiones.'

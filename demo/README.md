@@ -17,6 +17,8 @@ Open **http://localhost:8023**. Login: `demo@user-kit.test` / `demo`
 1. Sign in and reload `/` — throttled `lastActivityAt` updates; the page shows the resolved profile (`app_user`).
 2. Set `enabled = 0` for the demo user in SQLite — login is blocked by `AccountStatusUserChecker`.
 3. Compare online status via `UserPresenceResolver` and Twig `user_is_online()`.
+4. Session registry: sign in from two browsers, open **My sessions** (`/account/sessions`) in one and sign the other out
+   — it is signed out on its next request. A fourth sign-in signs the oldest session out (`limit.max_sessions: 3`).
 
 Configuration lives in `demo/symfony8/config/packages/nowo_user_kit.yaml` (`nowo_user_kit.profiles.app_user`). See [Configuration](../docs/CONFIGURATION.md#profiles).
 

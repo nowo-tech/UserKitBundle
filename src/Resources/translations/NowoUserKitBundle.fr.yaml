@@ -1,2 +1,53 @@
 account:
     disabled: 'Ce compte a été désactivé.'
+sessions:
+    signed_out:
+        signed_out: 'Vous avez été déconnecté, car cette session a été fermée depuis une autre.'
+        others: 'Vous avez été déconnecté, car toutes les autres sessions ont été fermées depuis un autre appareil.'
+        everywhere: 'Vous avez été déconnecté, car toutes les sessions de votre compte ont été fermées.'
+        admin: 'Vous avez été déconnecté par un administrateur.'
+        evicted: 'Vous avez été déconnecté, car vous vous êtes connecté ailleurs (limite de sessions).'
+        device: 'Vous avez été déconnecté, car cet appareil n’est plus de confiance.'
+        password_changed: 'Vous avez été déconnecté, car votre mot de passe a changé.'
+        account_disabled: 'Vous avez été déconnecté, car votre compte a été désactivé.'
+        account_changed: 'Vous avez été déconnecté, car vos accès ont changé.'
+        expired: 'Vous avez été déconnecté après une période d’inactivité.'
+    limit:
+        rejected: 'Vous êtes déjà connecté sur %count% appareils, le maximum pour votre compte. Déconnectez-vous d’abord de l’un d’eux.'
+    current: 'Cette session'
+    client:
+        browser_os: '%browser% sur %os%'
+        unknown: 'Navigateur inconnu'
+    column:
+        device: 'Appareil'
+        network: 'Réseau'
+        created_at: 'Connexion'
+        last_seen_at: 'Dernière activité'
+        actions: 'Actions'
+    index:
+        title: 'Sessions'
+        intro: 'Là où votre compte est connecté en ce moment. Fermez toute session que vous ne reconnaissez pas.'
+        empty: 'Aucune session active.'
+        caption: 'Vos sessions actives'
+    admin:
+        title: 'Sessions de %user%'
+        intro: 'Là où %user% est connecté en ce moment. Les sessions fermées prennent fin à leur prochaine requête.'
+        empty: '%user% n’a aucune session active.'
+        caption: 'Sessions actives de %user%'
+    action:
+        revoke: 'Déconnecter'
+        revoke_others: 'Déconnecter toutes les autres sessions'
+        revoke_all: 'Déconnecter partout'
+    confirm:
+        revoke_title: 'Déconnecter cette session ?'
+        revoke: 'La prochaine requête de ce navigateur mènera à la page de connexion.'
+        revoke_others_title: 'Déconnecter toutes les autres sessions ?'
+        revoke_others: 'Toutes les sessions sauf celle-ci sont fermées, y compris les connexions mémorisées sur ces navigateurs.'
+        revoke_all_title: 'Déconnecter partout ?'
+        revoke_all: 'Chaque session de %user% est fermée à sa prochaine requête.'
+        admin_revoke: 'Cette session de %user% est fermée à sa prochaine requête.'
+    flash:
+        revoked: 'La session a été fermée.'
+        no_others: 'Il n’y avait aucune autre session à fermer.'
+        revoked_others: '%count% autre(s) session(s) fermée(s).'
+        revoked_all: '%count% session(s) fermée(s).'

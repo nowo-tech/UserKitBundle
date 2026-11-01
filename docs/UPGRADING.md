@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.9.0](#to-190)
 - [To 1.8.1](#to-181)
 - [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
@@ -32,6 +33,70 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.9.0
+
+From **1.8.x**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration or code change is required: the new session registry is **off** (`nowo_user_kit.sessions.enabled:
+false`) and registers nothing until you enable it.
+
+- **New Composer dependencies**: `nowo-tech/ui-kit-bundle` (^2.20), `nowo-tech/form-kit-bundle` (^2.17),
+  `symfony/twig-bundle`, `symfony/form`, `symfony/security-csrf`, `symfony/routing`, `symfony/console`, `doctrine/dbal`.
+  Symfony Flex registers `NowoUiKitBundle` and `NowoFormKitBundle` in `config/bundles.php`; without Flex add them by
+  hand (they are inert until used).
+
+### Enabling the session registry
+
+1. Configure it (see [CONFIGURATION](CONFIGURATION.md#session-registry-sessions)):
+
+   ```yaml
+   # config/packages/nowo_user_kit.yaml
+   nowo_user_kit:
+       sessions:
+           enabled: true
+           idle_lifetime: 86400   # >= framework.session.gc_maxlifetime
+           web_ui:
+               enabled: true      # optional pages
+   ```
+
+2. Create the table (`user_kit_session`, or `<sessions.doctrine.table_prefix>user_kit_session`). The bundle maps its
+   entity automatically when the feature is on, so Doctrine Migrations picks it up:
+
+   ```bash
+   php bin/console doctrine:migrations:diff
+   php bin/console doctrine:migrations:migrate
+   ```
+
+   Do not use `doctrine:schema:update --force` in production.
+
+3. Pages only: import the routes and protect the prefixes in your firewall:
+
+   ```yaml
+   # config/routes/nowo_user_kit_sessions.yaml
+   nowo_user_kit_sessions:
+       resource: .
+       type: nowo_user_kit_sessions
+   ```
+
+   ```yaml
+   # config/packages/security.yaml
+   security:
+       access_control:
+           - { path: ^/account/sessions, roles: ROLE_USER }
+           - { path: ^/admin/user-sessions, roles: ROLE_ADMIN }
+   ```
+
+4. Schedule the retention purge daily: `php bin/console nowo:user-kit:sessions:purge`.
+
+Sessions that were already signed in are registered on their next request. With the feature on, a password change of a
+profile user signs out its other sessions (`sessions.password_change.revoke_sessions: false` to keep the old
+behaviour), and `RegistrySessionInvalidator` replaces the no-op `DefaultSessionInvalidator` unless you aliased your own
+`SessionInvalidatorInterface`.
 
 ## To 1.8.1
 

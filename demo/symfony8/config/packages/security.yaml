@@ -21,6 +21,8 @@ security:
                 path: demo_logout
     access_control:
         - { path: ^/login, roles: PUBLIC_ACCESS }
+        - { path: ^/account/sessions, roles: ROLE_USER }
+        - { path: ^/admin/user-sessions, roles: ROLE_ADMIN }
         - { path: ^/, roles: PUBLIC_ACCESS }
 
 when@test:

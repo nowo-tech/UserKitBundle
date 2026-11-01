@@ -1,0 +1,26 @@
+{#
+  Row cells of the session lists (keep their order in line with Sessions\Ui\SessionsPages::columns()). Variables:
+  row (Sessions\Entity\UserSession), page (ListPage), current_hash (registry hash of the viewer's session, or null on
+  the administration page). Restyle through nowo_ui_kit.theme slots, never here.
+#}
+{%- set _b = page.bundle -%}
+{%- set _cell = nowo_ui_class('table_cell', _b) -%}
+{%- set _muted = nowo_ui_class('table_cell_muted', _b) -%}
+{%- set _client = row.browser and row.os
+    ? 'sessions.client.browser_os'|trans({'%browser%': row.browser, '%os%': row.os}, 'NowoUserKitBundle')
+    : (row.browser ?: row.os ?: 'sessions.client.unknown'|trans({}, 'NowoUserKitBundle')) -%}
+<td class="{{ _cell }} nowo-ui-cell--start" data-label="{{ 'sessions.column.device'|trans({}, 'NowoUserKitBundle') }}" data-required="1">
+    <span data-testid="nowo-user-kit-session-client">{{ _client }}</span>
+    {%- if current_hash is not null and row.sessionHash == current_hash %}
+        <span class="{{ nowo_ui_class('badge_success', _b) }}" data-testid="nowo-user-kit-session-current">{{ 'sessions.current'|trans({}, 'NowoUserKitBundle') }}</span>
+    {%- endif %}
+</td>
+<td class="{{ _cell }}{{ row.hasDisplayableIp ? '' : ' ' ~ _muted }} nowo-ui-cell--start" data-label="{{ 'sessions.column.network'|trans({}, 'NowoUserKitBundle') }}" data-nowo-ui-priority="2">
+    {%- if row.hasDisplayableIp -%}<code class="{{ nowo_ui_class('code', _b) }}">{{ row.ip }}</code>{%- else -%}—{%- endif -%}
+</td>
+<td class="{{ _cell }} nowo-ui-cell--start" data-label="{{ 'sessions.column.created_at'|trans({}, 'NowoUserKitBundle') }}" data-nowo-ui-priority="3">
+    <time datetime="{{ row.createdAt|date('c') }}">{{ row.createdAt|date('Y-m-d H:i') }}</time>
+</td>
+<td class="{{ _cell }} nowo-ui-cell--start" data-label="{{ 'sessions.column.last_seen_at'|trans({}, 'NowoUserKitBundle') }}" data-required="1">
+    <time datetime="{{ row.lastSeenAt|date('c') }}">{{ row.lastSeenAt|date('Y-m-d H:i') }}</time>
+</td>

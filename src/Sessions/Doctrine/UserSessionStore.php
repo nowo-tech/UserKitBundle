@@ -1,0 +1,324 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\UserKitBundle\Sessions\Doctrine;
+
+use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Types\Types;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
+use LogicException;
+use Nowo\UserKitBundle\Sessions\Entity\UserSession;
+use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
+use Nowo\UserKitBundle\Sessions\Model\SessionClient;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+
+use function array_map;
+use function bin2hex;
+use function count;
+use function random_bytes;
+
+/**
+ * The session registry table. Lists are read through the ORM; every write is one parameterised DBAL statement, so the
+ * request listeners never flush the entity manager, and a race between two first requests of the same session is one
+ * ignored unique-key violation, not a closed entity manager. The table name comes from the (prefixed) metadata.
+ */
+final readonly class UserSessionStore
+{
+    /** Upper bound of the rows a page lists (REQ-PERF-001). */
+    public const MAX_LIST = 200;
+
+    /**
+     * @param string|null $entityManagerName `sessions.doctrine.entity_manager` (null = the manager of the entity)
+     */
+    public function __construct(
+        private ManagerRegistry $doctrine,
+        private ?string $entityManagerName = null,
+    ) {
+    }
+
+    /**
+     * Registers a session.
+     *
+     * @return bool false when the hash is already registered (a parallel first request won)
+     */
+    public function insert(SessionUser $user, string $hash, SessionClient $client, DateTimeImmutable $now): bool
+    {
+        try {
+            $this->connection()->insert($this->table(), [
+                'public_id'    => bin2hex(random_bytes(16)),
+                'user_type'    => $user->type,
+                'user_id'      => $user->id,
+                'session_hash' => $hash,
+                'device_id'    => $client->deviceId,
+                'browser'      => $client->browser,
+                'os'           => $client->os,
+                'ip'           => $client->ip,
+                'created_at'   => $now,
+                'last_seen_at' => $now,
+            ], ['created_at' => Types::DATETIME_IMMUTABLE, 'last_seen_at' => Types::DATETIME_IMMUTABLE]);
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Records activity of a live session (and its device id when it was unknown).
+     *
+     * @return bool whether a live (not revoked) row was touched
+     */
+    public function touch(string $hash, DateTimeImmutable $now, ?string $deviceId = null): bool
+    {
+        return $this->connection()->executeStatement(
+            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND revoked_at IS NULL',
+            ['now' => $now, 'device' => $deviceId, 'hash' => $hash],
+            ['now' => Types::DATETIME_IMMUTABLE],
+        ) > 0;
+    }
+
+    /**
+     * State of a registered session.
+     *
+     * @return array{revoked: bool, reason: string|null}|null null when the row does not exist
+     */
+    public function state(string $hash): ?array
+    {
+        $row = $this->connection()->fetchAssociative('SELECT revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+        if ($row === false) {
+            return null;
+        }
+        $revoked = $row['revoked_at'] !== null;
+
+        return ['revoked' => $revoked, 'reason' => $revoked ? (string) ($row['revoked_reason'] ?? RevocationReason::SignedOut->value) : null];
+    }
+
+    /**
+     * The session id changed (migrated): the row follows it.
+     */
+    public function rekey(string $from, string $to): void
+    {
+        $this->connection()->executeStatement('UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from', ['to' => $to, 'from' => $from]);
+    }
+
+    /**
+     * Deletes the row of a session (sign-out, or a revoked session that came back).
+     */
+    public function deleteByHash(string $hash): void
+    {
+        $this->connection()->executeStatement('DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+    }
+
+    /**
+     * The live sessions of a user (not revoked, seen since `$since`), the most recent first.
+     *
+     * @return list<UserSession>
+     */
+    public function findActive(SessionUser $user, DateTimeImmutable $since, int $limit = self::MAX_LIST): array
+    {
+        /** @var list<UserSession> $rows */
+        $rows = $this->entityManager()->createQueryBuilder()
+            ->select('s')
+            ->from(UserSession::class, 's')
+            ->andWhere('s.userType = :type')
+            ->andWhere('s.userId = :id')
+            ->andWhere('s.revokedAt IS NULL')
+            ->andWhere('s.lastSeenAt >= :since')
+            ->setParameter('type', $user->type)
+            ->setParameter('id', $user->id)
+            ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
+            ->orderBy('s.lastSeenAt', 'DESC')
+            ->addOrderBy('s.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return $rows;
+    }
+
+    /**
+     * Number of live sessions of a user, `$except` left out.
+     */
+    public function countActive(SessionUser $user, DateTimeImmutable $since, ?string $except = null): int
+    {
+        $qb = $this->connection()->createQueryBuilder()
+            ->select('COUNT(*)')
+            ->from($this->table())
+            ->where('user_type = :type')
+            ->andWhere('user_id = :id')
+            ->andWhere('revoked_at IS NULL')
+            ->andWhere('last_seen_at >= :since')
+            ->setParameter('type', $user->type)
+            ->setParameter('id', $user->id)
+            ->setParameter('since', $since, Types::DATETIME_IMMUTABLE);
+        if ($except !== null) {
+            $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
+        }
+
+        return (int) $qb->executeQuery()->fetchOne();
+    }
+
+    /**
+     * Public ids of the live sessions of a user other than `$except`, the least recently active first (eviction
+     * order).
+     *
+     * @return list<string>
+     */
+    public function oldestActive(SessionUser $user, DateTimeImmutable $since, ?string $except, int $limit): array
+    {
+        if ($limit < 1) {
+            return [];
+        }
+        $qb = $this->connection()->createQueryBuilder()
+            ->select('public_id')
+            ->from($this->table())
+            ->where('user_type = :type')
+            ->andWhere('user_id = :id')
+            ->andWhere('revoked_at IS NULL')
+            ->andWhere('last_seen_at >= :since')
+            ->setParameter('type', $user->type)
+            ->setParameter('id', $user->id)
+            ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
+            ->orderBy('last_seen_at', 'ASC')
+            ->addOrderBy('id', 'ASC')
+            ->setMaxResults($limit);
+        if ($except !== null) {
+            $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
+        }
+
+        return array_map(strval(...), $qb->executeQuery()->fetchFirstColumn());
+    }
+
+    /**
+     * Marks the matching live rows of a user revoked.
+     *
+     * @param list<string>|null $publicIds only these rows (null: every live row)
+     * @param string|null $deviceId only the rows of this device
+     * @param string|null $except keep this session (the caller's own)
+     *
+     * @return list<array{public_id: string, hash: string}> the revoked rows
+     */
+    public function revoke(SessionUser $user, RevocationReason $reason, DateTimeImmutable $now, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null): array
+    {
+        if ($publicIds === []) {
+            return [];
+        }
+        $qb = $this->connection()->createQueryBuilder()
+            ->select('public_id', 'session_hash')
+            ->from($this->table())
+            ->where('user_type = :type')
+            ->andWhere('user_id = :id')
+            ->andWhere('revoked_at IS NULL')
+            ->setParameter('type', $user->type)
+            ->setParameter('id', $user->id);
+        if ($publicIds !== null) {
+            $qb->andWhere('public_id IN (:ids)')->setParameter('ids', $publicIds, ArrayParameterType::STRING);
+        }
+        if ($deviceId !== null) {
+            $qb->andWhere('device_id = :device')->setParameter('device', $deviceId);
+        }
+        if ($except !== null) {
+            $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
+        }
+        $rows = array_map(
+            static fn (array $row): array => ['public_id' => (string) $row['public_id'], 'hash' => (string) $row['session_hash']],
+            $qb->executeQuery()->fetchAllAssociative(),
+        );
+        if ($rows === []) {
+            return [];
+        }
+        $this->connection()->executeStatement(
+            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE revoked_at IS NULL AND session_hash IN (:hashes)',
+            ['now' => $now, 'reason' => $reason->value, 'hashes' => array_column($rows, 'hash')],
+            ['now' => Types::DATETIME_IMMUTABLE, 'hashes' => ArrayParameterType::STRING],
+        );
+
+        return $rows;
+    }
+
+    /**
+     * Every row of a user (personal data export).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function allFor(SessionUser $user): array
+    {
+        return $this->connection()->fetchAllAssociative(
+            'SELECT browser, os, ip, device_id, created_at, last_seen_at, revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id ORDER BY created_at ASC, id ASC',
+            ['type' => $user->type, 'id' => $user->id],
+        );
+    }
+
+    /**
+     * Deletes every row of a user (personal data erasure).
+     */
+    public function deleteFor(SessionUser $user): int
+    {
+        return (int) $this->connection()->executeStatement(
+            'DELETE FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id',
+            ['type' => $user->type, 'id' => $user->id],
+        );
+    }
+
+    /**
+     * Retention purge: deletes, in batches, the rows not seen since `$before` (expired sessions, and revoked ones that
+     * never came back).
+     *
+     * @return int deleted rows
+     */
+    public function purge(DateTimeImmutable $before, int $batchSize = 1000): int
+    {
+        $deleted = 0;
+        do {
+            $ids = $this->connection()->createQueryBuilder()
+                ->select('id')
+                ->from($this->table())
+                ->where('last_seen_at < :before')
+                ->setParameter('before', $before, Types::DATETIME_IMMUTABLE)
+                ->orderBy('id', 'ASC')
+                ->setMaxResults($batchSize)
+                ->executeQuery()
+                ->fetchFirstColumn();
+            if ($ids === []) {
+                break;
+            }
+            $deleted += (int) $this->connection()->executeStatement(
+                'DELETE FROM ' . $this->table() . ' WHERE id IN (:ids)',
+                ['ids' => array_map(intval(...), $ids)],
+                ['ids' => ArrayParameterType::INTEGER],
+            );
+        } while (count($ids) === $batchSize);
+
+        return $deleted;
+    }
+
+    /**
+     * Prefixed table name of the registry.
+     */
+    public function table(): string
+    {
+        return $this->entityManager()->getClassMetadata(UserSession::class)->getTableName();
+    }
+
+    private function connection(): Connection
+    {
+        return $this->entityManager()->getConnection();
+    }
+
+    private function entityManager(): EntityManagerInterface
+    {
+        $manager = $this->entityManagerName !== null
+            ? $this->doctrine->getManager($this->entityManagerName)
+            : $this->doctrine->getManagerForClass(UserSession::class);
+        if (!$manager instanceof EntityManagerInterface) {
+            throw new LogicException('NowoUserKitBundle: the session registry entity is not mapped by an ORM entity manager (sessions.doctrine.entity_manager).');
+        }
+
+        return $manager;
+    }
+}

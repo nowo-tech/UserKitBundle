@@ -25,6 +25,12 @@
                         Reload this page to see throttled <code>lastActivityAt</code> updates.
                         Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
                     </p>
+                    <h2 class="h5 mt-4">Sessions</h2>
+                    <p class="mb-0">
+                        <a href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-sessions-link">My sessions</a>
+                        — sign in from another browser, sign that session out here, and it is signed out on its next request
+                        (<code>nowo_user_kit.sessions</code>, limit 3 sessions).
+                    </p>
                 {% else %}
                     <p class="mb-0">Not authenticated. <a href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
                 {% endif %}

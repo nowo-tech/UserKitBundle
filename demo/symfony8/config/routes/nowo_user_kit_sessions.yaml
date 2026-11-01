@@ -1,0 +1,5 @@
+# Session pages of UserKit (opt-in, REQ-SF-004 rule 7): "My sessions" under /account/sessions, administration under
+# /admin/user-sessions. See ../../../../docs/CONFIGURATION.md#routes-and-access-control.
+nowo_user_kit_sessions:
+    resource: .
+    type: nowo_user_kit_sessions

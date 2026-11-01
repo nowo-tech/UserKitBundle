@@ -1,2 +1,53 @@
 account:
     disabled: 'This account has been disabled.'
+sessions:
+    signed_out:
+        signed_out: 'You were signed out because this session was signed out from another one.'
+        others: 'You were signed out because all other sessions were signed out from another device.'
+        everywhere: 'You were signed out because every session of your account was signed out.'
+        admin: 'You were signed out by an administrator.'
+        evicted: 'You were signed out because you signed in elsewhere (session limit).'
+        device: 'You were signed out because this device is no longer trusted.'
+        password_changed: 'You were signed out because your password changed.'
+        account_disabled: 'You were signed out because your account was disabled.'
+        account_changed: 'You were signed out because your access changed.'
+        expired: 'You were signed out after a period of inactivity.'
+    limit:
+        rejected: 'You are already signed in on %count% devices, the maximum for your account. Sign out of one of them first.'
+    current: 'This session'
+    client:
+        browser_os: '%browser% on %os%'
+        unknown: 'Unknown browser'
+    column:
+        device: 'Device'
+        network: 'Network'
+        created_at: 'Signed in'
+        last_seen_at: 'Last active'
+        actions: 'Actions'
+    index:
+        title: 'Sessions'
+        intro: 'Where your account is signed in right now. Sign out any session you do not recognise.'
+        empty: 'No active sessions.'
+        caption: 'Your active sessions'
+    admin:
+        title: 'Sessions of %user%'
+        intro: 'Where %user% is signed in right now. Signed-out sessions end on their next request.'
+        empty: '%user% has no active sessions.'
+        caption: 'Active sessions of %user%'
+    action:
+        revoke: 'Sign out'
+        revoke_others: 'Sign out all other sessions'
+        revoke_all: 'Sign out everywhere'
+    confirm:
+        revoke_title: 'Sign out this session?'
+        revoke: 'The next request from that browser goes to the sign-in page.'
+        revoke_others_title: 'Sign out all other sessions?'
+        revoke_others: 'Every session except this one is signed out, including remember-me logins on those browsers.'
+        revoke_all_title: 'Sign out everywhere?'
+        revoke_all: 'Every session of %user% is signed out on its next request.'
+        admin_revoke: 'This session of %user% is signed out on its next request.'
+    flash:
+        revoked: 'The session was signed out.'
+        no_others: 'There were no other sessions to sign out.'
+        revoked_others: 'Signed out %count% other session(s).'
+        revoked_all: 'Signed out %count% session(s).'

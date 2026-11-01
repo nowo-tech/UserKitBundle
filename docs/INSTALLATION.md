@@ -23,7 +23,7 @@
 
 Optional:
 
-- `symfony/twig-bundle` — for the `user_is_online` Twig helper
+- `symfony/twig-bundle` — for the `user_is_online` Twig helper and the session pages (installed with the bundle since 1.9.0)
 - [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tech/AuthKitBundle) — login/register UI (complementary, not required)
 
 ## Translations
@@ -45,6 +45,9 @@ Symfony Flex registers the bundle automatically. Manual registration:
 return [
     // ...
     Nowo\UserKitBundle\NowoUserKitBundle::class => ['all' => true],
+    // Since 1.9.0 (session pages; inert until used):
+    Nowo\FormKitBundle\NowoFormKitBundle::class => ['all' => true],
+    Nowo\UiKitBundle\NowoUiKitBundle::class => ['all' => true],
 ];
 ```
 

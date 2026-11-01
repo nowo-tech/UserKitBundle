@@ -1,2 +1,53 @@
 account:
     disabled: 'Dieses Konto wurde deaktiviert.'
+sessions:
+    signed_out:
+        signed_out: 'Du wurdest abgemeldet, weil diese Sitzung von einer anderen aus beendet wurde.'
+        others: 'Du wurdest abgemeldet, weil alle anderen Sitzungen von einem anderen Gerät aus beendet wurden.'
+        everywhere: 'Du wurdest abgemeldet, weil alle Sitzungen deines Kontos beendet wurden.'
+        admin: 'Du wurdest von einem Administrator abgemeldet.'
+        evicted: 'Du wurdest abgemeldet, weil du dich anderswo angemeldet hast (Sitzungslimit).'
+        device: 'Du wurdest abgemeldet, weil diesem Gerät nicht mehr vertraut wird.'
+        password_changed: 'Du wurdest abgemeldet, weil sich dein Passwort geändert hat.'
+        account_disabled: 'Du wurdest abgemeldet, weil dein Konto deaktiviert wurde.'
+        account_changed: 'Du wurdest abgemeldet, weil sich deine Zugriffsrechte geändert haben.'
+        expired: 'Du wurdest nach einer Zeit der Inaktivität abgemeldet.'
+    limit:
+        rejected: 'Du bist bereits auf %count% Geräten angemeldet, dem Maximum für dein Konto. Melde dich zuerst auf einem davon ab.'
+    current: 'Diese Sitzung'
+    client:
+        browser_os: '%browser% unter %os%'
+        unknown: 'Unbekannter Browser'
+    column:
+        device: 'Gerät'
+        network: 'Netzwerk'
+        created_at: 'Angemeldet'
+        last_seen_at: 'Zuletzt aktiv'
+        actions: 'Aktionen'
+    index:
+        title: 'Sitzungen'
+        intro: 'Wo dein Konto gerade angemeldet ist. Beende jede Sitzung, die du nicht erkennst.'
+        empty: 'Keine aktiven Sitzungen.'
+        caption: 'Deine aktiven Sitzungen'
+    admin:
+        title: 'Sitzungen von %user%'
+        intro: 'Wo %user% gerade angemeldet ist. Beendete Sitzungen enden mit ihrer nächsten Anfrage.'
+        empty: '%user% hat keine aktiven Sitzungen.'
+        caption: 'Aktive Sitzungen von %user%'
+    action:
+        revoke: 'Abmelden'
+        revoke_others: 'Alle anderen Sitzungen abmelden'
+        revoke_all: 'Überall abmelden'
+    confirm:
+        revoke_title: 'Diese Sitzung abmelden?'
+        revoke: 'Die nächste Anfrage dieses Browsers führt zur Anmeldeseite.'
+        revoke_others_title: 'Alle anderen Sitzungen abmelden?'
+        revoke_others: 'Alle Sitzungen außer dieser werden beendet, auch gespeicherte Anmeldungen in diesen Browsern.'
+        revoke_all_title: 'Überall abmelden?'
+        revoke_all: 'Jede Sitzung von %user% wird mit ihrer nächsten Anfrage beendet.'
+        admin_revoke: 'Diese Sitzung von %user% wird mit ihrer nächsten Anfrage beendet.'
+    flash:
+        revoked: 'Die Sitzung wurde abgemeldet.'
+        no_others: 'Es gab keine anderen Sitzungen zum Abmelden.'
+        revoked_others: '%count% andere Sitzung(en) abgemeldet.'
+        revoked_all: '%count% Sitzung(en) abgemeldet.'
