@@ -36,6 +36,8 @@ A commented `staff` profile in the same file shows how to add a second user enti
 | `make down` | Stop containers |
 | `make test` | Run demo PHPUnit smoke tests |
 | `make link-bundle` | Symlink `/var/user-kit-bundle` and refresh schema |
+| `make test-e2e` | Playwright e2e in `e2e/` (login → My sessions → sign out another session; demo must be up) |
+| `make demo-screenshots` | Refresh `../../docs/images/demo/*.webp` (demo must be up) |
 
 ## Stack
 

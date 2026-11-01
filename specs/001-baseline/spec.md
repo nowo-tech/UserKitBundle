@@ -20,6 +20,7 @@ Symfony bundle for **user account state and presence**:
 4. Optional **session invalidation** when an account transitions from enabled to disabled.
 5. Optional **UI preferences** (nine `preferred_*` columns, pre-paint `<html>` attributes) and **product-tour progress** — feature spec [`002-ui-preferences`](../002-ui-preferences/spec.md).
 6. Optional **personal data (GDPR) SPI**: export providers, erasers and erasure guards orchestrated in one transaction — feature spec [`003-personal-data`](../003-personal-data/spec.md).
+7. Optional **session registry and limits** (1.9.0+): list / sign out sessions and devices, "My sessions" and admin pages, concurrent-session limits — feature spec [`004-sessions`](../004-sessions/spec.md) (FR-SES-003 … FR-SES-010).
 
 Complements **AuthKitBundle** (login/register/reset UI and routes) without requiring it. Complements **LoginThrottleBundle** (rate limiting) — different concern: account status vs. brute-force throttling.
 
@@ -127,6 +128,19 @@ Complements **AuthKitBundle** (login/register/reset UI and routes) without requi
 - **FR-SES-001**: `AccountDisabledListener` on Doctrine `onFlush` or `postUpdate` — detect `enabled` true→false transition.
 - **FR-SES-002**: Strategy interface `SessionInvalidatorInterface` with default implementation documented for Symfony session storage; extensible for Redis/database sessions.
 
+### Session registry (spec 004)
+
+Opt-in (`nowo_user_kit.sessions.enabled`, since 1.9.0); full specification in [`004-sessions`](../004-sessions/spec.md).
+
+- **FR-SES-003** (004 FR-001): one registry row per authenticated stateful session — HMAC of the session id only, owner, browser / OS names, IP as configured, optional device id; touched at most once per `touch_interval`, deleted at logout, purged by `nowo:user-kit:sessions:purge` after `idle_lifetime` + `touch_interval`.
+- **FR-SES-004** (004 FR-002): a revoked, missing or idle session is signed out on its next request, before the firewall, with any session handler (`database` or shared `cache` revocation store); remember-me cookies cleared.
+- **FR-SES-005** (004 FR-003): "My sessions" (list, *This session*, sign out one / all others) and the administration page (one user's sessions, sign out one / everywhere) — UiKit list scaffold, FormKit CSRF-only actions, confirm dialogs, `no-store`; `@NowoUserKitBundle` Twig namespace with host overrides.
+- **FR-SES-006** (004 FR-004): concurrent-session limit at sign-in (`evict_oldest` / `reject_new`), per-user limits through a resolver service.
+- **FR-SES-007** (004 FR-005): automatic sign-outs — password change (other sessions), account disabled (`RegistrySessionInvalidator`), device (`revokeDevice()`).
+- **FR-SES-008** (004 FR-006): audit events after every mutation (`UserSessionStartedEvent`, `UserSessionsRevokedEvent`, `SessionLimitReachedEvent`, `UserSessionsPurgedEvent`).
+- **FR-SES-009** (004 FR-007): configuration and wiring — services only when enabled, opt-in route loader (REQ-SF-004 rule 7), REQ-UI-002 access checkers (role lists never empty, `allow_unauthenticated` debug-only), compile-time guards, table prefix (REQ-ORM-002).
+- **FR-SES-010** (004 FR-008): GDPR `sessions` export section and eraser when `personal_data.enabled`.
+
 ### Integration & i18n
 
 - **FR-I18N-001**: Translation domain `NowoUserKitBundle` — disabled account message (minimum `en`, `es`; align with AuthKit locale set when implemented).
@@ -140,7 +154,7 @@ Complements **AuthKitBundle** (login/register/reset UI and routes) without requi
 
 ## Success Criteria
 
-- **SC-001**: **61/61** production files under `src/` mapped in [`code-inventory.md`](code-inventory.md), including the `002-ui-preferences` and `003-personal-data` features (audited 2026-10-20; `git ls-files src | wc -l`).
+- **SC-001**: **105/105** production files under `src/` mapped in [`code-inventory.md`](code-inventory.md), including the `002-ui-preferences`, `003-personal-data` and `004-sessions` features (audited 2026-11-01; `git ls-files src | wc -l`).
 - **SC-002**: Disabled user cannot authenticate with valid password (functional test).
 - **SC-003**: Enabled user authenticates without regression (functional test).
 - **SC-004**: Last activity updates respect throttle (unit test).

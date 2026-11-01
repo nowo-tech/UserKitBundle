@@ -38,6 +38,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `twig/extra-bundle` and `twig/string-extra` (`^3.12`) are declared in `require` (REQ-TWIG-004): the bundle ships Twig
+  views since 1.9.0. Both were already installed through UiKit. New `make check-twig-extra` gate
+  (`.scripts/check-twig-extra.sh`), part of `make release-check`; INSTALLATION documents the Twig Extra stack.
+- `phpunit/phpunit` dev constraint raised to `^11.5`; `phpunit.xml.dist` uses the 11.5 schema and
+  `ignoreIndirectDeprecations` (was `restrictDeprecations`), which removes the PHPUnit runner deprecation ("OK, but
+  there were issues") reported in every CI cell.
+
+### Added
+
+- Demo Playwright e2e (REQ-DEMO-013): `demo/symfony8/e2e` — login, "My sessions", sign out the session of a second
+  browser context (signed out on its next request). `make test-e2e` / `make demo-screenshots` (root, `demo/` and
+  `demo/symfony8`), Playwright image pinned to `@playwright/test` 1.64.1; `test-e2e` closes `make release-check`.
+- README screenshots `docs/images/demo/my-sessions.webp` and `sign-out-session.webp` (WebP, demo shell + profiler).
+- `Demo smoke` workflow (`demo-smoke.yml`): HTTP 200 smoke and the Playwright e2e on tags, weekly and on demand;
+  `make demo-smoke` now boots the demo and checks `/` (REQ-TEST-011).
+
+### Fixed
+
+- Demo: a fresh checkout started FrankenPHP worker mode without `vendor/` and the container exited; the entrypoint
+  now runs `composer install` and the schema update first, and `make up` waits for the server.
+- Demo: the session pages render in the demo shell (`nowo_ui_kit.layouts.admin` → `layouts/admin.html.twig`,
+  Bootstrap 5 + Bootstrap Icons), so the row "Sign out" icon is visible; navbar link to "My sessions".
+- UPGRADING: duplicate "To 1.9.0" heading removed.
+
+### Documentation
+
+- Spec Kit baseline (REQ-SPECKIT-003): `code-inventory.md` maps the 44 session-registry files under a new Sessions
+  category (FR-SES-003 … FR-SES-010 = 004 FR-001 … FR-008); total 105 production sources, Last audited 2026-11-01.
+  `spec.md` and `docs/SPEC-DRIVEN-DEVELOPMENT.md` describe the session registry scope.
+
 ## [1.9.0] - 2026-11-01
 
 Session registry and limits (sessions feature, opt-in): list/revoke sessions and devices, concurrent-session limit, RGPD minimisation See [UPGRADING](UPGRADING.md#to-190).

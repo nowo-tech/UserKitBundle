@@ -11,6 +11,19 @@ Designed to complement [`nowo-tech/auth-kit-bundle`](https://github.com/nowo-tec
 
 This bundle is **FrankenPHP worker mode friendly**.
 
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/my-sessions.webp" alt="My sessions page listing the current Chrome session and a Firefox session, each with device, network, sign-in time and last activity" />
+      <br /><sub>"My sessions" — every signed-in browser, the current one flagged</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/sign-out-session.webp" alt="Confirmation dialog to sign out the Firefox session from My sessions" />
+      <br /><sub>Sign out another session — it is signed out on its next request</sub>
+    </td>
+  </tr>
+</table>
+
 ## Features
 
 - **`enabled` / disabled accounts** — `AccountStatusUserChecker` blocks login for disabled users
@@ -77,7 +90,17 @@ Use the same `user_class` in both bundles. UserKit may inherit `user_class` from
 make -C demo up    # Symfony 8.1 — http://localhost:8023
 ```
 
-Login with `demo@user-kit.test` / `demo`. The demo runs under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
+Login with `demo@user-kit.test` / `demo`, then open **My sessions** (sign in from a second browser to see two sessions).
+
+Playwright e2e (login → My sessions → sign out another session) and the README screenshots run against the running demo
+(REQ-DEMO-013):
+
+```bash
+make test-e2e          # official Playwright image, demo/symfony8/e2e
+make demo-screenshots  # refresh docs/images/demo/*.webp
+```
+
+The demo runs under **FrankenPHP** in Docker. See [demo/README.md](demo/README.md) and [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md) for development vs production setup, including **FrankenPHP worker mode** for production.
 
 ## Development
 

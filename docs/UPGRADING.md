@@ -4,7 +4,6 @@
 
 - [Unreleased](#unreleased)
 - [To 1.9.0](#to-190)
-- [To 1.9.0](#to-190-1)
   - [Enabling the session registry](#enabling-the-session-registry)
 - [To 1.8.1](#to-181)
 - [To 1.8.0](#to-180)
@@ -36,13 +35,17 @@
 
 ## Unreleased
 
-## To 1.9.0
-
-From **1.8.1**:
+From **1.9.0**:
 
 ```bash
 composer update nowo-tech/user-kit-bundle
 ```
+
+- **Twig Extra is now a declared dependency** (REQ-TWIG-004): `twig/extra-bundle` and `twig/string-extra` (`^3.12`)
+  move into `require`. They were already installed through UiKit, so the lock usually does not change. Symfony Flex
+  enables `Twig\Extra\TwigExtraBundle\TwigExtraBundle`; without Flex add it to `config/bundles.php` (see
+  [Installation](INSTALLATION.md#twig-extra)).
+- No configuration or code change otherwise.
 
 ## To 1.9.0
 

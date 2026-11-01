@@ -6,6 +6,7 @@
 - [Translations](#translations)
 - [Composer](#composer)
 - [Enable the bundle](#enable-the-bundle)
+  - [Twig Extra](#twig-extra)
 - [Configuration file](#configuration-file)
 - [User entity](#user-entity)
 - [Verify](#verify)
@@ -20,6 +21,8 @@
 - Doctrine ORM (user entity persistence)
 - `doctrine/doctrine-bundle` **^2.10** (PHP 8.2–8.3) or **^3.0** (PHP 8.4+)
 - `symfony/security-bundle`
+- `twig/extra-bundle` + `twig/string-extra` (REQ-TWIG-004) — installed as dependencies since 1.9.1; enable
+  `TwigExtraBundle` (see [Twig Extra](#twig-extra))
 
 Optional:
 
@@ -48,8 +51,22 @@ return [
     // Since 1.9.0 (session pages; inert until used):
     Nowo\FormKitBundle\NowoFormKitBundle::class => ['all' => true],
     Nowo\UiKitBundle\NowoUiKitBundle::class => ['all' => true],
+    Twig\Extra\TwigExtraBundle\TwigExtraBundle::class => ['all' => true],
 ];
 ```
+
+### Twig Extra
+
+The bundle ships Twig views (the session pages, `@NowoUserKitBundle/sessions/*`), so it requires the official
+[Twig Extra Bundle](https://github.com/twigphp/twig-extra-bundle) and the Nowo baseline extra (REQ-TWIG-004):
+
+```bash
+composer require twig/extra-bundle twig/string-extra   # pulled in by nowo-tech/user-kit-bundle
+```
+
+Flex enables `Twig\Extra\TwigExtraBundle\TwigExtraBundle`; without Flex add it to `config/bundles.php` as above. A host
+app that renders the bundle templates (or overrides them with Extra filters such as `|u.truncate`) needs the same
+stack. `make check-twig-extra` (part of `make release-check`) fails when the package or a demo misses it.
 
 ## Configuration file
 
