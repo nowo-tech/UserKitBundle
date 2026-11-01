@@ -30,4 +30,23 @@ git config --global --add safe.directory /var/user-kit-bundle 2>/dev/null || tru
 mkdir -p /app/var/cache /app/var/log /app/var/data
 chmod -R 777 /app/var 2>/dev/null || true
 
+if [ ! -f /app/.env ]; then
+	cp /app/.env.example /app/.env 2>/dev/null || true
+fi
+
+# A fresh checkout has no vendor/: install before FrankenPHP starts, otherwise the workers fail on
+# autoload_runtime.php and the container exits.
+if [ ! -f /app/vendor/autoload_runtime.php ]; then
+	echo "vendor not found, running composer install..."
+	if ! COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --working-dir=/app; then
+		echo "composer install failed; the container stays up for debugging."
+		exec tail -f /dev/null
+	fi
+fi
+
+if [ -d /app/vendor ]; then
+	echo "Creating the schema if needed..."
+	php /app/bin/console doctrine:schema:update --force --complete --no-interaction 2>/dev/null || true
+fi
+
 exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile

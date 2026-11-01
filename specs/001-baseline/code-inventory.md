@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-10-20  
+**Last audited**: 2026-11-01  
 **Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
@@ -94,6 +94,57 @@
 | `PersonalData/Eraser/UiPreferencesEraser.php` | Resets the UI preference columns | 003 FR-006 | Mapped |
 | `PersonalData/Eraser/ProductTourEraser.php` | Clears product-tour progress | 003 FR-006 | Mapped |
 
+## Sessions — session registry and limits (spec [`004-sessions`](../004-sessions/spec.md), since 1.9.0)
+
+FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-spec-004) and map to 004 FR-001 … FR-008.
+
+| Source file | Spec section | Requirement IDs | Status |
+| --- | --- | --- | --- |
+| `DependencyInjection/SessionsConfiguration.php` | `nowo_user_kit.sessions` config tree (safe defaults: off, IP truncated, pages off, roles never empty) | FR-SES-003, FR-SES-009 | Mapped |
+| `DependencyInjection/SessionsLoader.php` | Registers the registry services when `sessions.enabled`; prepends Doctrine mapping and the FormKit profile | FR-SES-009 | Mapped |
+| `DependencyInjection/Compiler/SessionsPass.php` | Compile-time guards (SecurityBundle + Doctrine, shared cache pool) and remember-me cookie wiring | FR-SES-004, FR-SES-009 | Mapped |
+| `DependencyInjection/Compiler/TwigPathsPass.php` | `@NowoUserKitBundle` namespace with the `templates/bundles/NowoUserKitBundle` override first | FR-SES-005 | Mapped |
+| `Sessions/UserSessionManager.php` | Public API: list, sign out one / others / everywhere / a device | FR-SES-003, FR-SES-005, FR-SES-007 | Mapped |
+| `Sessions/SessionUserResolver.php` | Owner reference (root entity class + identifier) | FR-SES-003 | Mapped |
+| `Sessions/RegistrySessionInvalidator.php` | `SessionInvalidatorInterface` backed by the registry (account disabled) | FR-SES-007 | Mapped |
+| `Sessions/Entity/UserSession.php` | Registry row: HMAC of the session id, owner, client, timestamps, revocation | FR-SES-003 | Mapped |
+| `Sessions/Doctrine/UserSessionStore.php` | Registry table: ORM reads, one parameterised DBAL statement per write, capped lists | FR-SES-003, FR-SES-004 | Mapped |
+| `Sessions/Doctrine/TablePrefixListener.php` | `sessions.doctrine.table_prefix` on bundle-owned tables / indexes only (REQ-ORM-002) | FR-SES-009 | Mapped |
+| `Sessions/Client/SessionClientFactory.php` | Client of a request with data minimisation (browser / OS names, truncated or hashed IP) | FR-SES-003 | Mapped |
+| `Sessions/Client/DeviceIdResolverInterface.php` | Optional host hook: device id stored with the session (`revokeDevice()`) | FR-SES-003, FR-SES-007 | Mapped |
+| `Sessions/Model/SessionClient.php` | Value object: browser, OS, device id, stored IP form | FR-SES-003 | Mapped |
+| `Sessions/Model/SessionUser.php` | Value object: owner class + id | FR-SES-003 | Mapped |
+| `Sessions/Model/SessionLimit.php` | Value object: limit of one user (null = unlimited) | FR-SES-006 | Mapped |
+| `Sessions/Model/SessionLimitPolicy.php` | Enum `evict_oldest` / `reject_new` | FR-SES-006 | Mapped |
+| `Sessions/Model/RevocationReason.php` | Enum of revocation reasons (stored, event, flash key) | FR-SES-004, FR-SES-008 | Mapped |
+| `Sessions/EventListener/SessionRegistryListener.php` | Registers sessions at sign-in, touches them, signs revoked / missing / idle sessions out before the firewall, applies the limit, deletes the row at logout | FR-SES-003, FR-SES-004, FR-SES-006 | Mapped |
+| `Sessions/EventListener/PasswordChangeListener.php` | Password field change of a profile user signs the other sessions out (`preUpdate` → `postFlush`) | FR-SES-007 | Mapped |
+| `Sessions/Revocation/RevocationStoreInterface.php` | Revocation lookup contract (`sessions.revocation.store`) | FR-SES-004 | Mapped |
+| `Sessions/Revocation/DatabaseRevocationStore.php` | Default store: registry row lookup, missing row fails closed | FR-SES-004 | Mapped |
+| `Sessions/Revocation/CacheRevocationStore.php` | Shared PSR-6 marker per revoked session hash | FR-SES-004 | Mapped |
+| `Sessions/Limit/SessionLimitResolverInterface.php` | Per-user limit hook (called at sign-in only) | FR-SES-006 | Mapped |
+| `Sessions/Limit/ConfiguredSessionLimitResolver.php` | Default resolver: `limit.max_sessions` / `limit.policy` for everyone | FR-SES-006 | Mapped |
+| `Sessions/Security/SessionLimitReachedException.php` | Authentication failure of the `reject_new` policy (translated message) | FR-SES-006 | Mapped |
+| `Sessions/Security/SessionsAccessCheckerInterface.php` | Page access contract (REQ-UI-002) | FR-SES-009 | Mapped |
+| `Sessions/Security/RoleSessionsAccessChecker.php` | Default checker: `access_roles` / `manage_roles`, anonymous denied | FR-SES-009 | Mapped |
+| `Sessions/Security/AllowAllSessionsAccessChecker.php` | Debug-only checker (`allow_unauthenticated`, refused without kernel.debug) | FR-SES-009 | Mapped |
+| `Sessions/Security/AccessGuard.php` | Applies the checker; trusts the token only when a firewall matched | FR-SES-009 | Mapped |
+| `Sessions/Controller/SessionsController.php` | "My sessions" and administration pages, CSRF-only POST actions, `no-store` | FR-SES-005 | Mapped |
+| `Sessions/Routing/SessionsRouteLoader.php` | Opt-in route loader `nowo_user_kit_sessions` (REQ-SF-004 rule 7) | FR-SES-009 | Mapped |
+| `Sessions/Ui/SessionsPages.php` | UiKit page contract: templates, layout, `ListPage` view models, confirm dialogs | FR-SES-005 | Mapped |
+| `Sessions/Ui/SessionRow.php` | Row view model (no session hash, displayable network only) | FR-SES-005 | Mapped |
+| `Sessions/Twig/SessionsTwigExtension.php` | `user_kit_sessions_admin_path(user)` Twig function | FR-SES-005 | Mapped |
+| `Sessions/Event/UserSessionStartedEvent.php` | Audit: session registered | FR-SES-008 | Mapped |
+| `Sessions/Event/UserSessionsRevokedEvent.php` | Audit: sessions revoked (actor, reason, count) | FR-SES-008 | Mapped |
+| `Sessions/Event/SessionLimitReachedEvent.php` | Audit / hook: sign-in hit the limit | FR-SES-006, FR-SES-008 | Mapped |
+| `Sessions/Event/UserSessionsPurgedEvent.php` | Audit: retention purge | FR-SES-008 | Mapped |
+| `Sessions/Command/PurgeSessionsCommand.php` | Retention purge of rows not seen for `idle_lifetime` + `touch_interval` | FR-SES-003 | Mapped |
+| `Sessions/PersonalData/SessionsExportProvider.php` | GDPR export section `sessions` (hash never exported) | FR-SES-010 | Mapped |
+| `Sessions/PersonalData/SessionsEraser.php` | GDPR eraser: signs every session out and deletes the rows | FR-SES-010 | Mapped |
+| `Resources/views/sessions/index.html.twig` | "My sessions" (UiKit list scaffold, row cells only) | FR-SES-005 | Mapped |
+| `Resources/views/sessions/admin.html.twig` | Administration of one user's sessions (UiKit list scaffold) | FR-SES-005 | Mapped |
+| `Resources/views/sessions/_cells.html.twig` | Shared row cells (device, network, signed in, last active) | FR-SES-005 | Mapped |
+
 ## Translations
 
 | Source file | Spec section | Requirement IDs | Status |
@@ -117,10 +168,15 @@
 | PHP — Twig | 1 | 1 |
 | PHP — UI preferences & product tour (002) | 18 | 18 |
 | PHP — personal data / GDPR (003) | 15 | 15 |
+| Sessions — session registry and limits (004) | 44 | 44 |
 | Translations | 7 | 7 |
-| **Total production sources** | **61** | **61** |
+| **Total production sources** | **105** | **105** |
 
-Audit command (production count): `git ls-files src | wc -l` → **61** (2026-10-20). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number).
+Audit command (production count): `git ls-files src | wc -l` → **105** (2026-11-01). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+
+## Inventory refresh (2026-11-01)
+
+- 1.9.0 session registry: 44 files (`src/Sessions/**`, `SessionsConfiguration`, `SessionsLoader`, `SessionsPass`, `TwigPathsPass`, the three `sessions/*.html.twig` views) mapped under the new Sessions category (REQ-SPECKIT-003 re-audit).
 
 ## Inventory refresh (2026-09-25)
 

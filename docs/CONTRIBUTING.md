@@ -206,6 +206,17 @@ make -C demo up
 # http://localhost:8023 — demo@user-kit.test / demo
 ```
 
+Playwright e2e and README screenshots (REQ-DEMO-013) run in the official Playwright image (pinned in
+`demo/symfony8/Makefile` to the `@playwright/test` version of `demo/symfony8/e2e/package.json`) against the running demo:
+
+```bash
+make test-e2e          # login → My sessions → sign out a second browser context
+make demo-screenshots  # refresh docs/images/demo/*.webp (PNG captures converted with sharp)
+```
+
+`make release-check` runs `test-e2e` last; the **Demo smoke** workflow (`demo-smoke.yml`) runs the smoke and the e2e on
+tags, weekly and on demand.
+
 See [demo/README.md](../demo/README.md).
 
 ## Questions

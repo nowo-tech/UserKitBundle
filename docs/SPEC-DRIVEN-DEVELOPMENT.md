@@ -33,6 +33,7 @@ This repository follows the Nowo bundle **spec-driven development** model in thr
 | US-08 | Optional AuthKitBundle integration on the same `user_class` | FR-CFG-001 | [INSTALLATION.md](INSTALLATION.md) |
 | 002 US-01 … US-05 | UI preferences and product-tour progress without a host migration | [`002-ui-preferences`](../specs/002-ui-preferences/spec.md) FR-001 … FR-007 | [CONFIGURATION.md](CONFIGURATION.md), [USAGE.md](USAGE.md) |
 | 003 US-01 … US-04 | Personal data export / erasure (GDPR self-service) with host vetoes, atomic | [`003-personal-data`](../specs/003-personal-data/spec.md) FR-001 … FR-006 | [CONFIGURATION.md](CONFIGURATION.md), [USAGE.md](USAGE.md) |
+| 004 | Session registry and limits: "My sessions", sign out a session / device / everywhere, concurrent-session limits (opt-in) | FR-SES-003 … FR-SES-010 ([`004-sessions`](../specs/004-sessions/spec.md) FR-001 … FR-008) | [CONFIGURATION.md](CONFIGURATION.md), [USAGE.md](USAGE.md) |
 
 Acceptance criteria (Given/When/Then) live in the specs under [`specs/`](../specs/).
 
@@ -54,6 +55,7 @@ Acceptance criteria (Given/When/Then) live in the specs under [`specs/`](../spec
 - Translation domain `NowoUserKitBundle` with seven required locales.
 - Optional UI preferences (`UiPreferencesTrait` / embeddable, preference enums, `user_ui_html_attributes()` Twig function) and product-tour progress ([`002-ui-preferences`](../specs/002-ui-preferences/spec.md)).
 - Optional personal data SPI: export providers, erasers and erasure guards with built-in sections for the kit columns ([`003-personal-data`](../specs/003-personal-data/spec.md)). The kit never disables or anonymises the account itself.
+- Optional session registry and limits (1.9.0+, `sessions.enabled`): one row per signed-in session, sign out one / all others / everywhere / a device on the next request, "My sessions" and admin pages (UiKit + FormKit), concurrent-session limits, audit events, retention purge, GDPR section ([`004-sessions`](../specs/004-sessions/spec.md)).
 
 ### Explicit non-goals
 

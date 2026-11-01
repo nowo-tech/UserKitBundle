@@ -30,6 +30,9 @@ Configuration lives in `demo/symfony8/config/packages/nowo_user_kit.yaml` (`nowo
 | `make down` | Stop containers |
 | `make test` | Run demo PHPUnit smoke tests |
 | `make link-bundle` | Symlink `/var/user-kit-bundle` (in `demo/symfony8`) |
+| `make demo-smoke` | Boot the demo and expect HTTP 200 on `/` (REQ-TEST-011) |
+| `make test-e2e` | Playwright e2e in `symfony8/e2e` (login → My sessions → sign out another session; demo must be up) |
+| `make demo-screenshots` | Refresh `docs/images/demo/*.webp` (demo must be up) |
 
 See [docs/DEMO-FRANKENPHP.md](../docs/DEMO-FRANKENPHP.md) for FrankenPHP dev vs production (worker mode).
 
