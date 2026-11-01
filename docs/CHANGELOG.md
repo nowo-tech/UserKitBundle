@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.9.0] - 2026-11-01](#190---2026-11-01)
 - [[1.8.1] - 2026-10-30](#181---2026-10-30)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-28](#170---2026-10-28)
@@ -36,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+## [1.9.0] - 2026-11-01
+
+Session registry and limits (sessions feature, opt-in): list/revoke sessions and devices, concurrent-session limit, RGPD minimisation See [UPGRADING](UPGRADING.md#to-190).
 
 ### Added
 
@@ -106,6 +111,8 @@ test (`SessionSecurityRegressionTest`):
 - `composer.json` now requires `nowo-tech/ui-kit-bundle` ^2.20, `nowo-tech/form-kit-bundle` ^2.17, `symfony/twig-bundle`,
   `symfony/form`, `symfony/security-csrf`, `symfony/routing`, `symfony/console` and `doctrine/dbal` (REQ-TWIG-005 rule 11:
   the bundle now ships pages). Nothing is registered or changed for hosts that keep `sessions.enabled: false`.
+
+[1.9.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.9.0
 
 ## [1.8.1] - 2026-10-30
 

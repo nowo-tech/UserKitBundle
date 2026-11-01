@@ -4,6 +4,8 @@
 
 - [Unreleased](#unreleased)
 - [To 1.9.0](#to-190)
+- [To 1.9.0](#to-190-1)
+  - [Enabling the session registry](#enabling-the-session-registry)
 - [To 1.8.1](#to-181)
 - [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
@@ -33,6 +35,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.9.0
+
+From **1.8.1**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 ## To 1.9.0
 
