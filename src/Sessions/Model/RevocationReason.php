@@ -7,6 +7,8 @@ namespace Nowo\UserKitBundle\Sessions\Model;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 
+use function preg_match;
+
 /**
  * Why a registered session was ended. Stored in `revoked_reason`, carried by
  * {@see UserSessionsRevokedEvent} and used for the flash message the signed-out
@@ -14,6 +16,12 @@ use Nowo\UserKitBundle\Sessions\UserSessionManager;
  */
 enum RevocationReason: string
 {
+    /**
+     * Shape of a host-defined reason (`customReason` of the revoke methods): stored in `revoked_reason` (32 chars)
+     * instead of the built-in value; flash key `sessions.signed_out.<custom>` (falls back to `signed_out`).
+     */
+    public const CUSTOM_PATTERN = '/^[a-z][a-z0-9_]{0,31}$/';
+
     /** The owner signed this one session out (My sessions page). */
     case SignedOut = 'signed_out';
 
@@ -50,5 +58,14 @@ enum RevocationReason: string
     public function messageKey(): string
     {
         return 'sessions.signed_out.' . $this->value;
+    }
+
+    /**
+     * Whether `$code` can be used as a host-defined reason: matches {@see self::CUSTOM_PATTERN} and is not a
+     * built-in value (use the case itself for those).
+     */
+    public static function isValidCustom(string $code): bool
+    {
+        return preg_match(self::CUSTOM_PATTERN, $code) === 1 && self::tryFrom($code) === null;
     }
 }

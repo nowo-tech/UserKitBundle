@@ -40,7 +40,7 @@ final readonly class SessionsEraser implements PersonalDataEraserInterface
     }
 
     /**
-     * Revokes (so the browsers are signed out) then deletes the rows.
+     * Revokes (so the browsers are signed out) then deletes the rows and the remember-me epoch.
      */
     public function erase(ErasureRequest $request): void
     {
@@ -50,5 +50,6 @@ final readonly class SessionsEraser implements PersonalDataEraserInterface
         }
         $this->sessions->revokeAll($request->user, $request->actor, RevocationReason::AccountChanged);
         $this->store->deleteFor($owner);
+        $this->sessions->forgetEpoch($owner);
     }
 }

@@ -13,8 +13,12 @@ use Nowo\UserKitBundle\Sessions\Command\PurgeSessionsCommand;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Doctrine\TablePrefixListener;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
+use Nowo\UserKitBundle\Sessions\Epoch\DoctrineSessionEpochStore;
+use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
+use Nowo\UserKitBundle\Sessions\Epoch\SessionEpochStoreInterface;
 use Nowo\UserKitBundle\Sessions\EventListener\PasswordChangeListener;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
+use Nowo\UserKitBundle\Sessions\EventListener\UserRemovalListener;
 use Nowo\UserKitBundle\Sessions\Limit\ConfiguredSessionLimitResolver;
 use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\PersonalData\SessionsEraser;
@@ -115,6 +119,16 @@ final class SessionsLoader
                 'alias'     => 'NowoUserKitSessions',
                 'is_bundle' => false,
             ]]];
+            $epoch = $sessions['remember_me_epoch'] ?? [];
+            if (($epoch['enabled'] ?? false) === true && (!is_string($epoch['store'] ?? null) || $epoch['store'] === '')) {
+                $mapping['mappings']['NowoUserKitSessionEpoch'] = [
+                    'type'      => 'attribute',
+                    'dir'       => __DIR__ . '/../Sessions/Epoch/Entity',
+                    'prefix'    => 'Nowo\UserKitBundle\Sessions\Epoch\Entity',
+                    'alias'     => 'NowoUserKitSessionEpoch',
+                    'is_bundle' => false,
+                ];
+            }
             $manager = $sessions['doctrine']['entity_manager'] ?? null;
             $container->prependExtensionConfig('doctrine', ['orm' => is_string($manager) && $manager !== ''
                 ? ['entity_managers' => [$manager => $mapping]]
@@ -140,7 +154,7 @@ final class SessionsLoader
     public static function load(ContainerBuilder $container, array $sessions, array $profiles, bool $personalData): void
     {
         self::assertLiteralBooleans($sessions);
-        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
+        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
         $webUi   = $sessions['web_ui'];
         $enabled = $sessions['enabled'];
         $container->setParameter('nowo_user_kit.sessions.enabled', $enabled);
@@ -171,6 +185,7 @@ final class SessionsLoader
             : new Definition(DatabaseRevocationStore::class, [new Reference(UserSessionStore::class)]));
 
         $dispatcher = new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE);
+        $epoch      = $sessions['remember_me_epoch']['enabled'] ? self::registerEpoch($container, $sessions) : null;
         $container->setDefinition(UserSessionManager::class, (new Definition(UserSessionManager::class, [
             new Reference(UserSessionStore::class),
             new Reference(RevocationStoreInterface::class),
@@ -180,6 +195,8 @@ final class SessionsLoader
             $sessions['idle_lifetime'],
             $sessions['touch_interval'],
             $dispatcher,
+            new Reference(SessionLimitResolverInterface::class),
+            $epoch,
         ]))->setPublic(true));
 
         $client = $sessions['client'];
@@ -196,7 +213,7 @@ final class SessionsLoader
         if (is_string($limit['resolver']) && $limit['resolver'] !== '') {
             $container->setAlias(SessionLimitResolverInterface::class, $limit['resolver']);
         } else {
-            $container->setDefinition(ConfiguredSessionLimitResolver::class, new Definition(ConfiguredSessionLimitResolver::class, [$limit['max_sessions'], $limit['policy']]));
+            $container->setDefinition(ConfiguredSessionLimitResolver::class, new Definition(ConfiguredSessionLimitResolver::class, [$limit['max_sessions'], $limit['policy'], $limit['max_trusted_devices']]));
             $container->setAlias(SessionLimitResolverInterface::class, ConfiguredSessionLimitResolver::class);
         }
 
@@ -214,6 +231,7 @@ final class SessionsLoader
             self::extraCookies($sessions['remember_me_cookies']),
             $sessions['flash'],
             [],
+            $sessions['early_check']['json_response'],
         ]);
         $listener
             ->addTag('kernel.event_listener', ['event' => KernelEvents::REQUEST, 'method' => 'onRequestEarly', 'priority' => self::PRIORITY_EARLY])
@@ -229,11 +247,15 @@ final class SessionsLoader
         if ($sessions['password_change']['revoke_sessions']) {
             self::registerPasswordChangeListener($container, $sessions['password_change']['field'], $profiles);
         }
+        if ($sessions['user_removal']['delete_sessions']) {
+            self::registerUserRemovalListener($container, $profiles);
+        }
 
         $container->setDefinition(PurgeSessionsCommand::class, (new Definition(PurgeSessionsCommand::class, [
             new Reference(UserSessionStore::class),
             new Reference(UserSessionManager::class),
             $dispatcher,
+            $sessions['purge']['revoked_retention'],
         ]))->addTag('console.command', ['command' => PurgeSessionsCommand::NAME]));
 
         if ($personalData) {
@@ -309,6 +331,57 @@ final class SessionsLoader
     }
 
     /**
+     * Remember-me epoch services; {@see SessionsPass} wraps the remember-me handler of every firewall and hands the
+     * handlers and cookie names to {@see RememberMeEpoch}.
+     *
+     * @param array{hash_secret: string, remember_me_epoch: array{enabled: bool, store: string|null}, doctrine: array{table_prefix: string, entity_manager: string|null}} $sessions
+     */
+    private static function registerEpoch(ContainerBuilder $container, array $sessions): Reference
+    {
+        $store = $sessions['remember_me_epoch']['store'];
+        if (is_string($store) && $store !== '') {
+            $container->setAlias(SessionEpochStoreInterface::class, $store);
+        } else {
+            $container->setDefinition(DoctrineSessionEpochStore::class, new Definition(DoctrineSessionEpochStore::class, [new Reference('doctrine'), $sessions['doctrine']['entity_manager']]));
+            $container->setAlias(SessionEpochStoreInterface::class, DoctrineSessionEpochStore::class);
+        }
+        $container->setDefinition(RememberMeEpoch::class, (new Definition(RememberMeEpoch::class, [
+            new Reference(SessionEpochStoreInterface::class),
+            new Reference(SessionUserResolver::class),
+            new Reference(ClockInterface::class),
+            $sessions['hash_secret'],
+            new Reference('security.token_storage', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            new Reference('security.firewall.map', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            null,
+            [],
+        ]))
+            ->addTag('kernel.event_listener', ['event' => KernelEvents::RESPONSE, 'method' => 'onResponse', 'priority' => RememberMeEpoch::REISSUE_PRIORITY])
+            ->addTag('kernel.reset', ['method' => 'reset']));
+
+        return new Reference(RememberMeEpoch::class);
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $profiles
+     */
+    private static function registerUserRemovalListener(ContainerBuilder $container, array $profiles): void
+    {
+        $definition = (new Definition(UserRemovalListener::class, [new Reference(UserSessionManager::class)]))
+            ->addTag('doctrine.event_listener', ['event' => 'postFlush'])
+            ->addTag('doctrine.event_listener', ['event' => 'onClear'])
+            ->addTag('kernel.reset', ['method' => 'reset']);
+        foreach ($profiles as $profile) {
+            $definition->addTag('doctrine.orm.entity_listener', [
+                'event'  => 'preRemove',
+                'entity' => $profile['user_class'],
+                'lazy'   => true,
+                'method' => 'preRemove',
+            ]);
+        }
+        $container->setDefinition(UserRemovalListener::class, $definition);
+    }
+
+    /**
      * @param array<string, array<string, mixed>> $profiles
      */
     private static function registerPasswordChangeListener(ContainerBuilder $container, string $field, array $profiles): void
@@ -378,6 +451,9 @@ final class SessionsLoader
             'web_ui.enabled'                 => $sessions['web_ui']['enabled'] ?? null,
             'web_ui.admin'                   => $sessions['web_ui']['admin'] ?? null,
             'security.allow_unauthenticated' => $sessions['security']['allow_unauthenticated'] ?? null,
+            'remember_me_epoch.enabled'      => $sessions['remember_me_epoch']['enabled'] ?? null,
+            'early_check.json_response'      => $sessions['early_check']['json_response'] ?? null,
+            'user_removal.delete_sessions'   => $sessions['user_removal']['delete_sessions'] ?? null,
         ];
         foreach ($switches as $path => $value) {
             if (!is_bool($value)) {

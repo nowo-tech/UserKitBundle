@@ -1,0 +1,3 @@
+sessions:
+    signed_out:
+        link: 'You were signed out because the account was linked to another one.'
