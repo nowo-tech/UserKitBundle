@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.10.0](#to-1100)
 - [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
   - [Enabling the session registry](#enabling-the-session-registry)
@@ -35,6 +36,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.10.0
+
+From **1.9.1**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 No breaking change: every new key is opt-in or keeps the 1.9 behaviour; new constructor parameters and method
 parameters are optional and appended last.

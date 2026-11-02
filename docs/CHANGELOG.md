@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.10.0] - 2026-11-02](#1100---2026-11-02)
 - [[1.9.1] - 2026-11-01](#191---2026-11-01)
 - [[1.9.0] - 2026-11-01](#190---2026-11-01)
 - [[1.8.1] - 2026-10-30](#181---2026-10-30)
@@ -38,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+## [1.10.0] - 2026-11-02
+
+Sessions host API: SessionLimit max_trusted_devices / extra, opt-in remember-me epoch (revokeAll / revokeOthers, and revoke / revokeDevice with invalidateRememberMe), host revocation reasons + context, early-check JSON 401, purge.revoked_retention, forgetUser / forgetOwner and user_removal.delete_sessions. See [UPGRADING](https://github.com/nowo-tech/UserKitBundle/blob/v1.10.0/docs/UPGRADING.md#to-1100).
 
 Session host hooks for hosts with their own session UI (spec [005](../specs/005-session-host-hooks/spec.md)). Every
 addition is opt-in or keeps the 1.9 default. See [UPGRADING](UPGRADING.md#unreleased).
@@ -71,6 +76,8 @@ addition is opt-in or keeps the 1.9 default. See [UPGRADING](UPGRADING.md#unrele
   a live user is never deleted, F3 next-second epoch with deferred re-issue, F4 cookies signed under a longer lifetime
   are refused once an epoch exists, I1 no trailing newline in custom reasons, I2 epoch bumped before the rows, I3
   `forgetOwner()` dispatches the revoked event, I4 `no-store` on the JSON 401.
+
+[1.10.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.10.0
 
 ## [1.9.1] - 2026-11-01
 
