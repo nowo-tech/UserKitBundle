@@ -15,6 +15,7 @@ use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
+use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
@@ -200,12 +201,13 @@ final class RememberMeEpoch implements ResetInterface
     /**
      * SEC-004 CQ N2: a remember-me cookie issued on this response while the user's epoch is still ahead (a sign-in in
      * the same second as a revocation) is already stale; the session gets a fresh one on its first request at or after
-     * the epoch (same marker as the kept session).
+     * the epoch (same marker as the kept session). Interactive sign-ins only: a cookie re-issued by a remember-me
+     * auto-login is never deferred (1.10.1 delta L-N2: a revoked cookie racing the revocation must not get a fresh one).
      */
     private function deferEarlyCookie(Request $request, ?SessionUser $owner): void
     {
         $issued = $request->attributes->get(ResponseListener::COOKIE_ATTR_NAME);
-        if (!$owner instanceof SessionUser || !$issued instanceof Cookie || $issued->getValue() === null || !$request->hasSession()) {
+        if ($this->tokens?->getToken() instanceof RememberMeToken || !$owner instanceof SessionUser || !$issued instanceof Cookie || $issued->getValue() === null || !$request->hasSession()) {
             return;
         }
         $epoch = $this->store->epoch($owner);

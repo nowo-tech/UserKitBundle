@@ -45,6 +45,7 @@ use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Security\Core\Authentication\RememberMe\InMemoryTokenProvider;
 use Symfony\Component\Security\Core\Authentication\RememberMe\PersistentToken;
+use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
@@ -219,6 +220,12 @@ final class HostHooksTest extends TestCase
         $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
         $clock->sleep(1);
         $request->attributes->set(ResponseListener::COOKIE_ATTR_NAME, Cookie::create('REMEMBERME', 'v'));
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // L-N2: a cookie re-issued by a remember-me auto-login is never deferred.
+        $clock->modify('-1 second');
+        $tokens->setToken(new RememberMeToken($user, 'main'));
         $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
         self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
 

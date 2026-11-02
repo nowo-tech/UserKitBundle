@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use Doctrine\ORM\Tools\SchemaTool;
+use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Sessions\Epoch\Entity\UserSessionEpoch;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\BrowserKit\Cookie;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
+use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 use function strtok;
 use function time;
@@ -67,6 +71,40 @@ final class SessionCqReverifyRegressionTest extends SessionsKernelTestCase
         $fresh = $this->rememberMe($browser);
         self::assertNotSame($early->getValue(), $fresh->getValue());
         self::assertSame('alice@example.com', $this->visit($fresh));
+    }
+
+    /**
+     * 1.10.1 delta L-N2: a revoked cookie replayed in a race with the revocation (its epoch check passes just before the
+     * bump, its session row is registered after the revocation, its response is built after the bump) must not end with
+     * a valid cookie.
+     */
+    public function testRevokedCookieRacingTheRevocationGetsNoFreshCookie(): void
+    {
+        $this->bootEpoch();
+        $alice  = $this->member('alice@example.com');
+        $stolen = $this->rememberMe($this->signIn('alice@example.com', remember: true));
+        $this->tick();
+
+        // The revocation lands between the remember-me check and the registration of the new session row.
+        $revoked    = false;
+        $dispatcher = $this->container()->get('security.event_dispatcher.main');
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+        $dispatcher->addListener(LoginSuccessEvent::class, function (LoginSuccessEvent $event) use ($alice, &$revoked): void {
+            if (!$revoked && $event->getAuthenticatedToken() instanceof RememberMeToken) {
+                $revoked = true;
+                $this->manager()->revokeAll($alice);
+            }
+        }, SessionsLoader::PRIORITY_LOGIN_SUCCESS + 1);
+
+        $thief = $this->browser();
+        $thief->getCookieJar()->set(new Cookie($stolen->getName(), $stolen->getValue()));
+        $thief->request('GET', '/page');
+        self::assertTrue($revoked);
+        $this->tick();
+        $thief->request('GET', '/page');
+        $thief->request('GET', '/page');
+        $cookie = $thief->getCookieJar()->get('REMEMBERME');
+        self::assertTrue(!$cookie instanceof Cookie || $this->visit($cookie) === 'anonymous', 'The racing replay must not end with a valid cookie.');
     }
 
     /**
