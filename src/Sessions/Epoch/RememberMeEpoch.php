@@ -12,6 +12,7 @@ use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
+use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -38,7 +39,9 @@ use function is_string;
  * session for revoke / revokeDevice) gets its fresh remember-me cookie on its first response at or after the epoch:
  * the same response when that second has already passed, else its next request (a marker in that session). Only when
  * its request carries the firewall's remember-me cookie (`kernel.response` priority {@see self::REISSUE_PRIORITY},
- * before Symfony's remember-me ResponseListener).
+ * before Symfony's remember-me ResponseListener); the marker is kept until the cookie is actually re-issued (1.10.1,
+ * CQ N1), and a cookie issued while the epoch is still ahead (a sign-in in the revocation's second) is re-issued the
+ * same way (CQ N2).
  *
  * Remembers the kept sessions of the current request only (`kernel.reset`, worker mode).
  */
@@ -137,13 +140,20 @@ final class RememberMeEpoch implements ResetInterface
     public function onResponse(ResponseEvent $event): void
     {
         $request = $event->getRequest();
-        if (!$event->isMainRequest() || !$request->hasPreviousSession() || $request->attributes->getBoolean('_stateless')
-            || $request->attributes->get(SessionRegistryListener::SIGNED_OUT_ATTRIBUTE) === true
-            || $request->attributes->has(ResponseListener::COOKIE_ATTR_NAME)) {
+        if (!$event->isMainRequest() || $request->attributes->getBoolean('_stateless')
+            || $request->attributes->get(SessionRegistryListener::SIGNED_OUT_ATTRIBUTE) === true) {
             return;
         }
-        $user    = $this->tokens?->getToken()?->getUser();
-        $owner   = $user instanceof UserInterface ? $this->owners->resolve($user) : null;
+        $user  = $this->tokens?->getToken()?->getUser();
+        $owner = $user instanceof UserInterface ? $this->owners->resolve($user) : null;
+        if ($request->attributes->has(ResponseListener::COOKIE_ATTR_NAME)) {
+            $this->deferEarlyCookie($request, $owner);
+
+            return;
+        }
+        if (!$request->hasPreviousSession()) {
+            return;
+        }
         $session = $request->getSession();
         $epoch   = $owner instanceof SessionUser ? $this->keptEpoch($request, $owner) : null;
         if ($epoch === null) {
@@ -151,26 +161,57 @@ final class RememberMeEpoch implements ResetInterface
             if (!is_array($pending)) {
                 return;
             }
-            $session->remove(self::PENDING_ATTRIBUTE);
-            if (!$owner instanceof SessionUser || ($pending['u'] ?? null) !== $owner->key() || !is_int($pending['e'] ?? null)) {
+            if (!is_int($pending['e'] ?? null) || !is_string($pending['u'] ?? null)) {
+                $session->remove(self::PENDING_ATTRIBUTE);
+
+                return;
+            }
+            // SEC-004 CQ N1: a request without the user's token (another firewall context, anonymous) keeps the marker;
+            // only another user's token drops it.
+            if (!$owner instanceof SessionUser) {
+                return;
+            }
+            if ($pending['u'] !== $owner->key()) {
+                $session->remove(self::PENDING_ATTRIBUTE);
+
                 return;
             }
             $epoch = $pending['e'];
         }
-        if ($this->now() < $epoch) {
+        $firewall = $this->firewalls?->getFirewallConfig($request)?->getName();
+        $cookie   = is_string($firewall) ? ($this->cookies[$firewall] ?? null) : null;
+        if ($this->now() < $epoch || !is_string($firewall) || $cookie === null || !$request->cookies->has($cookie)
+            || $this->handlers?->has($firewall) !== true) {
+            // Too early, or a request that cannot carry the cookie (no remember-me on this firewall, outside its path):
+            // keep the marker until a request can (CQ N1).
             // @igor-ignore - The request's own session (not an injected service): the marker belongs to this session.
             $session->set(self::PENDING_ATTRIBUTE, ['u' => $owner->key(), 'e' => $epoch]);
 
             return;
         }
-        $firewall = $this->firewalls?->getFirewallConfig($request)?->getName();
-        $cookie   = is_string($firewall) ? ($this->cookies[$firewall] ?? null) : null;
-        if (!is_string($firewall) || $cookie === null || !$request->cookies->has($cookie) || $this->handlers?->has($firewall) !== true) {
-            return;
-        }
         $handler = $this->handlers->get($firewall);
         if ($handler instanceof RememberMeHandlerInterface) {
             $handler->createRememberMeCookie($user);
+            // Dropped only once the cookie is actually re-issued (CQ N1).
+            $session->remove(self::PENDING_ATTRIBUTE);
+        }
+    }
+
+    /**
+     * SEC-004 CQ N2: a remember-me cookie issued on this response while the user's epoch is still ahead (a sign-in in
+     * the same second as a revocation) is already stale; the session gets a fresh one on its first request at or after
+     * the epoch (same marker as the kept session).
+     */
+    private function deferEarlyCookie(Request $request, ?SessionUser $owner): void
+    {
+        $issued = $request->attributes->get(ResponseListener::COOKIE_ATTR_NAME);
+        if (!$owner instanceof SessionUser || !$issued instanceof Cookie || $issued->getValue() === null || !$request->hasSession()) {
+            return;
+        }
+        $epoch = $this->store->epoch($owner);
+        if ($epoch !== null && $this->now() < $epoch) {
+            // @igor-ignore - The request's own session (not an injected service): the marker belongs to this session.
+            $request->getSession()->set(self::PENDING_ATTRIBUTE, ['u' => $owner->key(), 'e' => $epoch]);
         }
     }
 

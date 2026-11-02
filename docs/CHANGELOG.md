@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Remember-me epoch (audit CQ re-verification on 1.10.0):
+  - N1 (Info): the kept session's pending re-issue marker is now dropped only once its cookie has actually been re-issued (or on another user's token). A first request on another firewall context, without the user's token, on a firewall without remember-me or outside the cookie's path no longer loses it.
+  - N2 (Info): a sign-in in the same second as a revocation got a cookie that was already refused; such a cookie (issued while the user's epoch is still ahead) is now re-issued on the session's first request at or after the epoch second.
+- Docs: SECURITY.md states the exact window of the partial `lifetime` cut residual (CQ F4) and recommends rotating `remember_me.secret` after an incident.
+
 ## [1.10.0] - 2026-11-02
 
 Sessions host API: SessionLimit max_trusted_devices / extra, opt-in remember-me epoch (revokeAll / revokeOthers, and revoke / revokeDevice with invalidateRememberMe), host revocation reasons + context, early-check JSON 401, purge.revoked_retention, forgetUser / forgetOwner and user_removal.delete_sessions. See [UPGRADING](https://github.com/nowo-tech/UserKitBundle/blob/v1.10.0/docs/UPGRADING.md#to-1100).
