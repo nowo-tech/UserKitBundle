@@ -156,6 +156,11 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.idle_lifetime` | int (s, ≥ 60) | `86400` | A session idle longer than this is expired: signed out on its next request and purged. Keep it ≥ `framework.session.gc_maxlifetime`. |
 | `sessions.touch_interval` | int (s, ≥ 1, < `idle_lifetime`) | `300` | `last_seen_at` is written at most once per this many seconds per session (the time of the last write is kept in the session, so the requests in between cost no write). |
 | `sessions.remember_me_cookies` | list | `[]` | **Extra** cookies removed from the request and cleared (path `/`) when a revoked session is signed out. The remember-me cookie of every firewall is read from the security configuration (name, path, domain, secure, SameSite; with a custom `remember_me.service`, the name from the firewall's authenticator, cleared by the handler) and needs no entry here; a cookie that cannot be resolved fails the compilation and must be listed here. |
+| `sessions.remember_me_epoch.enabled` | bool (literal) | `false` | Since 1.10. `revokeAll()` / `revokeOthers()` move the user's epoch to now and every remember-me cookie issued before it is refused (built-in signature and persistent handlers of every firewall; custom `remember_me.service` handlers are left alone). The kept session gets a fresh cookie on the same response. |
+| `sessions.remember_me_epoch.store` | service id \| null | `null` | Service implementing `Sessions\Epoch\SessionEpochStoreInterface`; `null` = the bundle table `user_kit_session_epoch` (mapped only then). |
+| `sessions.early_check.json_response` | bool (literal) | `false` | Since 1.10. XHR / `Accept: application/json` requests of a revoked, missing or idle session get `401 {"error":"session_signed_out"}` from the early check instead of going on as a guest. |
+| `sessions.purge.revoked_retention` | int (s, ≥ 0) \| null | `null` | Since 1.10. Revoked rows are kept this long after their revocation by the purge (shorter or longer than live rows); `null` = the live-row rule. |
+| `sessions.user_removal.delete_sessions` | bool (literal) | `false` | Since 1.10. After a Doctrine removal of a profile user, revoke and delete its rows and epoch (the table has no foreign key). |
 | `sessions.flash` | bool | `true` | Add a `warning` flash ("You were signed out because…", `sessions.signed_out.<reason>`) to the signed-out browser. |
 | `sessions.revocation.store` | `database` \| `cache` | `database` | Where each signed-in request checks its revocation. `database`: one indexed lookup of its row; works with any session handler and any number of servers; a missing row fails closed. `cache`: a marker in `cache_pool`, no query per request; the pool **must be shared by every web server** (Redis, Memcached, PDO…); a lost marker is caught by the throttled touch, so `touch_interval` is the worst-case revocation delay. |
 | `sessions.revocation.cache_pool` | service id \| null | `null` | PSR-6 pool of the `cache` store. **Required** with `store: cache`; per-server adapters (filesystem — `cache.app` by default —, array, APCu, PHP files, null) are refused at compile time, also behind `TagAwareAdapter` / `ProxyAdapter` / `TraceableAdapter` / `ChainAdapter` when every tier is per-server. Unknown classes (custom pools, factories) are accepted: the check is a guard, not a proof. |
@@ -166,7 +171,8 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.client.device_id_resolver` | service id \| null | `null` | Service implementing `Sessions\Client\DeviceIdResolverInterface` (device id stored per session; enables `UserSessionManager::revokeDevice()`). |
 | `sessions.limit.max_sessions` | int ≥ 1 \| null | `null` | Live sessions a user may hold at once (`null` = unlimited). |
 | `sessions.limit.policy` | `evict_oldest` \| `reject_new` | `evict_oldest` | Over the limit: sign the least recently active sessions out, or refuse the sign-in (authentication failure on the login form). |
-| `sessions.limit.resolver` | service id \| null | `null` | Service implementing `Sessions\Limit\SessionLimitResolverInterface` (per-user limits: roles, plans, organizations…); replaces `max_sessions` / `policy`. |
+| `sessions.limit.max_trusted_devices` | int ≥ 0 \| null | `null` | Since 1.10. Trusted devices a user may keep; **not enforced** by the bundle (no trusted-device store): carried in `SessionLimit` for the host. |
+| `sessions.limit.resolver` | service id \| null | `null` | Service implementing `Sessions\Limit\SessionLimitResolverInterface` (per-user limits: roles, plans, organizations…); replaces `max_sessions` / `policy` / `max_trusted_devices`. |
 | `sessions.password_change.revoke_sessions` | bool | `true` | When the password field of a profile user changes, sign out its other sessions (the session that changed it stays). |
 | `sessions.password_change.field` | string | `password` | Mapped password field of the profile user classes. |
 | `sessions.doctrine.table_prefix` | string `[A-Za-z0-9_]{0,32}` | `''` | Prefix of the bundle table **and** index names (REQ-ORM-002). |
@@ -218,6 +224,9 @@ too): `id`, `public_id` (32 hex, used in URLs), `user_type` / `user_id` (owner: 
 `created_at`, `last_seen_at`, `revoked_at`, `revoked_reason`; one row per (session, owner), unique on
 `session_hash` + `user_type` + `user_id`. Create it with Doctrine Migrations
 (`doctrine:migrations:diff` after enabling the feature) or MigrationsKit; see [UPGRADING](UPGRADING.md#to-190).
+
+With `remember_me_epoch.enabled` and no custom `store`, a second table `user_kit_session_epoch` (`id`, `user_type`,
+`user_id`, `epoch_at`; unique on the owner) is mapped; see [UPGRADING](UPGRADING.md#unreleased).
 
 ### Routes and access control
 

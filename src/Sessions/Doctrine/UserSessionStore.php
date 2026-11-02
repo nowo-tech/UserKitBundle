@@ -220,7 +220,7 @@ final readonly class UserSessionStore
      *
      * @return list<array{public_id: string, hash: string}> the revoked rows
      */
-    public function revoke(SessionUser $user, RevocationReason $reason, DateTimeImmutable $now, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null): array
+    public function revoke(SessionUser $user, RevocationReason|string $reason, DateTimeImmutable $now, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null): array
     {
         if ($publicIds === []) {
             return [];
@@ -251,7 +251,7 @@ final readonly class UserSessionStore
         }
         $this->connection()->executeStatement(
             'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE revoked_at IS NULL AND session_hash IN (:hashes)',
-            ['now' => $now, 'reason' => $reason->value, 'hashes' => array_column($rows, 'hash')],
+            ['now' => $now, 'reason' => $reason instanceof RevocationReason ? $reason->value : $reason, 'hashes' => array_column($rows, 'hash')],
             ['now' => Types::DATETIME_IMMUTABLE, 'hashes' => ArrayParameterType::STRING],
         );
 
@@ -284,19 +284,26 @@ final readonly class UserSessionStore
 
     /**
      * Retention purge: deletes, in batches, the rows not seen since `$before` (expired sessions, and revoked ones that
-     * never came back).
+     * never came back). With `$revokedBefore`, revoked rows follow their own retention instead: they are deleted once
+     * revoked before it, whatever their last activity (shorter or longer than the live rows).
      *
      * @return int deleted rows
      */
-    public function purge(DateTimeImmutable $before, int $batchSize = 1000): int
+    public function purge(DateTimeImmutable $before, int $batchSize = 1000, ?DateTimeImmutable $revokedBefore = null): int
     {
         $deleted = 0;
         do {
-            $ids = $this->connection()->createQueryBuilder()
+            $qb = $this->connection()->createQueryBuilder()
                 ->select('id')
                 ->from($this->table())
-                ->where('last_seen_at < :before')
-                ->setParameter('before', $before, Types::DATETIME_IMMUTABLE)
+                ->setParameter('before', $before, Types::DATETIME_IMMUTABLE);
+            if ($revokedBefore instanceof DateTimeImmutable) {
+                $qb->where('(revoked_at IS NULL AND last_seen_at < :before) OR (revoked_at IS NOT NULL AND revoked_at < :revoked)')
+                    ->setParameter('revoked', $revokedBefore, Types::DATETIME_IMMUTABLE);
+            } else {
+                $qb->where('last_seen_at < :before');
+            }
+            $ids = $qb
                 ->orderBy('id', 'ASC')
                 ->setMaxResults($batchSize)
                 ->executeQuery()

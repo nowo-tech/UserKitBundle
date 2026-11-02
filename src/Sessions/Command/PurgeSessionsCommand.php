@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Sessions\Command;
 
+use DateInterval;
+use DateTimeImmutable;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsPurgedEvent;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
@@ -24,16 +26,23 @@ use const DATE_ATOM;
  * `idle_lifetime` + `touch_interval` — expired sessions (gone from the session handler) and revoked sessions that never
  * came back. Run it daily (cron or Symfony Scheduler). Only rows that can no longer be a live session are deleted, so
  * the command needs no confirmation.
+ *
+ * With `sessions.purge.revoked_retention` (seconds), revoked rows follow their own retention instead: deleted once
+ * revoked for that long (e.g. keep them 30 days for a "recently signed out" audit view, or drop them right away).
  */
 #[AsCommand(name: self::NAME, description: 'Delete the expired and revoked rows of the session registry')]
 final class PurgeSessionsCommand extends Command
 {
     public const NAME = 'nowo:user-kit:sessions:purge';
 
+    /**
+     * @param int|null $revokedRetention `sessions.purge.revoked_retention` (seconds; null = same rule as live rows)
+     */
     public function __construct(
         private readonly UserSessionStore $store,
         private readonly UserSessionManager $sessions,
         private readonly ?EventDispatcherInterface $dispatcher = null,
+        private readonly ?int $revokedRetention = null,
     ) {
         parent::__construct();
     }
@@ -52,10 +61,14 @@ final class PurgeSessionsCommand extends Command
 
             return Command::INVALID;
         }
-        $before  = $this->sessions->aliveSince()->modify(sprintf('-%d seconds', $this->sessions->touchInterval()));
-        $deleted = $this->store->purge($before, $batch);
-        $this->dispatcher?->dispatch(new UserSessionsPurgedEvent($before, $deleted));
-        $io->success(sprintf('Deleted %d session row(s) not seen since %s.', $deleted, $before->format(DATE_ATOM)));
+        $before        = $this->sessions->aliveSince()->modify(sprintf('-%d seconds', $this->sessions->touchInterval()));
+        $now           = $this->sessions->now();
+        $revokedBefore = $this->revokedRetention !== null ? $now->sub(new DateInterval('PT' . $this->revokedRetention . 'S')) : null;
+        $deleted       = $this->store->purge($before, $batch, $revokedBefore);
+        $this->dispatcher?->dispatch(new UserSessionsPurgedEvent($before, $deleted, $revokedBefore));
+        $io->success($revokedBefore instanceof DateTimeImmutable
+            ? sprintf('Deleted %d session row(s) not seen since %s or revoked before %s.', $deleted, $before->format(DATE_ATOM), $revokedBefore->format(DATE_ATOM))
+            : sprintf('Deleted %d session row(s) not seen since %s.', $deleted, $before->format(DATE_ATOM)));
 
         return Command::SUCCESS;
     }

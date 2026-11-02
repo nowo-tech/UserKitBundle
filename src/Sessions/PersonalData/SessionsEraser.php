@@ -40,7 +40,8 @@ final readonly class SessionsEraser implements PersonalDataEraserInterface
     }
 
     /**
-     * Revokes (so the browsers are signed out) then deletes the rows.
+     * Revokes (so the browsers are signed out) then deletes the rows. The remember-me epoch row (owner type, id and a
+     * timestamp) is kept while the user exists, so old remember-me cookies stay refused; it goes with the user.
      */
     public function erase(ErasureRequest $request): void
     {

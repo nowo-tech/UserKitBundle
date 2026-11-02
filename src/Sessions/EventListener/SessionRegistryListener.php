@@ -55,7 +55,8 @@ use const PHP_INT_MIN;
  *   `idle_lifetime` is signed out as a whole — session invalidated, token dropped, remember-me cookies of every
  *   firewall removed from the request (no auto-login) and cleared on the response with their configured name, path,
  *   domain, secure and SameSite, flash `sessions.signed_out.<reason>`. The request then goes on anonymous, so the
- *   firewall answers as for any guest (login redirect, 401…).
+ *   firewall answers as for any guest (login redirect, 401…) — or, with `sessions.early_check.json_response`, an
+ *   XHR / JSON request gets `401 {"error":"session_signed_out"}` right away.
  * - `kernel.request` priority 6 (after the firewall, stateful routes only): a signed-in session without a marker for
  *   this firewall context is registered; then `last_seen_at` is written at most once per `touch_interval` (the time
  *   of the last write lives in the marker, so requests in between cost no write); a touch that finds the row revoked
@@ -87,6 +88,8 @@ final readonly class SessionRegistryListener
      * @param list<array{name: string, path: string|null, domain: string|null, secure: bool|string|null, httponly: bool, samesite: string|null}> $rememberMeCookies
      * @param bool $flash `sessions.flash`: add the signed-out message to the new session
      * @param iterable<RememberMeHandlerInterface> $rememberMeHandlers
+     * @param bool $jsonResponse `sessions.early_check.json_response`: XHR / JSON requests of a signed-out session get
+     *                           a 401 JSON response from the early check instead of going on as a guest
      */
     public function __construct(
         private UserSessionManager $sessions,
@@ -102,6 +105,7 @@ final readonly class SessionRegistryListener
         private array $rememberMeCookies = [],
         private bool $flash = true,
         private iterable $rememberMeHandlers = [],
+        private bool $jsonResponse = false,
     ) {
     }
 
@@ -133,6 +137,9 @@ final readonly class SessionRegistryListener
         }
         if ($tracked) {
             $index = $saved;
+        }
+        if ($reason !== null && $this->jsonResponse && $this->wantsJson($request)) {
+            $event->setResponse($this->signedOutJson());
         }
     }
 
@@ -347,9 +354,37 @@ final readonly class SessionRegistryListener
         }
         $request->attributes->set(self::SIGNED_OUT_ATTRIBUTE, true);
         if ($this->flash && $session instanceof FlashBagAwareSessionInterface) {
-            $case = RevocationReason::tryFrom($reason) ?? RevocationReason::SignedOut;
-            $session->getFlashBag()->add('warning', $this->trans($case->messageKey()));
+            $session->getFlashBag()->add('warning', $this->signedOutMessage($reason));
         }
+    }
+
+    /**
+     * Flash of a stored reason: the built-in message, or `sessions.signed_out.<custom>` for a host-defined reason when
+     * the host translated it (else the generic `signed_out` message).
+     */
+    private function signedOutMessage(string $reason): string
+    {
+        $case = RevocationReason::tryFrom($reason);
+        if ($case instanceof RevocationReason) {
+            return $this->trans($case->messageKey());
+        }
+        if (RevocationReason::isValidCustom($reason)) {
+            $key     = 'sessions.signed_out.' . $reason;
+            $message = $this->trans($key);
+            if ($message !== $key) {
+                return $message;
+            }
+        }
+
+        return $this->trans(RevocationReason::SignedOut->messageKey());
+    }
+
+    private function signedOutJson(): JsonResponse
+    {
+        $response = new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
     }
 
     /**
@@ -365,7 +400,7 @@ final readonly class SessionRegistryListener
             return new RedirectResponse($request->getBaseUrl() . '/' . ltrim($request->getPathInfo(), '/\\') . ($query !== null ? '?' . $query : ''));
         }
 
-        return new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);
+        return $this->signedOutJson();
     }
 
     private function wantsJson(Request $request): bool

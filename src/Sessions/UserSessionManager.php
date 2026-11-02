@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Sessions;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
+use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
+use Nowo\UserKitBundle\Sessions\Event\UserSessionsDeletedEvent;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
+use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
+use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Psr\Clock\ClockInterface;
@@ -30,6 +35,11 @@ use function sprintf;
  * {@see RevocationStoreInterface}; each revoked session is signed out on its **next request** by
  * {@see EventListener\SessionRegistryListener}, whatever the session handler. Every revocation dispatches
  * {@see UserSessionsRevokedEvent} after the rows are written (audit).
+ *
+ * Host hooks: every revoke method takes an optional host-defined `customReason` (stored instead of the built-in
+ * reason, e.g. `link`; see {@see RevocationReason::isValidCustom()}) and a free-form `context` carried by the event.
+ * With `sessions.remember_me_epoch.enabled`, revokeAll / revokeOthers also invalidate the remember-me cookies of the
+ * user ({@see RememberMeEpoch}).
  *
  * Holds no state between requests (worker mode).
  */
@@ -55,7 +65,26 @@ final readonly class UserSessionManager
         private int $idleLifetime = 86400,
         private int $touchInterval = 300,
         private ?EventDispatcherInterface $dispatcher = null,
+        private ?SessionLimitResolverInterface $limits = null,
+        private ?RememberMeEpoch $epoch = null,
     ) {
+    }
+
+    /**
+     * Limits of the user from the configured resolver (`sessions.limit.*`): the concurrent-session limit the bundle
+     * enforces, plus `maxTrustedDevices` and `extra` for the host.
+     */
+    public function limitFor(object $user): SessionLimit
+    {
+        return $this->limits?->resolve($user) ?? SessionLimit::unlimited();
+    }
+
+    /**
+     * Whether revokeAll / revokeOthers invalidate remember-me cookies (`sessions.remember_me_epoch.enabled`).
+     */
+    public function invalidatesRememberMe(): bool
+    {
+        return $this->epoch instanceof RememberMeEpoch;
     }
 
     /**
@@ -158,9 +187,17 @@ final readonly class UserSessionManager
     /**
      * Signs one session of the user out (its owner, or another user as `$actor`: reason `admin`).
      *
+     * `$invalidateRememberMe` (with `sessions.remember_me_epoch.enabled`; no-op otherwise) also bumps the user's
+     * remember-me epoch, so the revoked device cannot sign back in with its remember-me cookie alone ("sign out this
+     * device" that sticks). The cookies of the user's **other** devices are voided too: they keep their sessions, but
+     * must sign in again once those expire. The caller's own current session (when the caller is the user) gets a
+     * fresh cookie.
+     *
+     * @param array<string, mixed> $context host-defined data for {@see UserSessionsRevokedEvent}
+     *
      * @return bool false when the user has no live session with that public id
      */
-    public function revoke(object $user, string $publicId, ?object $actor = null): bool
+    public function revoke(object $user, string $publicId, ?object $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false): bool
     {
         $owner = $this->owner($user);
         if (!$owner instanceof SessionUser) {
@@ -168,28 +205,34 @@ final readonly class UserSessionManager
         }
         $reason = $this->byOther($owner, $actor) ? RevocationReason::Admin : RevocationReason::SignedOut;
 
-        return $this->revokeRows($owner, $user, $actor ?? $user, $reason, publicIds: [$publicId]) !== [];
+        return $this->revokeRows($owner, $user, $actor ?? $user, $reason, publicIds: [$publicId], customReason: $customReason, context: $context, epoch: $invalidateRememberMe, keepCurrent: !$this->byOther($owner, $actor)) !== [];
     }
 
     /**
-     * Signs out every session of the user except `$currentHash` (the caller's own).
+     * Signs out every session of the user except `$currentHash` (the caller's own). With the remember-me epoch, the
+     * remember-me cookies of the user are invalidated too; the kept session gets a fresh one on this response.
+     *
+     * @param array<string, mixed> $context host-defined data for {@see UserSessionsRevokedEvent}
      *
      * @return int signed-out sessions
      */
-    public function revokeOthers(object $user, ?string $currentHash, ?object $actor = null): int
+    public function revokeOthers(object $user, ?string $currentHash, ?object $actor = null, ?string $customReason = null, array $context = []): int
     {
         $owner = $this->owner($user);
 
-        return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor ?? $user, RevocationReason::Others, except: $currentHash, audit: true)) : 0;
+        return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor ?? $user, RevocationReason::Others, except: $currentHash, audit: true, customReason: $customReason, context: $context, epoch: true)) : 0;
     }
 
     /**
      * Signs out every session of the user (an administrator's "sign out everywhere", account disabled, password
-     * changed…), `$except` left out.
+     * changed…), `$except` left out. With the remember-me epoch, the remember-me cookies of the user are invalidated
+     * too (the `$except` session gets a fresh one on this response).
+     *
+     * @param array<string, mixed> $context host-defined data for {@see UserSessionsRevokedEvent}
      *
      * @return int signed-out sessions
      */
-    public function revokeAll(object $user, ?object $actor = null, RevocationReason $reason = RevocationReason::Everywhere, ?string $except = null): int
+    public function revokeAll(object $user, ?object $actor = null, RevocationReason $reason = RevocationReason::Everywhere, ?string $except = null, ?string $customReason = null, array $context = []): int
     {
         $owner = $this->owner($user);
         if (!$owner instanceof SessionUser) {
@@ -199,19 +242,61 @@ final readonly class UserSessionManager
             $reason = RevocationReason::Admin;
         }
 
-        return count($this->revokeRows($owner, $user, $actor, $reason, except: $except, audit: true));
+        return count($this->revokeRows($owner, $user, $actor, $reason, except: $except, audit: true, customReason: $customReason, context: $context, epoch: true));
     }
 
     /**
      * Signs out the sessions of one device of the user (e.g. when the device loses its trust), `$except` left out.
+     * `$invalidateRememberMe`: as for {@see self::revoke()} (`$except`, else the caller's current session, keeps a
+     * fresh cookie).
+     *
+     * @param array<string, mixed> $context host-defined data for {@see UserSessionsRevokedEvent}
      *
      * @return int signed-out sessions
      */
-    public function revokeDevice(object $user, string $deviceId, ?string $except = null, ?object $actor = null): int
+    public function revokeDevice(object $user, string $deviceId, ?string $except = null, ?object $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false): int
     {
         $owner = $this->owner($user);
 
-        return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor, RevocationReason::Device, deviceId: $deviceId, except: $except)) : 0;
+        return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor, RevocationReason::Device, deviceId: $deviceId, except: $except, customReason: $customReason, context: $context, epoch: $invalidateRememberMe, keepCurrent: !$this->byOther($owner, $actor))) : 0;
+    }
+
+    /**
+     * Deletes every registry row of the user, after revoking the live ones so their browsers are signed out on their
+     * next request; with the remember-me epoch, the epoch is bumped (not deleted: old cookies of a user who still exists
+     * must stay refused — {@see self::forgetEpoch()} once the user is gone). For hosts that delete users (the table has no foreign key);
+     * `sessions.user_removal.delete_sessions` calls {@see self::forgetOwner()} after a Doctrine removal.
+     *
+     * @return int deleted rows
+     */
+    public function forgetUser(object $user): int
+    {
+        $owner = $this->owner($user);
+
+        return $owner instanceof SessionUser ? $this->forgetOwner($owner, $user) : 0;
+    }
+
+    /**
+     * {@see self::forgetUser()} by owner reference (the user entity may already be gone).
+     *
+     * @return int deleted rows
+     */
+    public function forgetOwner(SessionUser $owner, ?object $user = null): int
+    {
+        $this->revokeRows($owner, $user, null, RevocationReason::AccountChanged, epoch: true);
+        $deleted = $this->store->deleteFor($owner);
+        $this->dispatcher?->dispatch(new UserSessionsDeletedEvent($owner, $user, $deleted));
+
+        return $deleted;
+    }
+
+    /**
+     * Deletes the remember-me epoch of the user — only once the user is gone (old cookies would work again); no-op
+     * without the epoch. `sessions.user_removal.delete_sessions` calls it after the removing flush.
+     */
+    public function forgetEpoch(SessionUser $owner): void
+    {
+        $this->epoch?->forget($owner);
     }
 
     /**
@@ -241,18 +326,31 @@ final readonly class UserSessionManager
 
     /**
      * @param list<string>|null $publicIds
+     * @param array<string, mixed> $context
+     * @param bool $epoch bump the remember-me epoch (also when no row matched: a browser whose row is gone must not sign
+     *                    back in); bumped **before** the rows, so a failing epoch store revokes nothing
+     * @param bool $keepCurrent the caller's current session (unless revoked here) gets a fresh cookie, besides `$except`
      *
      * @return list<string> revoked public ids
      */
-    private function revokeRows(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null, bool $audit = false): array
+    private function revokeRows(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null, bool $audit = false, ?string $customReason = null, array $context = [], bool $epoch = false, bool $keepCurrent = false): array
     {
-        $rows = $this->store->revoke($owner, $reason, $this->now(), $publicIds, $deviceId, $except);
-        if ($rows !== []) {
-            $this->revocations->mark(array_column($rows, 'hash'), $reason->value);
+        if ($customReason !== null && !RevocationReason::isValidCustom($customReason)) {
+            throw new InvalidArgumentException(sprintf('A custom revocation reason must match %s and not be a built-in reason, got "%s".', RevocationReason::CUSTOM_PATTERN, $customReason));
         }
-        $ids = array_column($rows, 'public_id');
+        $bumped = $epoch && $this->epoch instanceof RememberMeEpoch ? $this->epoch->bump($owner) : null;
+        $code   = $customReason ?? $reason->value;
+        $rows   = $this->store->revoke($owner, $code, $this->now(), $publicIds, $deviceId, $except);
+        if ($rows !== []) {
+            $this->revocations->mark(array_column($rows, 'hash'), $code);
+        }
+        if ($bumped !== null) {
+            $this->epoch->keep($owner, $bumped, $except, $keepCurrent && $except === null, array_column($rows, 'hash'));
+        }
+        $invalidated = $bumped !== null;
+        $ids         = array_column($rows, 'public_id');
         if ($ids !== [] || $audit) {
-            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids));
+            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated));
         }
 
         return $ids;

@@ -10,8 +10,11 @@ use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
+use Nowo\UserKitBundle\Sessions\Epoch\EpochRememberMeHandler;
+use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
+use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Symfony\Component\Cache\Adapter\ApcuAdapter;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -28,9 +31,12 @@ use Symfony\Component\Cache\Adapter\TraceableTagAwareAdapter;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Security\Http\RememberMe\PersistentRememberMeHandler;
+use Symfony\Component\Security\Http\RememberMe\SignatureRememberMeHandler;
 
 use function array_key_exists;
 use function array_map;
@@ -53,6 +59,8 @@ use function substr;
  * - the registry needs SecurityBundle (token storage) and Doctrine;
  * - the `cache` revocation store refuses per-server pools (L3);
  * - the remember-me cookies of every firewall are handed to the registry listener (M2);
+ * - with `sessions.remember_me_epoch.enabled`, the built-in remember-me handler of every firewall is wrapped by
+ *   {@see EpochRememberMeHandler} (custom `remember_me.service` handlers are left alone);
  * - the registry backs {@see SessionInvalidatorInterface} unless the host aliased its own invalidator;
  * - the pages fail closed without form CSRF protection (REQ-SEC-005, pattern P2) or without Twig / FormKit, and refuse
  *   `security.allow_unauthenticated: true` outside `kernel.debug`.
@@ -92,6 +100,7 @@ final class SessionsPass implements CompilerPassInterface
         }
         $this->checkCachePool($container);
         $this->collectRememberMeCookies($container);
+        $this->wrapRememberMeHandlers($container);
         if ($container->hasAlias(SessionInvalidatorInterface::class) && (string) $container->getAlias(SessionInvalidatorInterface::class) === DefaultSessionInvalidator::class) {
             $container->setAlias(SessionInvalidatorInterface::class, RegistrySessionInvalidator::class);
         }
@@ -184,6 +193,41 @@ final class SessionsPass implements CompilerPassInterface
         }
         $listener->replaceArgument(10, $cookies);
         $listener->setArgument(12, $handlers);
+    }
+
+    /**
+     * Remember-me epoch: wraps the built-in (signature / persistent) remember-me handler of every firewall and hands
+     * the handlers and their cookie names to {@see RememberMeEpoch} (re-issue for the kept session).
+     */
+    private function wrapRememberMeHandlers(ContainerBuilder $container): void
+    {
+        if (!$container->hasDefinition(RememberMeEpoch::class)) {
+            return;
+        }
+        $handlers = [];
+        $cookies  = [];
+        foreach ($container->findTaggedServiceIds('security.remember_me_handler') as $id => $tags) {
+            $firewall            = $tags[0]['firewall'] ?? null;
+            [$class, $arguments] = $this->resolve($container, $container->getDefinition($id));
+            $options             = $arguments[3] ?? null;
+            $persistent          = is_string($class) && is_a($class, PersistentRememberMeHandler::class, true);
+            if (!is_string($firewall) || !is_array($options) || (!$persistent && (!is_string($class) || !is_a($class, SignatureRememberMeHandler::class, true)))) {
+                continue;
+            }
+            $decorator = 'nowo_user_kit.sessions.epoch_remember_me_handler.' . $firewall;
+            $container->setDefinition($decorator, (new Definition(EpochRememberMeHandler::class, [
+                new Reference($decorator . '.inner'),
+                new Reference(RememberMeEpoch::class),
+                new Reference(SessionUserResolver::class),
+                is_int($options['lifetime'] ?? null) ? $options['lifetime'] : 31536000,
+                $persistent ? ($arguments[0] ?? null) : null,
+            ]))->setDecoratedService($id));
+            $handlers[$firewall] = new Reference($id);
+            $cookies[$firewall]  = is_string($options['name'] ?? null) && $options['name'] !== '' ? $options['name'] : 'REMEMBERME';
+        }
+        $container->getDefinition(RememberMeEpoch::class)
+            ->replaceArgument(6, ServiceLocatorTagPass::register($container, $handlers))
+            ->replaceArgument(7, $cookies);
     }
 
     /**
