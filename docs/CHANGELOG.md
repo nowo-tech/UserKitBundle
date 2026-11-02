@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.10.1] - 2026-11-02](#1101---2026-11-02)
 - [[1.10.0] - 2026-11-02](#1100---2026-11-02)
 - [[1.9.1] - 2026-11-01](#191---2026-11-01)
 - [[1.9.0] - 2026-11-01](#190---2026-11-01)
@@ -40,12 +41,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-11-02
+
+remember-me epoch re-issue hardening (CQ N1, N2, F4 docs)
+
 ### Security
 
 - Remember-me epoch (audit CQ re-verification on 1.10.0):
   - N1 (Info): the kept session's pending re-issue marker is now dropped only once its cookie has actually been re-issued (or on another user's token). A first request on another firewall context, without the user's token, on a firewall without remember-me or outside the cookie's path no longer loses it.
   - N2 (Info): a sign-in in the same second as a revocation got a cookie that was already refused; such a cookie (issued while the user's epoch is still ahead) is now re-issued on the session's first request at or after the epoch second. Interactive sign-ins only: a cookie re-issued by a remember-me auto-login is never deferred, so a revoked cookie racing the revocation cannot obtain a fresh one.
 - Docs: SECURITY.md states the exact window of the partial `lifetime` cut residual (CQ F4) and recommends rotating `remember_me.secret` after an incident.
+
+[1.10.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.10.1
 
 ## [1.10.0] - 2026-11-02
 

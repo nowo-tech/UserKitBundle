@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.10.1](#to-1101)
 - [To 1.10.0](#to-1100)
 - [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
@@ -36,6 +37,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.10.1
+
+From **1.10.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.10.0** (security patch, no configuration or schema change):
 
