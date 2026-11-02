@@ -453,14 +453,15 @@ final class AccountSecurity
 | Method | Effect |
 | --- | --- |
 | `listFor($user)` | Live sessions (`Sessions\Entity\UserSession`), most recent first (≤ 200). |
-| `revoke($user, $publicId, $actor = null, ?string $customReason = null, array $context = [])` | One session (reason `signed_out`, or `admin` when `$actor` is someone else). |
+| `revoke($user, $publicId, $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false)` | One session (reason `signed_out`, or `admin` when `$actor` is someone else); with `invalidateRememberMe`, bumps the remember-me epoch too (see [Remember-me epoch](#remember-me-epoch)). |
 | `revokeOthers($user, $currentHash, $actor = null, ?string $customReason = null, array $context = [])` | Every session but `$currentHash` (reason `others`); bumps the remember-me epoch when enabled. |
 | `revokeAll($user, $actor = null, $reason = Everywhere, $except = null, ?string $customReason = null, array $context = [])` | Every session (reason `everywhere`, `admin` when `$actor` is someone else, or yours); bumps the remember-me epoch when enabled. |
-| `revokeDevice($user, $deviceId, $except = null, $actor = null, ?string $customReason = null, array $context = [])` | The sessions of one device (reason `device`). |
+| `revokeDevice($user, $deviceId, $except = null, $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false)` | The sessions of one device (reason `device`); `invalidateRememberMe` as for `revoke()`. |
 | `currentHash($requestOrSession)` | Registry hash of the current session (null before it is registered). |
 | `limitFor($user)` | `SessionLimit` from the configured resolver (`maxSessions`, `policy`, `maxTrustedDevices`, `extra`). |
-| `invalidatesRememberMe()` | Whether revokeAll / revokeOthers invalidate remember-me cookies (`remember_me_epoch.enabled`). |
-| `forgetUser($user)` / `forgetOwner(SessionUser $owner, $user = null)` | Revoke, then delete every row and the epoch of a user (user deletion). |
+| `invalidatesRememberMe()` | Whether the epoch is enabled (revokeAll / revokeOthers, and revoke / revokeDevice with `invalidateRememberMe`, void remember-me cookies). |
+| `forgetUser($user)` / `forgetOwner(SessionUser $owner, $user = null)` | Revoke, then delete every row of a user; the epoch is bumped, not deleted. |
+| `forgetEpoch(SessionUser $owner)` | Delete the epoch, only once the user is gone (old cookies would work again). |
 
 `RegistrySessionInvalidator` implements the existing `SessionInvalidatorInterface`: with `sessions.enabled` it becomes
 the default invalidator (unless you aliased your own), so `account_status.invalidate_sessions_on_disable` really signs
@@ -577,29 +578,44 @@ run. A purged revoked row still signs its browser out (database store: a missing
 ### Personal data
 
 With `personal_data.enabled`, the export gets a `sessions` section (browser, OS, stored IP form, device id, dates,
-revocation; never the hash) and the eraser `sessions` signs every session out and deletes the rows (and the
-remember-me epoch).
+revocation; never the hash) and the eraser `sessions` signs every session out and deletes the rows. The remember-me
+epoch row (owner type, id, a timestamp) is kept while the user exists, so old remember-me cookies stay refused.
 
 ### Remember-me epoch
 
 By default a copied or long-lived remember-me cookie signs back in after a revocation (it starts a **new**, visible
 session). With `sessions.remember_me_epoch.enabled: true`, `revokeAll()` and `revokeOthers()` (pages, password change,
-account disabled, your own calls) move the user's epoch to "now", and every remember-me cookie issued before it is
-refused — also for a browser whose registry row was already purged or garbage-collected:
+account disabled, your own calls) — and `revoke()` / `revokeDevice()` called with `invalidateRememberMe: true` — move
+the user's epoch to the next whole second, and every remember-me cookie issued before it is refused — also for a
+browser whose registry row was already purged or garbage-collected:
 
 - the built-in remember-me handler of every firewall is wrapped by `Sessions\Epoch\EpochRememberMeHandler`. Signature
-  cookies: issue time = signed expiry − `remember_me.lifetime`. Persistent cookies (`token_provider`): the token's
-  server-side `lastUsed`. A refused cookie is an authentication failure, so Symfony clears it;
-- the kept session (`revokeOthers`, `revokeAll(..., except: $hash)`) gets a fresh remember-me cookie on the same
-  response when its request carries one, so that browser stays remembered;
-- `revoke()` (one session) and `revokeDevice()` do not move the epoch (they cannot tell the cookies apart);
+  cookies: issue time = signed expiry − `remember_me.lifetime`; when that lies more than 60 s in the future (the cookie
+  was signed under a longer lifetime than today's) the issue time is unknown and the cookie is refused once the user
+  has an epoch. Persistent cookies (`token_provider`): the token's server-side `lastUsed`. A refused cookie is an
+  authentication failure, so Symfony clears it;
+- the epoch is the **next whole second** (cookies carry whole seconds), so a cookie issued earlier in the revocation's
+  second is refused too. Keep the servers' clocks in sync (NTP): skew widens or narrows that edge;
+- the kept session (`revokeOthers`, `revokeAll(..., except: $hash)`, or the caller's current session for
+  `revoke()` / `revokeDevice()` with `invalidateRememberMe`) gets a fresh remember-me cookie from the epoch second on:
+  on the same response when that second has passed, else on its next request. Only when its request carries the
+  firewall's cookie, and only for the firewall of that request (the epoch spans firewalls: the user's cookies of other
+  firewalls are refused, and those browsers sign in again);
+- **sign out one device so that it sticks**: `revoke($user, $publicId, invalidateRememberMe: true)` (or
+  `revokeDevice(..., invalidateRememberMe: true)`). Plain `revoke()` leaves the revoked device's remember-me cookie
+  valid for a cookie-only replay (it cannot be told apart from the user's other cookies). With the flag, the cookies of
+  the user's **other** devices are voided too: those devices keep their current sessions but must sign in again once
+  their sessions expire. Use it for "this wasn't me" / "sign out this device"; per-device remember-me revocation (token
+  series linked to the session row, persistent handler only) is planned for 1.11;
 - custom `remember_me.service` handlers are not wrapped: add a changing property to `signature_properties` instead;
 - the epoch lives in `user_kit_session_epoch` (one row per user), or in your `SessionEpochStoreInterface` service
   (`remember_me_epoch.store`) — e.g. a `sessionEpoch` column of your user, which you may also list in
   `remember_me.signature_properties`.
 
-Changing `remember_me.lifetime` to a shorter value makes older signature cookies look newer; bump the epoch
-(`revokeAll()`) of the affected users if that matters.
+Lowering `remember_me.lifetime` partially (e.g. one year to six months) still lets a pre-change cookie issued shortly
+before an epoch look newer than it is (its derived issue time is shifted by the difference but not into the future).
+After lowering the lifetime because of an incident, rotate the remember-me `secret` as well (every signature cookie
+becomes invalid).
 
 ### Host-defined revocation reasons
 
@@ -632,10 +648,11 @@ requests are unchanged.
 ### Deleting users
 
 The registry table has no foreign key to your user tables. When you delete a user, either call
-`UserSessionManager::forgetUser($user)` before the removal (revokes the live sessions, deletes every row and the
-epoch, dispatches `UserSessionsDeletedEvent`), or enable `sessions.user_removal.delete_sessions`: a Doctrine
+`UserSessionManager::forgetUser($user)` before the removal (revokes the live sessions — `UserSessionsRevokedEvent`,
+reason `account_changed` — deletes every row, bumps the epoch, dispatches `UserSessionsDeletedEvent`; call
+`forgetEpoch($owner)` once the user is gone), or enable `sessions.user_removal.delete_sessions`: a Doctrine
 `preRemove` entity listener on each profile user class remembers the owner and the rows go after the flush that really
-removed the user (a cleared unit of work or an entity persisted again cancels it). Without either, the rows are purged
+removed the user (a cleared unit of work or an entity persisted again cancels it), and the epoch goes too. Without either, the rows are purged
 after `idle_lifetime` + `touch_interval` and their sessions are signed out (the user cannot be refreshed).
 
 ### Host with its own session UI
@@ -665,8 +682,10 @@ final class DevicesController
 
     public function signOut(Request $request, #[CurrentUser] User $user, string $id): Response
     {
-        // your CSRF check (one token id per action and row), then:
-        $this->sessions->revoke($user, $id);                   // false → 404
+        // your CSRF check (one token id per action and row), then
+        // ("this wasn't me" / "sign out this device" that sticks: also void the remember-me cookies of the user,
+        //  this browser gets a fresh one; the user's other devices sign in again when their sessions expire):
+        $this->sessions->revoke($user, $id, invalidateRememberMe: true);   // false → 404
     }
 
     public function signOutOthers(Request $request, #[CurrentUser] User $user): Response
@@ -680,7 +699,8 @@ final class DevicesController
 Checklist for such hosts: scope every action to the signed-in user (the manager already filters by owner), one CSRF
 token per action and row, `Cache-Control: no-store` on the pages, never expose `getSessionHash()`, enforce
 `limitFor($user)->maxTrustedDevices` where devices are trusted, listen to `UserSessionsRevokedEvent` for the audit log,
-and enable `remember_me_epoch` so "sign out everywhere" also voids remember-me cookies.
+and enable `remember_me_epoch` so "sign out everywhere" also voids remember-me cookies. Without `invalidateRememberMe`,
+signing out one device does not void its remember-me cookie (see [Remember-me epoch](#remember-me-epoch)).
 
 ## Translation overrides (REQ-I18N-001)
 

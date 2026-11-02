@@ -48,10 +48,12 @@ addition is opt-in or keeps the 1.9 default. See [UPGRADING](UPGRADING.md#unrele
   (not enforced: UserKit keeps no trusted devices); `UserSessionManager::limitFor($user)`.
 - Remember-me epoch (`sessions.remember_me_epoch.enabled`, default off): `revokeAll()` / `revokeOthers()` refuse every
   remember-me cookie issued before them, also for browsers whose registry row is already gone. The built-in signature
-  and persistent handlers of every firewall are wrapped (`EpochRememberMeHandler`); the kept session gets a fresh cookie
-  on the same response. Epoch store `SessionEpochStoreInterface` (default table `user_kit_session_epoch`, or
+  and persistent handlers of every firewall are wrapped (`EpochRememberMeHandler`); the epoch is the next whole second,
+  and the kept session gets a fresh cookie from then on. `revoke()` / `revokeDevice()` take an opt-in
+  `invalidateRememberMe` (the revoked device's cookie-only replay is refused; the user's other devices sign in again
+  when their sessions expire). Epoch store `SessionEpochStoreInterface` (default table `user_kit_session_epoch`, or
   `remember_me_epoch.store`). `UserSessionManager::invalidatesRememberMe()`.
-- Host-defined revocation reasons: optional `customReason` (`^[a-z][a-z0-9_]{0,31}$`, not a built-in value) and
+- Host-defined revocation reasons: optional `customReason` (`^[a-z][a-z0-9_]{0,31}\z`, not a built-in value) and
   `context` on `revoke()`, `revokeOthers()`, `revokeAll()`, `revokeDevice()`; stored in `revoked_reason`, flash
   `sessions.signed_out.<custom>` when the host translates it. `UserSessionsRevokedEvent` gains `customReason`,
   `context`, `rememberMeInvalidated` and `reasonCode()`.
@@ -59,13 +61,16 @@ addition is opt-in or keeps the 1.9 default. See [UPGRADING](UPGRADING.md#unrele
   `401 {"error":"session_signed_out"}` from the early check.
 - `sessions.purge.revoked_retention` (default null = unchanged): revoked rows follow their own retention in
   `nowo:user-kit:sessions:purge`; `UserSessionsPurgedEvent::$revokedBefore`.
-- User deletion: `UserSessionManager::forgetUser()` / `forgetOwner()` (revoke, delete the rows and the epoch,
-  `UserSessionsDeletedEvent`), and `sessions.user_removal.delete_sessions` (default off) to call it after a Doctrine
+- User deletion: `UserSessionManager::forgetUser()` / `forgetOwner()` (revoke, delete the rows, bump the epoch,
+  `UserSessionsRevokedEvent` + `UserSessionsDeletedEvent`), `forgetEpoch()` once the user is gone, and `sessions.user_removal.delete_sessions` (default off) to call it after a Doctrine
   removal of a profile user (`UserRemovalListener`).
 
-### Changed
+### Security
 
-- The `sessions` eraser also deletes the remember-me epoch of the user (no-op without the epoch).
+- Fixes of the REQ-SEC-004 delta audit (Appendix CQ) before the tag: F1 opt-in `invalidateRememberMe`, F2 the epoch of
+  a live user is never deleted, F3 next-second epoch with deferred re-issue, F4 cookies signed under a longer lifetime
+  are refused once an epoch exists, I1 no trailing newline in custom reasons, I2 epoch bumped before the rows, I3
+  `forgetOwner()` dispatches the revoked event, I4 `no-store` on the JSON 401.
 
 ## [1.9.1] - 2026-11-01
 

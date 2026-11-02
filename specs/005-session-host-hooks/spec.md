@@ -36,7 +36,12 @@ the kit (kit extraction, follow-up of KIT-41). Every addition is opt-in or keeps
   epoch to now, even when no row matched; a remember-me cookie issued before the epoch is refused (signature cookies:
   signed expiry − lifetime, after signature verification; persistent cookies: server-side `lastUsed`, read before the
   refresh). The session kept by the call gets a fresh cookie on the same response when its request carries the
-  firewall's cookie. Custom `remember_me.service` handlers are not wrapped. Store: bundle table or
+  firewall's cookie. The epoch is the next whole second (a cookie of the revocation's second is stale); the re-issue
+  waits for that second (same response or next request). A signature cookie whose derived issue time lies more than
+  60 s in the future is stale once an epoch exists. `revoke()` / `revokeDevice()` take `invalidateRememberMe` (bump,
+  re-issue for the caller's own current session). The epoch of an existing user is never deleted by `forgetUser()`,
+  `forgetOwner()` or the eraser, only after the user's Doctrine removal. Custom `remember_me.service` handlers are not
+  wrapped. Store: bundle table or
   `remember_me_epoch.store`. The M2 cookie stripping / clearing is unchanged.
 - **FR-003** Optional `customReason` (`^[a-z][a-z0-9_]{0,31}$`, not a built-in value, else `InvalidArgumentException`)
   and `context` on `revoke`, `revokeOthers`, `revokeAll`, `revokeDevice`: the reason is stored in `revoked_reason` and
@@ -47,7 +52,7 @@ the kit (kit extraction, follow-up of KIT-41). Every addition is opt-in or keeps
 - **FR-005** `sessions.purge.revoked_retention` (seconds, default null = unchanged): revoked rows are deleted once
   revoked for that long, live rows keep the idle rule. `UserSessionManager::forgetUser()` / `forgetOwner()` revoke,
   then delete every row and the epoch of a user (`UserSessionsDeletedEvent`); `sessions.user_removal.delete_sessions`
-  (default false) calls it after the Doctrine flush that removed a profile user. The eraser also deletes the epoch.
+  (default false) calls it after the Doctrine flush that removed a profile user (and then deletes the epoch).
 - **FR-006** BC: new constructor and method parameters are optional and appended; new keys default to the 1.9
   behaviour; the epoch table is mapped only when the epoch is enabled with the default store.
 
@@ -56,6 +61,8 @@ the kit (kit extraction, follow-up of KIT-41). Every addition is opt-in or keeps
 - **SC-001** A copied remember-me cookie signs back in by default and is refused after revokeAll with the epoch on
   (signature and persistent handlers), also when the user's rows were already gone (`SessionHostHooksTest`).
 - **SC-002** revokeOthers from the pages and a password change re-issue a working cookie for the kept session only.
+- **SC-007** Appendix CQ PoCs as regression tests: same-second cookie, lowered lifetime, `revoke(…, invalidateRememberMe)`,
+  `forgetUser()` on a live user, trailing-newline reason, `no-store` JSON 401.
 - **SC-003** Host reasons are stored, flashed (translated or generic), carried by the event; invalid ones are refused.
 - **SC-004** JSON 401 only when enabled and only for JSON / XHR requests.
 - **SC-005** Revoked-row retention shorter and longer than the idle rule; user removal deletes rows and epoch only after
