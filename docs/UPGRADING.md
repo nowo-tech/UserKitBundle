@@ -37,6 +37,11 @@
 
 ## Unreleased
 
+From **1.10.0** (security patch, no configuration or schema change):
+
+- `sessions.remember_me_epoch`: the deferred re-issue marker (`RememberMeEpoch::PENDING_ATTRIBUTE`) stays in the session until the cookie is re-issued; a remember-me cookie issued during the revocation's second is re-issued from the epoch second on. Nothing to change in the host.
+- After an incident, or when you shorten `remember_me.lifetime`, rotate the remember-me secret (`remember_me.secret`, default `kernel.secret`): see the F4 window in [SECURITY.md](SECURITY.md).
+
 ## To 1.10.0
 
 From **1.9.1**:

@@ -36,6 +36,7 @@ use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ServiceLocator;
+use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\Session;
@@ -44,6 +45,7 @@ use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Security\Core\Authentication\RememberMe\InMemoryTokenProvider;
 use Symfony\Component\Security\Core\Authentication\RememberMe\PersistentToken;
+use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
@@ -158,12 +160,23 @@ final class HostHooksTest extends TestCase
         $epoch->onResponse($event($request));
         self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
 
-        // Due, but the request carries no remember-me cookie: nothing to refresh.
+        // Due, but the request carries no remember-me cookie: kept until a request can re-issue it (CQ N1).
         $session->set(RememberMeEpoch::PENDING_ATTRIBUTE, ['u' => $owner->key(), 'e' => $at]);
         $request->cookies->remove('REMEMBERME');
         $epoch->onResponse($event($request));
-        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+        self::assertSame(['u' => $owner->key(), 'e' => $at], $session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
         $request->cookies->set('REMEMBERME', 'x');
+
+        // A request without the user's token (another firewall context) keeps it too (CQ N1).
+        $tokens->setToken(null);
+        $epoch->onResponse($event($request));
+        self::assertSame(['u' => $owner->key(), 'e' => $at], $session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+        $tokens->setToken(new UsernamePasswordToken($user, 'main'));
+
+        // A malformed marker is dropped.
+        $session->set(RememberMeEpoch::PENDING_ATTRIBUTE, ['u' => $owner->key()]);
+        $epoch->onResponse($event($request));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
 
         // A pending re-issue of another owner is dropped.
         $session->set(RememberMeEpoch::PENDING_ATTRIBUTE, ['u' => 'x#1', 'e' => $at]);
@@ -181,6 +194,45 @@ final class HostHooksTest extends TestCase
         $epoch->forget($owner);
         $epoch->keep($owner, $at, null);
         $epoch->reset();
+    }
+
+    /** CQ N2: a cookie issued while the user's epoch is still ahead is re-issued from the epoch second on. */
+    public function testCookieIssuedBeforeTheEpochIsDeferred(): void
+    {
+        $user   = new InMemoryUser('alice', null);
+        $owner  = new SessionUser(InMemoryUser::class, 'alice');
+        $tokens = new TokenStorage();
+        $tokens->setToken(new UsernamePasswordToken($user, 'main'));
+        $clock = new MockClock('2026-11-02 10:00:00');
+        $now   = $clock->now()->getTimestamp();
+        $store = $this->createStub(SessionEpochStoreInterface::class);
+        $store->method('epoch')->willReturn($now + 1);
+        $epoch = new RememberMeEpoch($store, new SessionUserResolver(), $clock, 's', $tokens);
+
+        [$request, $session] = $this->request();
+        $request->attributes->set(ResponseListener::COOKIE_ATTR_NAME, Cookie::create('REMEMBERME', 'v'));
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        self::assertSame(['u' => $owner->key(), 'e' => $now + 1], $session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // A cleared cookie, or one issued at or after the epoch: nothing.
+        $session->remove(RememberMeEpoch::PENDING_ATTRIBUTE);
+        $request->attributes->set(ResponseListener::COOKIE_ATTR_NAME, Cookie::create('REMEMBERME'));
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        $clock->sleep(1);
+        $request->attributes->set(ResponseListener::COOKIE_ATTR_NAME, Cookie::create('REMEMBERME', 'v'));
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // L-N2: a cookie re-issued by a remember-me auto-login is never deferred.
+        $clock->modify('-1 second');
+        $tokens->setToken(new RememberMeToken($user, 'main'));
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $request, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // No previous session: nothing to re-issue.
+        $fresh = Request::create('/');
+        $epoch->onResponse(new ResponseEvent(self::kernel(), $fresh, HttpKernelInterface::MAIN_REQUEST, new Response()));
+        self::assertFalse($fresh->hasSession());
     }
 
     /**
