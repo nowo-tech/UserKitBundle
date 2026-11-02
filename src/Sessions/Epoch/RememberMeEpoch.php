@@ -12,6 +12,7 @@ use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -21,16 +22,23 @@ use Symfony\Contracts\Service\ResetInterface;
 
 use function hash_equals;
 use function hash_hmac;
+use function in_array;
+use function is_array;
+use function is_int;
 use function is_string;
 
 /**
- * `sessions.remember_me_epoch`: revokeAll / revokeOthers move the user's epoch to "now", and every remember-me cookie
- * issued before it is refused by {@see EpochRememberMeHandler} (wrapped around the built-in handler of each firewall).
- * So a browser whose registry row is gone (purged, garbage-collected) cannot sign back in with an old cookie.
+ * `sessions.remember_me_epoch`: revokeAll / revokeOthers (and revoke / revokeDevice with `invalidateRememberMe`) move
+ * the user's epoch forward, and every remember-me cookie issued before it is refused by {@see EpochRememberMeHandler}
+ * (wrapped around the built-in handler of each firewall). So a copied cookie, or a browser whose registry row is gone
+ * (purged, garbage-collected), cannot sign back in.
  *
- * The session that was kept (revokeOthers, or revokeAll with `except`) gets a fresh remember-me cookie on the same
- * response (`kernel.response` priority {@see self::REISSUE_PRIORITY}, before Symfony's remember-me ResponseListener),
- * when its request carries the firewall's remember-me cookie; it stays signed in on its next visit.
+ * The epoch is the **next whole second** after the revocation (cookies carry whole seconds), so a cookie issued earlier
+ * in the same second is stale too. The kept session (revokeOthers / revokeAll `except`, or the caller's current
+ * session for revoke / revokeDevice) gets its fresh remember-me cookie on its first response at or after the epoch:
+ * the same response when that second has already passed, else its next request (a marker in that session). Only when
+ * its request carries the firewall's remember-me cookie (`kernel.response` priority {@see self::REISSUE_PRIORITY},
+ * before Symfony's remember-me ResponseListener).
  *
  * Remembers the kept sessions of the current request only (`kernel.reset`, worker mode).
  */
@@ -39,7 +47,10 @@ final class RememberMeEpoch implements ResetInterface
     /** Before Symfony's remember-me ResponseListener (0), which writes the cookie set by the handler. */
     public const REISSUE_PRIORITY = 16;
 
-    /** @var array<string, string> owner key => registry hash of the session kept by this request's revocation */
+    /** Session attribute of a re-issue deferred to the epoch second: `{u: owner key, e: epoch}`. */
+    public const PENDING_ATTRIBUTE = '_nowo_user_kit_remember_me_reissue';
+
+    /** @var array<string, array{hash: string|null, current: bool, excluded: list<string>, epoch: int}> owner key => session kept by this request's revocation */
     private array $kept = [];
 
     /**
@@ -60,13 +71,28 @@ final class RememberMeEpoch implements ResetInterface
     }
 
     /**
-     * Moves the epoch of the user to now; `$keep` is the registry hash of the session that stays signed in.
+     * Moves the epoch of the user to the next whole second.
+     *
+     * @return int the stored epoch (Unix timestamp)
      */
-    public function bump(SessionUser $owner, ?string $keep = null): void
+    public function bump(SessionUser $owner): int
     {
-        $this->store->bump($owner, DateTimeImmutable::createFromInterface($this->clock->now()));
-        if ($keep !== null) {
-            $this->kept[$owner->key()] = $keep;
+        $epoch = $this->now() + 1;
+        $this->store->bump($owner, new DateTimeImmutable('@' . $epoch));
+
+        return $epoch;
+    }
+
+    /**
+     * The session kept by a revocation of this request gets a fresh cookie: `$hash` (its registry hash), or, with
+     * `$current`, the current request's session unless it is one of `$excluded` (the revoked hashes).
+     *
+     * @param list<string> $excluded
+     */
+    public function keep(SessionUser $owner, int $epoch, ?string $hash, bool $current = false, array $excluded = []): void
+    {
+        if ($hash !== null || $current) {
+            $this->kept[$owner->key()] = ['hash' => $hash, 'current' => $current, 'excluded' => $excluded, 'epoch' => $epoch];
         }
     }
 
@@ -81,7 +107,23 @@ final class RememberMeEpoch implements ResetInterface
     }
 
     /**
-     * Deletes the epoch of the user (account deleted or erased).
+     * Whether the user has an epoch at all.
+     */
+    public function hasEpoch(SessionUser $owner): bool
+    {
+        return $this->store->epoch($owner) !== null;
+    }
+
+    /**
+     * Current Unix time of the clock.
+     */
+    public function now(): int
+    {
+        return $this->clock->now()->getTimestamp();
+    }
+
+    /**
+     * Deletes the epoch of the user (only once the user itself is gone: old cookies would work again otherwise).
      */
     public function forget(SessionUser $owner): void
     {
@@ -90,26 +132,40 @@ final class RememberMeEpoch implements ResetInterface
     }
 
     /**
-     * Re-issues the remember-me cookie of the session kept by a revocation of this request.
+     * Re-issues the remember-me cookie of the session kept by a revocation (of this request, or deferred to the epoch).
      */
     public function onResponse(ResponseEvent $event): void
     {
         $request = $event->getRequest();
-        if ($this->kept === [] || !$event->isMainRequest() || !$request->hasSession()
+        if (!$event->isMainRequest() || !$request->hasPreviousSession() || $request->attributes->getBoolean('_stateless')
             || $request->attributes->get(SessionRegistryListener::SIGNED_OUT_ATTRIBUTE) === true
             || $request->attributes->has(ResponseListener::COOKIE_ATTR_NAME)) {
             return;
         }
-        $firewall = $this->firewalls?->getFirewallConfig($request)?->getName();
-        $cookie   = is_string($firewall) ? ($this->cookies[$firewall] ?? null) : null;
-        $user     = $this->tokens?->getToken()?->getUser();
-        if (!is_string($firewall) || $cookie === null || !$request->cookies->has($cookie) || !$user instanceof UserInterface || $this->handlers?->has($firewall) !== true) {
+        $user    = $this->tokens?->getToken()?->getUser();
+        $owner   = $user instanceof UserInterface ? $this->owners->resolve($user) : null;
+        $session = $request->getSession();
+        $epoch   = $owner instanceof SessionUser ? $this->keptEpoch($request, $owner) : null;
+        if ($epoch === null) {
+            $pending = $session->get(self::PENDING_ATTRIBUTE);
+            if (!is_array($pending)) {
+                return;
+            }
+            $session->remove(self::PENDING_ATTRIBUTE);
+            if (!$owner instanceof SessionUser || ($pending['u'] ?? null) !== $owner->key() || !is_int($pending['e'] ?? null)) {
+                return;
+            }
+            $epoch = $pending['e'];
+        }
+        if ($this->now() < $epoch) {
+            // @igor-ignore - The request's own session (not an injected service): the marker belongs to this session.
+            $session->set(self::PENDING_ATTRIBUTE, ['u' => $owner->key(), 'e' => $epoch]);
+
             return;
         }
-        $owner = $this->owners->resolve($user);
-        $kept  = $owner instanceof SessionUser ? ($this->kept[$owner->key()] ?? null) : null;
-        if ($kept === null || $request->getSession()->get(UserSessionManager::ATTRIBUTE) === null
-            || !hash_equals($kept, hash_hmac('sha256', $request->getSession()->getId(), $this->secret))) {
+        $firewall = $this->firewalls?->getFirewallConfig($request)?->getName();
+        $cookie   = is_string($firewall) ? ($this->cookies[$firewall] ?? null) : null;
+        if (!is_string($firewall) || $cookie === null || !$request->cookies->has($cookie) || $this->handlers?->has($firewall) !== true) {
             return;
         }
         $handler = $this->handlers->get($firewall);
@@ -124,5 +180,21 @@ final class RememberMeEpoch implements ResetInterface
     public function reset(): void
     {
         $this->kept = [];
+    }
+
+    /**
+     * Epoch of a revocation of this request that kept the current session of `$owner`, else null.
+     */
+    private function keptEpoch(Request $request, SessionUser $owner): ?int
+    {
+        $kept = $this->kept[$owner->key()] ?? null;
+        if ($kept === null || $request->getSession()->get(UserSessionManager::ATTRIBUTE) === null) {
+            return null;
+        }
+        $current = hash_hmac('sha256', $request->getSession()->getId(), $this->secret);
+        $match   = ($kept['hash'] !== null && hash_equals($kept['hash'], $current))
+            || ($kept['current'] && !in_array($current, $kept['excluded'], true));
+
+        return $match ? $kept['epoch'] : null;
     }
 }

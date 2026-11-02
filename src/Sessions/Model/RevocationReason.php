@@ -20,7 +20,7 @@ enum RevocationReason: string
      * Shape of a host-defined reason (`customReason` of the revoke methods): stored in `revoked_reason` (32 chars)
      * instead of the built-in value; flash key `sessions.signed_out.<custom>` (falls back to `signed_out`).
      */
-    public const CUSTOM_PATTERN = '/^[a-z][a-z0-9_]{0,31}$/';
+    public const CUSTOM_PATTERN = '/^[a-z][a-z0-9_]{0,31}\z/';
 
     /** The owner signed this one session out (My sessions page). */
     case SignedOut = 'signed_out';

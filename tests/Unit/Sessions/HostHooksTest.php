@@ -54,6 +54,7 @@ use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
 use Symfony\Component\Security\Http\RememberMe\ResponseListener;
 
 use function hash_hmac;
+use function time;
 
 final class HostHooksTest extends TestCase
 {
@@ -75,6 +76,7 @@ final class HostHooksTest extends TestCase
         self::assertFalse(RevocationReason::isValidCustom('admin'));
         self::assertFalse(RevocationReason::isValidCustom('Link'));
         self::assertFalse(RevocationReason::isValidCustom(str_repeat('a', 33)));
+        self::assertFalse(RevocationReason::isValidCustom("link\n"), 'I1: no trailing newline.');
         $event = new UserSessionsRevokedEvent(new SessionUser('t', '1'), null, null, RevocationReason::Admin, []);
         self::assertSame('admin', $event->reasonCode());
         self::assertSame([], $event->context);
@@ -91,6 +93,16 @@ final class HostHooksTest extends TestCase
         self::assertSame($user, $handler->consumeRememberMeCookie(new RememberMeDetails('alice', 1100, 'sig')), 'Issued at the epoch.');
         $handler->createRememberMeCookie($user);
         $handler->clearRememberMeCookie();
+
+        // F4: an issue time in the future (signed under a longer lifetime) is unknown: stale when an epoch exists.
+        $future = new RememberMeDetails('alice', time() + 100 + 3600, 'sig');
+        $none   = $this->createStub(SessionEpochStoreInterface::class);
+        self::assertSame($user, (new EpochRememberMeHandler($inner, new RememberMeEpoch($none, $owner, new MockClock(), 's'), $owner, 100))->consumeRememberMeCookie($future));
+        try {
+            $handler->consumeRememberMeCookie($future);
+            self::fail('A cookie with an unknown issue time passed the epoch.');
+        } catch (AuthenticationException) {
+        }
 
         $this->expectException(AuthenticationException::class);
         $handler->consumeRememberMeCookie(new RememberMeDetails('alice', 1099, 'sig'));
@@ -111,43 +123,80 @@ final class HostHooksTest extends TestCase
         $handler->consumeRememberMeCookie(new RememberMeDetails('alice', 99999, 'series:value'));
     }
 
-    public function testReissueOnlyForTheKeptSessionWithARememberMeCookie(): void
+    public function testReissueOnlyForTheKeptSessionAtOrAfterTheEpoch(): void
     {
-        $user    = new InMemoryUser('alice', null);
-        $session = new Session(new MockArraySessionStorage());
-        $session->start();
-        $session->set(UserSessionManager::ATTRIBUTE, ['main' => []]);
+        $user   = new InMemoryUser('alice', null);
+        $owner  = new SessionUser(InMemoryUser::class, 'alice');
         $tokens = new TokenStorage();
         $tokens->setToken(new UsernamePasswordToken($user, 'main'));
         $inner = $this->createMock(RememberMeHandlerInterface::class);
-        $inner->expects(self::once())->method('createRememberMeCookie')->with($user);
+        $inner->expects(self::exactly(2))->method('createRememberMeCookie')->with($user);
         $store     = $this->createStub(SessionEpochStoreInterface::class);
+        $clock     = new MockClock('2026-11-02 10:00:00');
         $context   = new FirewallContext([], null, null, new FirewallConfig('main', 'user_checker'));
         $firewalls = new FirewallMap(new ServiceLocator(['ctx.main' => static fn (): FirewallContext => $context]), ['ctx.main' => null]);
-        $epoch     = new RememberMeEpoch($store, new SessionUserResolver(), new MockClock(), 's', $tokens, $firewalls, new ServiceLocator(['main' => static fn (): RememberMeHandlerInterface => $inner]), ['main' => 'REMEMBERME']);
+        $epoch     = new RememberMeEpoch($store, new SessionUserResolver(), $clock, 's', $tokens, $firewalls, new ServiceLocator(['main' => static fn (): RememberMeHandlerInterface => $inner]), ['main' => 'REMEMBERME']);
+        $event     = static fn (Request $r, int $type = HttpKernelInterface::MAIN_REQUEST): ResponseEvent => new ResponseEvent(self::kernel(), $r, $type, new Response());
 
-        $request = Request::create('/');
-        $request->setSession($session);
-        $request->cookies->set('REMEMBERME', 'x');
-        $event = static fn (Request $r, int $type = HttpKernelInterface::MAIN_REQUEST): ResponseEvent => new ResponseEvent(self::kernel(), $r, $type, new Response());
-
+        [$request, $session] = $this->request();
+        $hash                = hash_hmac('sha256', $session->getId(), 's');
         $epoch->onResponse($event($request));
-        $epoch->bump(new SessionUser(InMemoryUser::class, 'alice'), hash_hmac('sha256', $session->getId(), 's'));
+        $at = $epoch->bump($owner);
+        self::assertSame($clock->now()->getTimestamp() + 1, $at, 'The epoch is the next whole second.');
+        $epoch->keep($owner, $at, $hash);
         $epoch->onResponse($event($request, HttpKernelInterface::SUB_REQUEST));
         // Another session of the user (signed out by the revocation): nothing.
-        $other = new Session(new MockArraySessionStorage());
-        $other->start();
-        $other->set(UserSessionManager::ATTRIBUTE, ['main' => []]);
-        $otherRequest = Request::create('/');
-        $otherRequest->setSession($other);
-        $otherRequest->cookies->set('REMEMBERME', 'x');
-        $epoch->onResponse($event($otherRequest));
+        [$other] = $this->request();
+        $epoch->onResponse($event($other));
+        // Same second as the epoch: deferred to the session's next request.
+        $epoch->onResponse($event($request));
+        self::assertSame(['u' => $owner->key(), 'e' => $at], $session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+        $epoch->reset();
+        $epoch->onResponse($event($request));
+        self::assertNotNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE), 'Still too early.');
+        $clock->sleep(1);
+        $epoch->onResponse($event($request));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // Due, but the request carries no remember-me cookie: nothing to refresh.
+        $session->set(RememberMeEpoch::PENDING_ATTRIBUTE, ['u' => $owner->key(), 'e' => $at]);
+        $request->cookies->remove('REMEMBERME');
+        $epoch->onResponse($event($request));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+        $request->cookies->set('REMEMBERME', 'x');
+
+        // A pending re-issue of another owner is dropped.
+        $session->set(RememberMeEpoch::PENDING_ATTRIBUTE, ['u' => 'x#1', 'e' => $at]);
+        $epoch->onResponse($event($request));
+        self::assertNull($session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
+
+        // revoke(…, invalidateRememberMe): the current session, unless it was the revoked one.
+        $epoch->keep($owner, $at, null, true, [$hash]);
+        $epoch->onResponse($event($request));
+        $epoch->keep($owner, $at, null, true, []);
         $epoch->onResponse($event($request));
         // Already handled (the handler set the cookie attribute): not twice.
         $request->attributes->set(ResponseListener::COOKIE_ATTR_NAME, true);
         $epoch->onResponse($event($request));
-        $epoch->forget(new SessionUser(InMemoryUser::class, 'alice'));
+        $epoch->forget($owner);
+        $epoch->keep($owner, $at, null);
         $epoch->reset();
+    }
+
+    /**
+     * @return array{Request, Session}
+     */
+    private function request(): array
+    {
+        $session = new Session(new MockArraySessionStorage());
+        $session->start();
+        $session->set(UserSessionManager::ATTRIBUTE, ['main' => []]);
+        $request = Request::create('/');
+        $request->setSession($session);
+        $request->cookies->set($session->getName(), $session->getId());
+        $request->cookies->set('REMEMBERME', 'x');
+
+        return [$request, $session];
     }
 
     public function testEpochStoreRaceAndUnmappedEntity(): void

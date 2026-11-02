@@ -381,7 +381,10 @@ final readonly class SessionRegistryListener
 
     private function signedOutJson(): JsonResponse
     {
-        return new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);
+        $response = new JsonResponse(['error' => 'session_signed_out'], Response::HTTP_UNAUTHORIZED);
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
     }
 
     /**

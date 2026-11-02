@@ -26,8 +26,10 @@ use Symfony\Component\BrowserKit\Cookie;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Security\Core\Authentication\RememberMe\InMemoryTokenProvider;
 use Symfony\Component\Security\Core\Signature\SignatureHasher;
+use Symfony\Component\Security\Http\RememberMe\RememberMeDetails;
 use Symfony\Component\Security\Http\RememberMe\SignatureRememberMeHandler;
 
 use function json_decode;
@@ -95,7 +97,8 @@ final class SessionHostHooksTest extends SessionsKernelTestCase
         self::assertRedirectsTo($thief, '/login');
         self::assertNull($thief->getCookieJar()->get('REMEMBERME'), 'The refused cookie is cleared.');
 
-        // A new sign-in after the revocation gets a cookie that works.
+        // A new sign-in after the revocation (from the epoch second on) gets a cookie that works.
+        $this->tick();
         $again = $this->signIn('alice@example.com', remember: true);
         self::assertSame('alice@example.com', $this->visit($this->rememberMe($again)));
     }
@@ -113,6 +116,9 @@ final class SessionHostHooksTest extends SessionsKernelTestCase
         $crawler = $laptop->request('GET', '/account/sessions');
         $laptop->submit($crawler->filter('form[action="/account/sessions/revoke-others"]')->form());
         self::assertRedirectsTo($laptop, '/account/sessions');
+        // F3: the epoch is the next whole second; the kept session gets its cookie from then on.
+        $this->tick();
+        $laptop->request('GET', '/page');
         $fresh = $this->rememberMe($laptop);
         self::assertNotSame($before->getValue(), $fresh->getValue(), 'The kept session got a fresh cookie.');
 
@@ -134,8 +140,81 @@ final class SessionHostHooksTest extends SessionsKernelTestCase
         $laptop = $this->signIn('alice@example.com', remember: true);
         $this->tick();
         $laptop->request('GET', '/page/password');
+        $this->tick();
+        $laptop->request('GET', '/page');
         $fresh = $this->rememberMe($laptop);
         self::assertSame('alice@example.com', $this->visit($fresh));
+    }
+
+    /**
+     * CQ P2 / F3: a cookie issued earlier in the same second as the revocation is stale too.
+     */
+    public function testACookieOfTheRevocationSecondIsRefused(): void
+    {
+        $this->bootEpoch();
+        $alice = $this->member('alice@example.com');
+        $this->tick();
+        $copy = $this->rememberMe($this->signIn('alice@example.com', remember: true));
+        $this->manager()->revokeAll($alice);
+        self::assertSame('anonymous', $this->visit($copy));
+    }
+
+    /**
+     * CQ P3 / F4: after lowering remember_me.lifetime, a cookie signed under the longer one (its issue time is unknown)
+     * is refused once the user has an epoch.
+     */
+    public function testLoweredLifetimeDoesNotMakeOldCookiesImmune(): void
+    {
+        $this->bootEpoch(options: ['remember_me' => ['lifetime' => 3600]]);
+        $alice   = $this->member('alice@example.com');
+        $expires = time() - 86400 + 31536000;
+        $hasher  = new SignatureHasher(PropertyAccess::createPropertyAccessor(), ['password'], 'test-secret');
+        $old     = new Cookie('REMEMBERME', (new RememberMeDetails('alice@example.com', $expires, $hasher->computeSignatureHash($alice, $expires)))->toString());
+        self::assertSame('alice@example.com', $this->visit($old), 'No epoch yet: Symfony accepts it until its signed expiry.');
+        $this->tick();
+        $this->manager()->revokeAll($alice);
+        self::assertSame('anonymous', $this->visit($old));
+    }
+
+    /**
+     * CQ P5 / F1: revoke() of one (stolen) session leaves its remember-me cookie valid by default; with
+     * invalidateRememberMe the cookie-only replay is refused (and every older cookie of the user).
+     */
+    public function testRevokeOneSessionCanInvalidateRememberMe(): void
+    {
+        foreach ([false, true] as $invalidate) {
+            $this->bootEpoch();
+            $alice  = $this->member('alice@example.com');
+            $events = $this->recordRevocations();
+            $this->signIn('alice@example.com');
+            $thief = $this->signIn('alice@example.com', remember: true);
+            $copy  = $this->rememberMe($thief);
+            $this->em()->clear();
+            $row = $this->manager()->listFor($alice)[0] ?? self::fail();
+            $this->tick();
+            self::assertTrue($this->manager()->revoke($alice, $row->getPublicId(), invalidateRememberMe: $invalidate));
+            self::assertSame($invalidate, ($events[0] ?? self::fail())->rememberMeInvalidated);
+            $thief->request('GET', '/page');
+            self::assertRedirectsTo($thief, '/login');
+            self::assertSame($invalidate ? 'anonymous' : 'alice@example.com', $this->visit($copy), $invalidate ? 'invalidated' : 'default');
+            $this->tearDown();
+        }
+    }
+
+    /**
+     * CQ P1 / F2: forgetUser() on a user who still exists bumps the epoch instead of deleting it.
+     */
+    public function testForgetUserKeepsTheEpochOfALiveUser(): void
+    {
+        $this->bootEpoch();
+        $alice = $this->member('alice@example.com');
+        $copy  = $this->rememberMe($this->signIn('alice@example.com', remember: true));
+        $this->tick();
+        $this->manager()->revokeAll($alice);
+        self::assertSame('anonymous', $this->visit($copy));
+        self::assertSame(1, $this->manager()->forgetUser($alice));
+        self::assertSame(1, $this->epochRows());
+        self::assertSame('anonymous', $this->visit($copy));
     }
 
     public function testEpochWithPersistentTokens(): void
@@ -171,7 +250,7 @@ final class SessionHostHooksTest extends SessionsKernelTestCase
         self::assertTrue($this->manager()->invalidatesRememberMe());
     }
 
-    public function testErasureAndUserRemovalForgetTheEpoch(): void
+    public function testUserRemovalDeletesRowsAndEpoch(): void
     {
         $this->bootEpoch(['user_removal' => ['delete_sessions' => true]]);
         $alice = $this->member('alice@example.com');
@@ -298,6 +377,7 @@ final class SessionHostHooksTest extends SessionsKernelTestCase
         $xhr->request('GET', '/page', server: ['HTTP_ACCEPT' => 'application/json']);
         self::assertSame(401, $xhr->getResponse()->getStatusCode());
         self::assertSame(['error' => 'session_signed_out'], json_decode($this->body($xhr), true, 512, JSON_THROW_ON_ERROR));
+        self::assertTrue($xhr->getResponse()->headers->hasCacheControlDirective('no-store'));
         $html->request('GET', '/page');
         self::assertRedirectsTo($html, '/login');
         $this->tearDown();

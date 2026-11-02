@@ -55,6 +55,8 @@ final class UserRemovalListener implements ResetInterface
             }
             unset($this->pending[$key]);
             $this->sessions->forgetOwner($removal['owner']);
+            // The user is gone: its epoch can go too.
+            $this->sessions->forgetEpoch($removal['owner']);
         }
     }
 
