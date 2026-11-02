@@ -36,6 +36,25 @@
 
 ## Unreleased
 
+No breaking change: every new key is opt-in or keeps the 1.9 behaviour; new constructor parameters and method
+parameters are optional and appended last.
+
+- **Remember-me epoch** (`sessions.remember_me_epoch.enabled: true`): with the default store, create the new table
+  `user_kit_session_epoch` (`doctrine:migrations:diff` after enabling it; prefixed with `doctrine.table_prefix`). With
+  `remember_me_epoch.store`, implement `Sessions\Epoch\SessionEpochStoreInterface` instead (no table). After enabling,
+  existing remember-me cookies keep working until the next revokeAll / revokeOthers of their user.
+- **Trusted devices**: return `new SessionLimit($max, $policy, maxTrustedDevices: $n)` from your resolver (or set
+  `limit.max_trusted_devices`) and read it with `UserSessionManager::limitFor($user)`; enforce it where the trusted
+  devices live.
+- **Host-defined reasons**: pass `customReason: 'link'` (and `context: [...]`) to the revoke methods; add
+  `sessions.signed_out.link` to your `NowoUserKitBundle` translations for a specific flash.
+- **JSON clients**: set `sessions.early_check.json_response: true` to answer XHR / JSON requests of a signed-out session
+  with `401 {"error":"session_signed_out"}` before the firewall.
+- **Retention / deleted users**: `sessions.purge.revoked_retention` (seconds) and `sessions.user_removal.delete_sessions`
+  (or call `UserSessionManager::forgetUser($user)` before deleting a user yourself).
+- Listeners of `UserSessionsRevokedEvent` that store the reason should prefer `$event->reasonCode()` (the host reason
+  when one was given; `$event->reason` stays the built-in category).
+
 ## To 1.9.1
 
 From **1.9.0**:

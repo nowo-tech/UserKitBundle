@@ -26,6 +26,11 @@
   - [AuthKit hook points](#authkit-hook-points)
   - [Retention purge](#retention-purge)
   - [Personal data](#personal-data)
+  - [Remember-me epoch](#remember-me-epoch)
+  - [Host-defined revocation reasons](#host-defined-revocation-reasons)
+  - [Signed-out JSON clients](#signed-out-json-clients)
+  - [Deleting users](#deleting-users)
+  - [Host with its own session UI](#host-with-its-own-session-ui)
 - [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
   - [Override in the application](#override-in-the-application)
 - [AuthKit coexistence](#authkit-coexistence)
@@ -448,11 +453,14 @@ final class AccountSecurity
 | Method | Effect |
 | --- | --- |
 | `listFor($user)` | Live sessions (`Sessions\Entity\UserSession`), most recent first (≤ 200). |
-| `revoke($user, $publicId, $actor = null)` | One session (reason `signed_out`, or `admin` when `$actor` is someone else). |
-| `revokeOthers($user, $currentHash, $actor = null)` | Every session but `$currentHash` (reason `others`). |
-| `revokeAll($user, $actor = null, $reason = Everywhere, $except = null)` | Every session (reason `everywhere`, `admin` when `$actor` is someone else, or yours). |
-| `revokeDevice($user, $deviceId, $except = null)` | The sessions of one device (reason `device`). |
+| `revoke($user, $publicId, $actor = null, ?string $customReason = null, array $context = [])` | One session (reason `signed_out`, or `admin` when `$actor` is someone else). |
+| `revokeOthers($user, $currentHash, $actor = null, ?string $customReason = null, array $context = [])` | Every session but `$currentHash` (reason `others`); bumps the remember-me epoch when enabled. |
+| `revokeAll($user, $actor = null, $reason = Everywhere, $except = null, ?string $customReason = null, array $context = [])` | Every session (reason `everywhere`, `admin` when `$actor` is someone else, or yours); bumps the remember-me epoch when enabled. |
+| `revokeDevice($user, $deviceId, $except = null, $actor = null, ?string $customReason = null, array $context = [])` | The sessions of one device (reason `device`). |
 | `currentHash($requestOrSession)` | Registry hash of the current session (null before it is registered). |
+| `limitFor($user)` | `SessionLimit` from the configured resolver (`maxSessions`, `policy`, `maxTrustedDevices`, `extra`). |
+| `invalidatesRememberMe()` | Whether revokeAll / revokeOthers invalidate remember-me cookies (`remember_me_epoch.enabled`). |
+| `forgetUser($user)` / `forgetOwner(SessionUser $owner, $user = null)` | Revoke, then delete every row and the epoch of a user (user deletion). |
 
 `RegistrySessionInvalidator` implements the existing `SessionInvalidatorInterface`: with `sessions.enabled` it becomes
 the default invalidator (unless you aliased your own), so `account_status.invalidate_sessions_on_disable` really signs
@@ -467,7 +475,11 @@ Every mutation dispatches an event **after** the rows are written (the session i
 | `Sessions\Event\UserSessionStartedEvent` | A session was registered (`atLogin` true at sign-in). |
 | `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `user`, `actor` (null for automatic ones), `reason`, `publicIds`. Explicit user actions dispatch it even when nothing matched. |
 | `Sessions\Event\SessionLimitReachedEvent` | A sign-in hit the limit (`isRejected()`, `evicted` public ids). |
-| `Sessions\Event\UserSessionsPurgedEvent` | The retention purge ran (`before`, `deleted`). |
+| `Sessions\Event\UserSessionsPurgedEvent` | The retention purge ran (`before`, `deleted`, `revokedBefore`). |
+| `Sessions\Event\UserSessionsDeletedEvent` | Every row of a user was deleted (`forgetUser()` / user removal): `owner`, `user` (null after a Doctrine removal), `deleted`. |
+
+`UserSessionsRevokedEvent` also carries `customReason`, `context` (host data of the call; never stored or logged by
+the bundle) and `rememberMeInvalidated`; `reasonCode()` is the value stored on the rows.
 
 ```php
 #[AsEventListener]
@@ -508,6 +520,21 @@ final class PlanSessionLimits implements SessionLimitResolverInterface
 
 Two sign-ins at exactly the same time may both pass the check (no lock); the next sign-in applies the limit again.
 
+**Trusted devices.** UserKit keeps no trusted devices, so it does not enforce `maxTrustedDevices`: the value travels in
+`SessionLimit` so that one resolver serves both limits. Return it from your resolver (or set
+`limit.max_trusted_devices`) and check it where the host (or AuthKit) trusts a new device; `extra` carries any other
+host-defined value:
+
+```php
+return new SessionLimit(5, SessionLimitPolicy::EvictOldest, maxTrustedDevices: 3, extra: ['plan' => 'pro']);
+
+// where a device is about to be trusted:
+$limit = $this->sessions->limitFor($user);
+if ($limit->limitsTrustedDevices() && $this->devices->countTrusted($user) >= $limit->maxTrustedDevices) {
+    // refuse, or untrust the oldest device and call $this->sessions->revokeDevice($user, $oldestId)
+}
+```
+
 ### Device ids
 
 Implement `DeviceIdResolverInterface` (for example from a device-fingerprinting bundle) and set
@@ -543,10 +570,117 @@ Run the purge daily (cron or Symfony Scheduler); it deletes the rows not seen fo
 php bin/console nowo:user-kit:sessions:purge --batch-size=1000
 ```
 
+With `sessions.purge.revoked_retention` (seconds), revoked rows follow their own rule: deleted once revoked for that
+long, whatever their last activity — longer to keep a "recently signed out" audit view, or `0` to drop them on the next
+run. A purged revoked row still signs its browser out (database store: a missing row fails closed).
+
 ### Personal data
 
 With `personal_data.enabled`, the export gets a `sessions` section (browser, OS, stored IP form, device id, dates,
-revocation; never the hash) and the eraser `sessions` signs every session out and deletes the rows.
+revocation; never the hash) and the eraser `sessions` signs every session out and deletes the rows (and the
+remember-me epoch).
+
+### Remember-me epoch
+
+By default a copied or long-lived remember-me cookie signs back in after a revocation (it starts a **new**, visible
+session). With `sessions.remember_me_epoch.enabled: true`, `revokeAll()` and `revokeOthers()` (pages, password change,
+account disabled, your own calls) move the user's epoch to "now", and every remember-me cookie issued before it is
+refused — also for a browser whose registry row was already purged or garbage-collected:
+
+- the built-in remember-me handler of every firewall is wrapped by `Sessions\Epoch\EpochRememberMeHandler`. Signature
+  cookies: issue time = signed expiry − `remember_me.lifetime`. Persistent cookies (`token_provider`): the token's
+  server-side `lastUsed`. A refused cookie is an authentication failure, so Symfony clears it;
+- the kept session (`revokeOthers`, `revokeAll(..., except: $hash)`) gets a fresh remember-me cookie on the same
+  response when its request carries one, so that browser stays remembered;
+- `revoke()` (one session) and `revokeDevice()` do not move the epoch (they cannot tell the cookies apart);
+- custom `remember_me.service` handlers are not wrapped: add a changing property to `signature_properties` instead;
+- the epoch lives in `user_kit_session_epoch` (one row per user), or in your `SessionEpochStoreInterface` service
+  (`remember_me_epoch.store`) — e.g. a `sessionEpoch` column of your user, which you may also list in
+  `remember_me.signature_properties`.
+
+Changing `remember_me.lifetime` to a shorter value makes older signature cookies look newer; bump the epoch
+(`revokeAll()`) of the affected users if that matters.
+
+### Host-defined revocation reasons
+
+The built-in reasons (`RevocationReason`) cover the bundle's own sign-outs. Pass a host reason and free-form context to
+any revoke method; the reason is stored instead of the built-in one (32 characters, `^[a-z][a-z0-9_]{0,31}$`, not a
+built-in value) and the signed-out browser gets `sessions.signed_out.<reason>` when you translate it (else the generic
+message):
+
+```php
+$this->sessions->revokeAll($user, $actor, RevocationReason::AccountChanged, customReason: 'link', context: ['provider' => 'github']);
+```
+
+```yaml
+# translations/NowoUserKitBundle.en.yaml
+sessions:
+    signed_out:
+        link: 'You were signed out because your account was linked to another one.'
+```
+
+`UserSessionsRevokedEvent::$reason` stays the built-in category (`account_changed` above); `customReason`, `context` and
+`reasonCode()` carry the rest. Keep secrets out of `context`: listeners may log it.
+
+### Signed-out JSON clients
+
+By default the early check signs a revoked session out and lets the request go on as a guest, so the firewall answers
+(login redirect, or your entry point). With `sessions.early_check.json_response: true`, XHR requests and requests that
+prefer JSON (`Accept: application/json`, `_format: json`) get `401 {"error":"session_signed_out"}` right away; HTML
+requests are unchanged.
+
+### Deleting users
+
+The registry table has no foreign key to your user tables. When you delete a user, either call
+`UserSessionManager::forgetUser($user)` before the removal (revokes the live sessions, deletes every row and the
+epoch, dispatches `UserSessionsDeletedEvent`), or enable `sessions.user_removal.delete_sessions`: a Doctrine
+`preRemove` entity listener on each profile user class remembers the owner and the rows go after the flush that really
+removed the user (a cleared unit of work or an entity persisted again cancels it). Without either, the rows are purged
+after `idle_lifetime` + `touch_interval` and their sessions are signed out (the user cannot be refreshed).
+
+### Host with its own session UI
+
+Hosts that render their own "Devices / sessions" screens keep `web_ui.enabled: false` (no route, no template) and use
+the PHP API:
+
+```php
+final class DevicesController
+{
+    public function __construct(private readonly UserSessionManager $sessions) {}
+
+    public function list(Request $request, #[CurrentUser] User $user): Response
+    {
+        $current = $this->sessions->currentHash($request);
+        $rows    = array_map(static fn (UserSession $s): array => [
+            'id'        => $s->getPublicId(),               // opaque, safe in URLs and forms
+            'browser'   => $s->getBrowser(),
+            'os'        => $s->getOs(),
+            'ip'        => $s->hasDisplayableIp() ? $s->getIp() : null,
+            'last_seen' => $s->getLastSeenAt(),
+            'current'   => $current !== null && hash_equals($s->getSessionHash(), $current),
+        ], $this->sessions->listFor($user));
+        // never pass the session hash (or the entity) to the template
+        // ...render $rows
+    }
+
+    public function signOut(Request $request, #[CurrentUser] User $user, string $id): Response
+    {
+        // your CSRF check (one token id per action and row), then:
+        $this->sessions->revoke($user, $id);                   // false → 404
+    }
+
+    public function signOutOthers(Request $request, #[CurrentUser] User $user): Response
+    {
+        // your CSRF check, then (also refreshes this browser's remember-me cookie with the epoch):
+        $this->sessions->revokeOthers($user, $this->sessions->currentHash($request), customReason: 'link');
+    }
+}
+```
+
+Checklist for such hosts: scope every action to the signed-in user (the manager already filters by owner), one CSRF
+token per action and row, `Cache-Control: no-store` on the pages, never expose `getSessionHash()`, enforce
+`limitFor($user)->maxTrustedDevices` where devices are trusted, listen to `UserSessionsRevokedEvent` for the audit log,
+and enable `remember_me_epoch` so "sign out everywhere" also voids remember-me cookies.
 
 ## Translation overrides (REQ-I18N-001)
 

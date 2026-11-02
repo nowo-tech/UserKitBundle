@@ -69,4 +69,5 @@ import.
 ## Out of scope
 
 - Geolocation of sessions, risk-based step-up, passkeys management, API / Bearer tokens (stateless firewalls are
-  ignored), voiding remember-me cookies copied to another device (host `signature_properties`).
+  ignored), voiding remember-me cookies copied to another device (host `signature_properties`; opt-in remember-me epoch
+  since 1.10, spec [`005-session-host-hooks`](../005-session-host-hooks/spec.md)).

@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-11-01  
+**Last audited**: 2026-11-02  
 **Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
@@ -141,6 +141,13 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `Sessions/Command/PurgeSessionsCommand.php` | Retention purge of rows not seen for `idle_lifetime` + `touch_interval` | FR-SES-003 | Mapped |
 | `Sessions/PersonalData/SessionsExportProvider.php` | GDPR export section `sessions` (hash never exported) | FR-SES-010 | Mapped |
 | `Sessions/PersonalData/SessionsEraser.php` | GDPR eraser: signs every session out and deletes the rows | FR-SES-010 | Mapped |
+| `Sessions/Epoch/SessionEpochStoreInterface.php` | Remember-me epoch store contract (spec [005](../005-session-host-hooks/spec.md)) | 005 FR-002 | Mapped |
+| `Sessions/Epoch/DoctrineSessionEpochStore.php` | Default epoch store (DBAL, `user_kit_session_epoch`) | 005 FR-002 | Mapped |
+| `Sessions/Epoch/Entity/UserSessionEpoch.php` | Epoch row mapping (only with the default store) | 005 FR-002 | Mapped |
+| `Sessions/Epoch/RememberMeEpoch.php` | Bumps the epoch, re-issues the kept session's remember-me cookie | 005 FR-002 | Mapped |
+| `Sessions/Epoch/EpochRememberMeHandler.php` | Wraps the built-in remember-me handlers; refuses cookies older than the epoch | 005 FR-002 | Mapped |
+| `Sessions/Event/UserSessionsDeletedEvent.php` | Audit: every row of a user deleted | 005 FR-005 | Mapped |
+| `Sessions/EventListener/UserRemovalListener.php` | `user_removal.delete_sessions`: rows of removed profile users | 005 FR-005 | Mapped |
 | `Resources/views/sessions/index.html.twig` | "My sessions" (UiKit list scaffold, row cells only) | FR-SES-005 | Mapped |
 | `Resources/views/sessions/admin.html.twig` | Administration of one user's sessions (UiKit list scaffold) | FR-SES-005 | Mapped |
 | `Resources/views/sessions/_cells.html.twig` | Shared row cells (device, network, signed in, last active) | FR-SES-005 | Mapped |
@@ -168,11 +175,15 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | PHP — Twig | 1 | 1 |
 | PHP — UI preferences & product tour (002) | 18 | 18 |
 | PHP — personal data / GDPR (003) | 15 | 15 |
-| Sessions — session registry and limits (004) | 44 | 44 |
+| Sessions — session registry and limits (004, 005) | 51 | 51 |
 | Translations | 7 | 7 |
-| **Total production sources** | **105** | **105** |
+| **Total production sources** | **112** | **112** |
 
-Audit command (production count): `git ls-files src | wc -l` → **105** (2026-11-01). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+Audit command (production count): `git ls-files src | wc -l` → **112** (2026-11-02). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+
+## Inventory refresh (2026-11-02)
+
+- 1.10.0 session host hooks (spec `005-session-host-hooks`): 7 new files (`Sessions/Epoch/**`, `UserSessionsDeletedEvent`, `UserRemovalListener`) mapped under the Sessions category; changed files keep their rows.
 
 ## Inventory refresh (2026-11-01)
 
