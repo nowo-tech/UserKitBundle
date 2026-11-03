@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.0] - 2026-11-03](#1110---2026-11-03)
 - [[1.10.1] - 2026-11-02](#1101---2026-11-02)
 - [[1.10.0] - 2026-11-02](#1100---2026-11-02)
 - [[1.9.1] - 2026-11-01](#191---2026-11-01)
@@ -41,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-03
+
+Parked sessions API and pending sign-ins for MFA
+
 ### Added
 
 - Sessions API for sessions that are not the request's own (spec 006, for AuthKitBundle 1.34 multi-account sign-in):
@@ -63,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UserSessionManager::listFor()` (and the session pages) no longer trigger doctrine/orm 3.7's deprecation of string
   sort directions: `SortDirection::Descending` is used where it exists (PHP 8.6 / symfony/polyfill-php86), `'DESC'`
   otherwise.
+
+[1.11.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.11.0
 
 ## [1.10.1] - 2026-11-02
 
