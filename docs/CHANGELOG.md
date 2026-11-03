@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.1] - 2026-11-03](#1111---2026-11-03)
 - [[1.11.0] - 2026-11-03](#1110---2026-11-03)
 - [[1.10.1] - 2026-11-02](#1101---2026-11-02)
 - [[1.10.0] - 2026-11-02](#1100---2026-11-02)
@@ -42,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-11-03
+
+Revoked sessions stay revoked after purge
+
 ### Fixed
 
 - `UserSessionManager::sessionState()` / `sessionStates()` consult the revocation store as the early check does
@@ -49,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   purge) is `revoked` (`signed_out`) instead of `unknown`, so a caller can never treat it as resumable; with the cache
   store a revocation marker that outlives its row still answers `revoked`. `unknown` remains for an empty id, a user
   that cannot be registered, or (cache store) a missing row without a marker.
+
+[1.11.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.11.1
 
 ## [1.11.0] - 2026-11-03
 

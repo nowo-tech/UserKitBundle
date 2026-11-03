@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.11.1](#to-1111)
 - [To 1.11.0](#to-1110)
 - [To 1.10.1](#to-1101)
 - [To 1.10.0](#to-1100)
@@ -19,7 +20,7 @@
 - [To 1.2.0](#to-120)
 - [To 1.1.13](#to-1113)
 - [To 1.1.12](#to-1112)
-- [To 1.1.11](#to-1111)
+- [To 1.1.11](#to-1111-1)
 - [From 1.1.9 to 1.1.10](#from-119-to-1110)
 - [From 1.1.8 to 1.1.9](#from-118-to-119)
 - [1.1.8](#118)
@@ -38,6 +39,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.11.1
+
+From **1.11.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.11.0**: `sessionState()` / `sessionStates()` answer `revoked` (reason `signed_out`) for a session without a
 registry row with the database revocation store (it was `unknown`). Callers that treated `unknown` as "can come back"
