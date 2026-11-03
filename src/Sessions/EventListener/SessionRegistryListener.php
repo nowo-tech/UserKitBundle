@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Sessions\EventListener;
 
 use Nowo\UserKitBundle\NowoUserKitBundle;
+use Nowo\UserKitBundle\Security\PendingAuthentication;
+use Nowo\UserKitBundle\Security\PendingAuthenticationTokenInterface;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Event\SessionLimitReachedEvent;
@@ -38,7 +40,9 @@ use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function in_array;
+use function is_array;
 use function is_object;
+use function is_string;
 use function ltrim;
 use function str_contains;
 
@@ -66,7 +70,9 @@ use const PHP_INT_MIN;
  *   exceed the concurrent-session limit ({@see SessionLimitReachedException}).
  * - `LoginSuccessEvent` priority -256 (after the session id migration and the remember-me cookie): the previous row
  *   of this firewall context goes, `evict_oldest` revokes the least recently active sessions over the limit, the new
- *   session is registered.
+ *   session is registered. A pending sign-in (second factor still to come,
+ *   {@see PendingAuthenticationTokenInterface}) is only flagged: it is registered as
+ *   a sign-in (limit included) on the first request after its token became final, and nothing is touched meanwhile.
  * - `LogoutEvent` priority 64 (before the session is invalidated): the row of this firewall context goes.
  *
  * Stateless firewalls are ignored. Holds no state between requests (worker mode).
@@ -75,6 +81,13 @@ final readonly class SessionRegistryListener
 {
     /** Request attribute set when this request signed its session out (the response clears the cookies). */
     public const SIGNED_OUT_ATTRIBUTE = '_nowo_user_kit_session_signed_out';
+
+    /**
+     * Session attribute: firewall contexts whose sign-in is pending
+     * ({@see PendingAuthenticationTokenInterface}), to be
+     * registered as a sign-in once the token is final.
+     */
+    public const PENDING_ATTRIBUTE = '_nowo_user_kit_session_pending';
 
     /** Marker key of requests outside any firewall context. */
     public const DEFAULT_CONTEXT = 'main';
@@ -153,12 +166,22 @@ final readonly class SessionRegistryListener
             return;
         }
         $session = $request->getSession();
-        $user    = $this->currentUser();
-        $owner   = $user !== null ? $this->sessions->owner($user) : null;
+        if (PendingAuthentication::isPending($this->tokens->getToken())) {
+            // The sign-in is not complete (second factor): nothing is registered or touched yet.
+            return;
+        }
+        $user  = $this->currentUser();
+        $owner = $user !== null ? $this->sessions->owner($user) : null;
         if ($user === null || !$owner instanceof SessionUser) {
             return;
         }
         $context = $this->context($request);
+        if ($this->takePending($session, $context)) {
+            // The pending sign-in of this context became final: register it as a sign-in (limit included).
+            $this->signIn($request, $session, $context, $user, $owner);
+
+            return;
+        }
         $markers = $this->sessions->markers($session);
         $marker  = $markers[$context] ?? null;
         if ($marker === null || $marker['u'] !== $owner->key()) {
@@ -228,11 +251,29 @@ final readonly class SessionRegistryListener
         $session = $request->getSession();
         $context = $this->context($request);
         $this->forget($session, $context);
+        if (PendingAuthentication::isPending($event->getAuthenticatedToken())) {
+            // Registered (limit included) on the first request after the token became final.
+            $pending           = $this->pendingContexts($session);
+            $pending[$context] = true;
+            // @igor-ignore - The request's own session (not an injected service): the flag belongs to this session.
+            $session->set(self::PENDING_ATTRIBUTE, $pending);
+
+            return;
+        }
+        $this->takePending($session, $context);
         $user  = $event->getUser();
         $owner = $this->sessions->owner($user);
         if (!$owner instanceof SessionUser) {
             return;
         }
+        $this->signIn($request, $session, $context, $user, $owner);
+    }
+
+    /**
+     * A sign-in: `evict_oldest` signs the oldest sessions out first, then the session is registered.
+     */
+    private function signIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner): void
+    {
         $limit = $this->limits->resolve($user);
         if ($limit->policy === SessionLimitPolicy::EvictOldest && $limit->maxSessions !== null) {
             $since  = $this->sessions->aliveSince();
@@ -245,6 +286,38 @@ final readonly class SessionRegistryListener
         }
         // forget() read the session, so it is started and its id is the migrated one.
         $this->register($request, $session, $context, $user, $owner, true);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function pendingContexts(SessionInterface $session): array
+    {
+        $pending = $session->get(self::PENDING_ATTRIBUTE);
+        $flags   = [];
+        foreach (is_array($pending) ? $pending : [] as $context => $flag) {
+            if (is_string($context) && $flag === true) {
+                $flags[$context] = true;
+            }
+        }
+
+        return $flags;
+    }
+
+    /**
+     * Removes the pending flag of a context; true when it was set.
+     */
+    private function takePending(SessionInterface $session, string $context): bool
+    {
+        $pending = $this->pendingContexts($session);
+        if (!isset($pending[$context])) {
+            return false;
+        }
+        unset($pending[$context]);
+        // @igor-ignore - The request's own session (not an injected service): the flag belongs to this session.
+        $pending === [] ? $session->remove(self::PENDING_ATTRIBUTE) : $session->set(self::PENDING_ATTRIBUTE, $pending);
+
+        return true;
     }
 
     /**

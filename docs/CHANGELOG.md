@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rekey()` (moves the rows of a session's markers to its new id after a `migrate()`); value objects
   `Sessions\Model\SessionState` / `SessionStatus`; `UserSessionStore::statesOf()`. No behaviour change, no schema
   change.
+- Pending sign-ins (spec 006, for AuthKitBundle 1.34 MFA): a token implementing
+  `Security\PendingAuthenticationTokenInterface`, or carrying its attribute `nowo.authentication_pending` set to
+  `true` (`Security\PendingAuthentication::isPending()`), is not registered at `LoginSuccessEvent` and nothing is
+  touched while it lasts; the session is registered as a sign-in (concurrent-session limit included,
+  `UserSessionStartedEvent::$atLogin` true) on the first request after the token became final.
 
 ## [1.10.1] - 2026-11-02
 

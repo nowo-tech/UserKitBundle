@@ -22,6 +22,7 @@ the request's own. Additive API only (BC).
 | `UserSessionManager::endSession()` | Sign a non-current session out like a logout (owner's row deleted, no event) |
 | `UserSessionManager::rekey()` | Move the rows of a session's markers to its new id after a `migrate()` outside a sign-in |
 | `Sessions\Doctrine\UserSessionStore::statesOf()` | One bound query for an owner's rows of several hashes |
+| `Security\PendingAuthenticationTokenInterface`, `Security\PendingAuthentication` | Pending sign-ins (AuthKit MFA) are registered once their token is final |
 
 ---
 
@@ -37,6 +38,11 @@ the request's own. Additive API only (BC).
 - **FR-003** `rekey($session, $previousId)` moves, for every marker of the session whose hash is the previous id's,
   the owner's row to the hash of the current id and updates the marker; other markers, malformed owner keys and an
   unchanged id are left alone.
+- **FR-006** Pending sign-ins: `Security\PendingAuthenticationTokenInterface` (or the token attribute
+  `nowo.authentication_pending` = `true`, `PendingAuthentication::isPending()`): `LoginSuccessEvent` of such a token
+  only flags the firewall context in the session (`_nowo_user_kit_session_pending`); requests while it is pending
+  register and touch nothing; the first request with a final token registers the session as a sign-in (limit
+  included, `atLogin` true); a final sign-in in the same session clears the flag (no double registration).
 - **FR-004** Session ids and hashes never leave the server through the new API (value objects carry neither).
 - **FR-005** BC: additions only; no configuration, schema, event or behaviour change.
 
@@ -45,6 +51,8 @@ the request's own. Additive API only (BC).
 - **SC-001** `ParkedSessionsTest`: live / revoked (reason) / expired at the exact boundary / unknown (other owner,
   unresolvable user, empty id); batched states in input order; `endSession()` signs that browser out and keeps the
   user's other session; `rekey()` moves only the matching markers.
+- **SC-003** `PendingSignInTest`: nothing registered while pending (interface and attribute), registered once
+  final, `evict_oldest` applied at completion, a final sign-in clears the flag, other contexts' flags kept.
 - **SC-002** 100 % line coverage, PHPStan, Rector, Igor, CS green; existing suites unchanged.
 
 ## Out of scope

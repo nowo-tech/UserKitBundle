@@ -565,6 +565,13 @@ the same browser), its idle expiry, limits and revocations. The API it uses, als
 | `endSession($sessionId, $user)` | Signs a session out like a logout: the owner's row is deleted, no event. The caller destroys the session data |
 | `rekey($session, $previousId)` | After `$session->migrate()` outside a sign-in, moves the rows of the session's markers to the new id at once |
 
+**Pending sign-ins (second factor).** A sign-in whose token is not final yet (AuthKit MFA: the code is still to be
+entered) is not registered at `LoginSuccessEvent`. Mark such a token by implementing
+`Nowo\UserKitBundle\Security\PendingAuthenticationTokenInterface`, or, from a package that cannot depend on UserKit,
+by setting its attribute `nowo.authentication_pending` to `true`. Nothing is registered or touched while it lasts; the
+first request after the token became final registers the session as a sign-in (`evict_oldest` applies there,
+`UserSessionStartedEvent::$atLogin` is true). `reject_new` still runs at the first factor (after the credentials).
+
 Revoking a parked session (one row, *sign out everywhere*, password change, disable) makes it `revoked`: the switcher
 drops that account only. A session id is a secret: never log it or store it in clear (AuthKit seals it).
 

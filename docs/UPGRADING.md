@@ -42,6 +42,11 @@ From **1.10.1**: no action. The new `UserSessionManager` methods (`sessionState(
 `endSession()`, `rekey()`) are additions; nothing changes for existing hosts, no schema change. AuthKitBundle 1.34
 multi-account sign-in requires them.
 
+Pending sign-ins (second factor): tokens implementing `Nowo\UserKitBundle\Security\PendingAuthenticationTokenInterface`
+(or with the token attribute `nowo.authentication_pending` = `true`) are registered once final instead of at
+`LoginSuccessEvent`. No other token is affected. A custom pending token must not extend Symfony's `AbstractToken`
+with an empty role list (the firewall would treat it as a changed user); implement `TokenInterface` directly.
+
 ## To 1.10.1
 
 From **1.10.0**:
