@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
+use Doctrine\Deprecations\Deprecation;
 use Nowo\UserKitBundle\Sessions\Model\SessionState;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
@@ -143,6 +144,17 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
         $this->manager()->rekey($session, 'same-id');
         $this->manager()->rekey($session, 'other-id');
         self::assertFalse($session->has(UserSessionManager::ATTRIBUTE));
+    }
+
+    public function testListingSessionsTriggersNoDoctrineDeprecation(): void
+    {
+        $this->boot();
+        $alice = $this->member('alice@example.com');
+        $this->signIn('alice@example.com');
+        Deprecation::enableTrackingDeprecations();
+        $before = Deprecation::getTriggeredDeprecations();
+        self::assertCount(1, $this->manager()->listFor($alice));
+        self::assertSame($before, Deprecation::getTriggeredDeprecations(), 'doctrine/orm 3.7 deprecates string sort directions (SortDirection).');
     }
 
     private function sid(KernelBrowser $browser): string

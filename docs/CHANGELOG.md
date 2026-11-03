@@ -53,7 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Security\PendingAuthenticationTokenInterface`, or carrying its attribute `nowo.authentication_pending` set to
   `true` (`Security\PendingAuthentication::isPending()`), is not registered at `LoginSuccessEvent` and nothing is
   touched while it lasts; the session is registered as a sign-in (concurrent-session limit included,
-  `UserSessionStartedEvent::$atLogin` true) on the first request after the token became final.
+  `UserSessionStartedEvent::$atLogin` true) on the first request after the token became final. `reject_new` is
+  checked again at that point (parallel pending sign-ins cannot exceed the limit; the over-limit browser is signed
+  out with the limit message and `SessionLimitReachedEvent`), the attribute counts only on a role-less token, and a
+  sign-in never counts or evicts its own session (audit DC-M1, DC-L1, DC-I1).
+
+### Fixed
+
+- `UserSessionManager::listFor()` (and the session pages) no longer trigger doctrine/orm 3.7's deprecation of string
+  sort directions: `SortDirection::Descending` is used where it exists (PHP 8.6 / symfony/polyfill-php86), `'DESC'`
+  otherwise.
 
 ## [1.10.1] - 2026-11-02
 

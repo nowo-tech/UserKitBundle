@@ -17,10 +17,13 @@ use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use SortDirection;
 
 use function array_map;
 use function bin2hex;
+use function constant;
 use function count;
+use function enum_exists;
 use function random_bytes;
 
 /**
@@ -137,6 +140,17 @@ final readonly class UserSessionStore
     }
 
     /**
+     * Descending order for the ORM query builder: `SortDirection::Descending` where it exists (PHP 8.6 or
+     * symfony/polyfill-php86, required by doctrine/orm 3.7, which deprecates string directions), else `'DESC'`.
+     *
+     * @return 'DESC'|SortDirection
+     */
+    private function descending(): mixed
+    {
+        return enum_exists('SortDirection') ? constant('SortDirection::Descending') : 'DESC';
+    }
+
+    /**
      * The session id changed (migrated): the owner's row follows it.
      */
     public function rekey(string $from, string $to, SessionUser $owner): void
@@ -184,8 +198,8 @@ final readonly class UserSessionStore
             ->setParameter('type', $user->type)
             ->setParameter('id', $user->id)
             ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
-            ->orderBy('s.lastSeenAt', 'DESC')
-            ->addOrderBy('s.id', 'DESC')
+            ->orderBy('s.lastSeenAt', $this->descending())
+            ->addOrderBy('s.id', $this->descending())
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();

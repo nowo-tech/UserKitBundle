@@ -42,7 +42,10 @@ the request's own. Additive API only (BC).
   `nowo.authentication_pending` = `true`, `PendingAuthentication::isPending()`): `LoginSuccessEvent` of such a token
   only flags the firewall context in the session (`_nowo_user_kit_session_pending`); requests while it is pending
   register and touch nothing; the first request with a final token registers the session as a sign-in (limit
-  included, `atLogin` true); a final sign-in in the same session clears the flag (no double registration).
+  included, `atLogin` true); a final sign-in in the same session clears the flag (no double registration). Audit DC:
+  `reject_new` re-checked at completion (the over-limit browser is signed out with the limit message and
+  `SessionLimitReachedEvent`, DC-M1); the attribute counts only on a role-less token (DC-L1); a sign-in never counts or
+  evicts its own session (DC-I1).
 - **FR-004** Session ids and hashes never leave the server through the new API (value objects carry neither).
 - **FR-005** BC: additions only; no configuration, schema, event or behaviour change.
 

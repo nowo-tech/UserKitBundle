@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures;
 
-use Nowo\UserKitBundle\Security\PendingAuthenticationTokenInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Http\Event\AuthenticationTokenCreatedEvent;
 
 /**
@@ -29,18 +27,15 @@ final readonly class PendingFlow
         if ($mode === 'interface') {
             $event->setAuthenticatedToken(new PendingToken($event->getAuthenticatedToken()));
         } elseif ($mode === 'attribute') {
-            $event->getAuthenticatedToken()->setAttribute(PendingAuthenticationTokenInterface::ATTRIBUTE, true);
+            $event->setAuthenticatedToken(new AttributePendingToken($event->getAuthenticatedToken()));
         }
     }
 
     public function complete(): Response
     {
         $token = $this->tokens->getToken();
-        if ($token instanceof PendingToken) {
+        if ($token instanceof WrappingToken) {
             $this->tokens->setToken($token->inner());
-        } elseif ($token instanceof TokenInterface) {
-            $token->setAttribute(PendingAuthenticationTokenInterface::ATTRIBUTE, false);
-            $this->tokens->setToken($token);
         }
 
         return new Response('completed');

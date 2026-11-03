@@ -10,6 +10,7 @@ use Nowo\UserKitBundle\Sessions\Event\SessionLimitReachedEvent;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionStartedEvent;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\AttributePendingToken;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\PendingFlow;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -95,6 +96,33 @@ final class PendingSignInTest extends SessionsKernelTestCase
         self::assertTrue($laptop->getResponse()->isSuccessful());
     }
 
+    public function testRejectNewHoldsAgainstParallelPendingSignIns(): void
+    {
+        $this->bootPending(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice    = $this->member('alice@example.com');
+        $browsers = [];
+        for ($i = 0; $i < 3; ++$i) {
+            $browsers[] = $this->pendingSignIn('alice@example.com', 'interface');
+        }
+        self::assertSame([], $this->rowsOf($alice), 'Pending sign-ins pass the first-factor check (nothing registered yet).');
+
+        foreach ($browsers as $i => $browser) {
+            $browser->request('GET', '/complete');
+            $browser->request('GET', '/page');
+            if ($i === 0) {
+                self::assertTrue($browser->getResponse()->isSuccessful());
+
+                continue;
+            }
+            self::assertTrue($browser->getResponse()->isRedirect(), 'DC-M1: over the limit at completion: signed out.');
+            $browser->request('GET', '/page');
+            self::assertTrue($browser->getResponse()->isRedirect(), 'Still signed out (sent to the sign-in page).');
+        }
+        self::assertCount(1, $this->rowsOf($alice), 'Exactly one live session (max_sessions: 1).');
+        $rejected = array_values(array_filter($this->events, static fn (object $e): bool => $e instanceof SessionLimitReachedEvent && $e->isRejected()));
+        self::assertCount(2, $rejected);
+    }
+
     public function testPendingFlagsOfOtherContextsAreKept(): void
     {
         $this->bootPending();
@@ -115,14 +143,15 @@ final class PendingSignInTest extends SessionsKernelTestCase
     public function testPendingDetection(): void
     {
         $user  = new InMemoryUser('a', null);
-        $token = new UsernamePasswordToken($user, 'main');
+        $token = new UsernamePasswordToken($user, 'main', ['ROLE_USER']);
         self::assertFalse(PendingAuthentication::isPending(null));
         self::assertFalse(PendingAuthentication::isPending(new NullToken()));
         self::assertFalse(PendingAuthentication::isPending($token));
         $token->setAttribute(PendingAuthenticationTokenInterface::ATTRIBUTE, 'yes');
         self::assertFalse(PendingAuthentication::isPending($token));
         $token->setAttribute(PendingAuthenticationTokenInterface::ATTRIBUTE, true);
-        self::assertTrue(PendingAuthentication::isPending($token));
+        self::assertFalse(PendingAuthentication::isPending($token), 'DC-L1: a token with roles is never pending.');
+        self::assertTrue(PendingAuthentication::isPending(new AttributePendingToken(new UsernamePasswordToken($user, 'main'))));
     }
 
     /**

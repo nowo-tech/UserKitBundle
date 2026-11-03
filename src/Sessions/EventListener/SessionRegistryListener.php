@@ -177,7 +177,15 @@ final readonly class SessionRegistryListener
         }
         $context = $this->context($request);
         if ($this->takePending($session, $context)) {
-            // The pending sign-in of this context became final: register it as a sign-in (limit included).
+            // The pending sign-in of this context became final: register it as a sign-in (limit included). Parallel
+            // pending sign-ins registered nothing at the first factor, so `reject_new` is checked again here (DC-M1).
+            $rejection = $this->rejection($user, $owner, null);
+            if ($rejection !== null) {
+                $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
+                $event->setResponse($this->afterSignOut($request));
+
+                return;
+            }
             $this->signIn($request, $session, $context, $user, $owner);
 
             return;
@@ -223,20 +231,32 @@ final readonly class SessionRegistryListener
         if (!$request instanceof Request || !$this->stateful($request)) {
             return;
         }
-        $user  = $event->getPassport()->getUser();
-        $limit = $this->limits->resolve($user);
-        $owner = $this->sessions->owner($user);
-        if ($limit->policy !== SessionLimitPolicy::RejectNew || $limit->maxSessions === null || !$owner instanceof SessionUser) {
-            return;
+        $user      = $event->getPassport()->getUser();
+        $owner     = $this->sessions->owner($user);
+        $rejection = $owner instanceof SessionUser ? $this->rejection($user, $owner, $this->sessions->currentHash($request)) : null;
+        if ($rejection !== null) {
+            throw new SessionLimitReachedException($rejection);
         }
-        $active = $this->store->countActive($owner, $this->sessions->aliveSince(), $this->sessions->currentHash($request));
+    }
+
+    /**
+     * `reject_new`: the message refusing one more session (the {@see SessionLimitReachedEvent} is dispatched), or
+     * null when the user is under the limit. `$except`: the session being signed in again (not counted).
+     */
+    private function rejection(object $user, SessionUser $owner, ?string $except): ?string
+    {
+        $limit = $this->limits->resolve($user);
+        if ($limit->policy !== SessionLimitPolicy::RejectNew || $limit->maxSessions === null) {
+            return null;
+        }
+        $active = $this->store->countActive($owner, $this->sessions->aliveSince(), $except);
         if ($active < $limit->maxSessions) {
-            return;
+            return null;
         }
         $reached = new SessionLimitReachedEvent($user, $owner, $limit, $active);
         $this->dispatcher?->dispatch($reached);
 
-        throw new SessionLimitReachedException($reached->getMessage() ?? $this->trans('sessions.limit.rejected', ['%count%' => $active]));
+        return $reached->getMessage() ?? $this->trans('sessions.limit.rejected', ['%count%' => $active]);
     }
 
     /**
@@ -276,11 +296,13 @@ final readonly class SessionRegistryListener
     {
         $limit = $this->limits->resolve($user);
         if ($limit->policy === SessionLimitPolicy::EvictOldest && $limit->maxSessions !== null) {
-            $since  = $this->sessions->aliveSince();
-            $active = $this->store->countActive($owner, $since);
-            $over   = $active - $limit->maxSessions + 1;
+            // This session is never counted nor evicted (a second registration of it must not evict another, DC-I1).
+            $current = $this->sessions->hash($session->getId());
+            $since   = $this->sessions->aliveSince();
+            $active  = $this->store->countActive($owner, $since, $current);
+            $over    = $active - $limit->maxSessions + 1;
             if ($over > 0) {
-                $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, null, $over), RevocationReason::Evicted);
+                $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
                 $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
             }
         }
@@ -415,7 +437,7 @@ final readonly class SessionRegistryListener
      * Ends the session: token dropped, session invalidated, remember-me cookies out of the request (and cleared on the
      * response), flash.
      */
-    private function signOut(Request $request, SessionInterface $session, string $reason): void
+    private function signOut(Request $request, SessionInterface $session, string $reason, ?string $message = null): void
     {
         $this->tokens->setToken(null);
         $session->invalidate();
@@ -427,7 +449,7 @@ final readonly class SessionRegistryListener
         }
         $request->attributes->set(self::SIGNED_OUT_ATTRIBUTE, true);
         if ($this->flash && $session instanceof FlashBagAwareSessionInterface) {
-            $session->getFlashBag()->add('warning', $this->signedOutMessage($reason));
+            $session->getFlashBag()->add('warning', $message ?? $this->signedOutMessage($reason));
         }
     }
 
