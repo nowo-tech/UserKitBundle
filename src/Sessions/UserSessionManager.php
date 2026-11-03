@@ -14,6 +14,8 @@ use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
+use Nowo\UserKitBundle\Sessions\Model\SessionState;
+use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Psr\Clock\ClockInterface;
@@ -297,6 +299,97 @@ final readonly class UserSessionManager
     public function forgetEpoch(SessionUser $owner): void
     {
         $this->epoch?->forget($owner);
+    }
+
+    /**
+     * State of a session of `$user` that is not the request's own (e.g. an account parked by AuthKit's account
+     * switcher): live, revoked (with its reason), expired (idle longer than `idle_lifetime` + `touch_interval`, as the
+     * early check of its next request would decide) or unknown (no row: never registered, signed out, purged).
+     */
+    public function sessionState(string $sessionId, object $user): SessionState
+    {
+        return $this->sessionStates([[$sessionId, $user]])[0];
+    }
+
+    /**
+     * {@see self::sessionState()} for several sessions: one query per owner. Keys follow the input.
+     *
+     * @param list<array{0: string, 1: object}> $sessions `[session id, user]` pairs
+     *
+     * @return list<SessionState>
+     */
+    public function sessionStates(array $sessions): array
+    {
+        $owners = [];
+        $hashes = [];
+        foreach ($sessions as [$sessionId, $user]) {
+            $owner = $this->owner($user);
+            if ($owner instanceof SessionUser && $sessionId !== '') {
+                $owners[$owner->key()]   = $owner;
+                $hashes[$owner->key()][] = $this->hash($sessionId);
+            }
+        }
+        $rows = [];
+        foreach ($owners as $key => $owner) {
+            $rows[$key] = $this->store->statesOf($owner, $hashes[$key]);
+        }
+        $now    = $this->now()->getTimestamp();
+        $states = [];
+        foreach ($sessions as [$sessionId, $user]) {
+            $owner = $this->owner($user);
+            $row   = $owner instanceof SessionUser && $sessionId !== '' ? ($rows[$owner->key()][$this->hash($sessionId)] ?? null) : null;
+            if ($row === null) {
+                $states[] = SessionState::unknown();
+            } elseif ($row['revoked']) {
+                $states[] = new SessionState(SessionStatus::Revoked, $row['reason'], $row['last_seen_at']);
+            } elseif ($now - $row['last_seen_at']->getTimestamp() >= $this->idleLifetime + $this->touchInterval) {
+                $states[] = new SessionState(SessionStatus::Expired, null, $row['last_seen_at']);
+            } else {
+                $states[] = new SessionState(SessionStatus::Live, null, $row['last_seen_at']);
+            }
+        }
+
+        return $states;
+    }
+
+    /**
+     * Signs out a session of `$user` that is not the request's own, like a logout does for the current one: the
+     * owner's row is deleted (no event, as on logout). The caller destroys the session data itself.
+     */
+    public function endSession(string $sessionId, object $user): void
+    {
+        $owner = $this->owner($user);
+        if ($owner instanceof SessionUser && $sessionId !== '') {
+            $this->store->deleteRow($this->hash($sessionId), $owner);
+        }
+    }
+
+    /**
+     * The session's id changed outside a sign-in (e.g. `migrate()` after AuthKit switched to a parked account): the
+     * rows of its markers follow the new id at once, instead of on the next registered request.
+     */
+    public function rekey(SessionInterface $session, string $previousId): void
+    {
+        $from = $this->hash($previousId);
+        $to   = $this->hash($session->getId());
+        if ($from === $to) {
+            return;
+        }
+        $markers = $this->markers($session);
+        $changed = false;
+        foreach ($markers as $context => $marker) {
+            $owner = SessionUser::fromKey($marker['u']);
+            if ($marker['h'] !== $from || !$owner instanceof SessionUser) {
+                continue;
+            }
+            $this->store->rekey($from, $to, $owner);
+            $markers[$context]['h'] = $to;
+            $changed                = true;
+        }
+        if ($changed) {
+            // @igor-ignore - The caller's session (not an injected service): the markers belong to this session.
+            $session->set(self::ATTRIBUTE, $markers);
+        }
     }
 
     /**

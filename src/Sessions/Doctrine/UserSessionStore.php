@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -16,10 +17,13 @@ use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use SortDirection;
 
 use function array_map;
 use function bin2hex;
+use function constant;
 use function count;
+use function enum_exists;
 use function random_bytes;
 
 /**
@@ -102,6 +106,51 @@ final readonly class UserSessionStore
     }
 
     /**
+     * State of the owner's rows of several sessions in one query (sessions that are not the request's own, e.g. the
+     * parked sessions of AuthKit's account switcher). Hashes without a row are left out.
+     *
+     * @param list<string> $hashes
+     *
+     * @return array<string, array{revoked: bool, reason: string|null, last_seen_at: DateTimeImmutable}> by hash
+     */
+    public function statesOf(SessionUser $owner, array $hashes): array
+    {
+        if ($hashes === []) {
+            return [];
+        }
+        $rows = $this->connection()->executeQuery(
+            'SELECT session_hash, revoked_at, revoked_reason, last_seen_at FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id AND session_hash IN (:hashes)',
+            ['type' => $owner->type, 'id' => $owner->id, 'hashes' => $hashes],
+            ['hashes' => ArrayParameterType::STRING],
+        )->fetchAllAssociative();
+        $platform = $this->connection()->getDatabasePlatform();
+        $states   = [];
+        foreach ($rows as $row) {
+            $revoked = $row['revoked_at'] !== null;
+            /** @var DateTimeImmutable $lastSeen not-null column */
+            $lastSeen                              = Type::getType(Types::DATETIME_IMMUTABLE)->convertToPHPValue($row['last_seen_at'], $platform);
+            $states[(string) $row['session_hash']] = [
+                'revoked'      => $revoked,
+                'reason'       => $revoked ? (string) ($row['revoked_reason'] ?? RevocationReason::SignedOut->value) : null,
+                'last_seen_at' => $lastSeen,
+            ];
+        }
+
+        return $states;
+    }
+
+    /**
+     * Descending order for the ORM query builder: `SortDirection::Descending` where it exists (PHP 8.6 or
+     * symfony/polyfill-php86, required by doctrine/orm 3.7, which deprecates string directions), else `'DESC'`.
+     *
+     * @return 'DESC'|SortDirection
+     */
+    private function descending(): mixed
+    {
+        return enum_exists('SortDirection') ? constant('SortDirection::Descending') : 'DESC';
+    }
+
+    /**
      * The session id changed (migrated): the owner's row follows it.
      */
     public function rekey(string $from, string $to, SessionUser $owner): void
@@ -149,8 +198,8 @@ final readonly class UserSessionStore
             ->setParameter('type', $user->type)
             ->setParameter('id', $user->id)
             ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
-            ->orderBy('s.lastSeenAt', 'DESC')
-            ->addOrderBy('s.id', 'DESC')
+            ->orderBy('s.lastSeenAt', $this->descending())
+            ->addOrderBy('s.id', $this->descending())
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();

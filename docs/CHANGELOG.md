@@ -41,6 +41,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sessions API for sessions that are not the request's own (spec 006, for AuthKitBundle 1.34 multi-account sign-in):
+  `UserSessionManager::sessionState()` / `sessionStates()` (live, revoked with its reason, expired, unknown — one
+  query per owner), `endSession()` (signs a parked session out like a logout: the owner's row is deleted) and
+  `rekey()` (moves the rows of a session's markers to its new id after a `migrate()`); value objects
+  `Sessions\Model\SessionState` / `SessionStatus`; `UserSessionStore::statesOf()`. No behaviour change, no schema
+  change.
+- Pending sign-ins (spec 006, for AuthKitBundle 1.34 MFA): a token implementing
+  `Security\PendingAuthenticationTokenInterface`, or carrying its attribute `nowo.authentication_pending` set to
+  `true` (`Security\PendingAuthentication::isPending()`), is not registered at `LoginSuccessEvent` and nothing is
+  touched while it lasts; the session is registered as a sign-in (concurrent-session limit included,
+  `UserSessionStartedEvent::$atLogin` true) on the first request after the token became final. `reject_new` is
+  checked again at that point (parallel pending sign-ins cannot exceed the limit; the over-limit browser is signed
+  out with the limit message and `SessionLimitReachedEvent`), the attribute counts only on a role-less token, and a
+  sign-in never counts or evicts its own session (audit DC-M1, DC-L1, DC-I1).
+
+### Fixed
+
+- `UserSessionManager::listFor()` (and the session pages) no longer trigger doctrine/orm 3.7's deprecation of string
+  sort directions: `SortDirection::Descending` is used where it exists (PHP 8.6 / symfony/polyfill-php86), `'DESC'`
+  otherwise.
+
 ## [1.10.1] - 2026-11-02
 
 remember-me epoch re-issue hardening (CQ N1, N2, F4 docs)
