@@ -18,6 +18,9 @@ enum SessionStatus: string
     /** Idle longer than `idle_lifetime` + `touch_interval`: signed out on its next request. */
     case Expired = 'expired';
 
-    /** No row for that owner (never registered, signed out, purged or deleted). */
+    /**
+     * Nothing known: an empty id or a user that cannot be registered, or (cache revocation store) no row and no marker.
+     * With the database store a missing row is {@see self::Revoked} (1.11.1).
+     */
     case Unknown = 'unknown';
 }
