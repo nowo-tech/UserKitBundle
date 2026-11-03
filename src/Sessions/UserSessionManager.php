@@ -304,7 +304,9 @@ final readonly class UserSessionManager
     /**
      * State of a session of `$user` that is not the request's own (e.g. an account parked by AuthKit's account
      * switcher): live, revoked (with its reason), expired (idle longer than `idle_lifetime` + `touch_interval`, as the
-     * early check of its next request would decide) or unknown (no row: never registered, signed out, purged).
+     * early check of its next request would decide) or unknown. Since 1.11.1 the revocation store is consulted too: with the
+     * database store a session without a row is `revoked` (`signed_out`); `unknown` remains for an invalid id or user, and
+     * for a missing row without a marker with the cache store.
      */
     public function sessionState(string $sessionId, object $user): SessionState
     {
@@ -337,11 +339,23 @@ final readonly class UserSessionManager
         $states = [];
         foreach ($sessions as [$sessionId, $user]) {
             $owner = $this->owner($user);
-            $row   = $owner instanceof SessionUser && $sessionId !== '' ? ($rows[$owner->key()][$this->hash($sessionId)] ?? null) : null;
-            if ($row === null) {
+            if (!$owner instanceof SessionUser || $sessionId === '') {
                 $states[] = SessionState::unknown();
-            } elseif ($row['revoked']) {
+
+                continue;
+            }
+            $hash = $this->hash($sessionId);
+            $row  = $rows[$owner->key()][$hash] ?? null;
+            // 1.11.1 (audit DE-M1): the revocation store decides too, as the early check of that session's next request
+            // would: with the database store a missing row is revoked (fail closed, e.g. a revoked row the retention
+            // purge already deleted), with the cache store a marker outlives its row.
+            $marked = $row === null || !$row['revoked'] ? $this->revocations->reason($hash, $owner) : null;
+            if ($row !== null && $row['revoked']) {
                 $states[] = new SessionState(SessionStatus::Revoked, $row['reason'], $row['last_seen_at']);
+            } elseif ($marked !== null) {
+                $states[] = new SessionState(SessionStatus::Revoked, $marked, $row['last_seen_at'] ?? null);
+            } elseif ($row === null) {
+                $states[] = SessionState::unknown();
             } elseif ($now - $row['last_seen_at']->getTimestamp() >= $this->idleLifetime + $this->touchInterval) {
                 $states[] = new SessionState(SessionStatus::Expired, null, $row['last_seen_at']);
             } else {

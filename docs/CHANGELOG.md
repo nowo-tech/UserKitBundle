@@ -42,6 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `UserSessionManager::sessionState()` / `sessionStates()` consult the revocation store as the early check does
+  (audit DE-M1): with the database store a session whose row is gone (e.g. revoked, then deleted by the retention
+  purge) is `revoked` (`signed_out`) instead of `unknown`, so a caller can never treat it as resumable; with the cache
+  store a revocation marker that outlives its row still answers `revoked`. `unknown` remains for an empty id, a user
+  that cannot be registered, or (cache store) a missing row without a marker.
+
 ## [1.11.0] - 2026-11-03
 
 Parked sessions API and pending sign-ins for MFA

@@ -9,8 +9,10 @@ use Nowo\UserKitBundle\Sessions\Model\SessionState;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
+use Nowo\UserKitBundle\Tests\Support\SharedMemoryPool;
 use stdClass;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
@@ -65,8 +67,8 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
         $bob   = $this->member('bob@example.com');
         $sid   = $this->sid($this->signIn('alice@example.com'));
 
-        self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState('not-a-session', $alice)->status);
-        self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState($sid, $bob)->status, 'Another owner never sees the row.');
+        self::assertSame(SessionStatus::Revoked, $this->manager()->sessionState('not-a-session', $alice)->status, 'Database store: no row = revoked (fail closed).');
+        self::assertSame(SessionStatus::Revoked, $this->manager()->sessionState($sid, $bob)->status, 'Another owner never sees the row.');
         self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState($sid, new stdClass())->status);
         self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState('', $alice)->status);
     }
@@ -83,7 +85,7 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
 
         $states = $this->manager()->sessionStates([[$b1, $bob], [$a1, $alice], ['gone', $alice], [$a2, $alice], [$a1, new stdClass()]]);
         self::assertSame(
-            [SessionStatus::Revoked, SessionStatus::Live, SessionStatus::Unknown, SessionStatus::Live, SessionStatus::Unknown],
+            [SessionStatus::Revoked, SessionStatus::Live, SessionStatus::Revoked, SessionStatus::Live, SessionStatus::Unknown],
             array_map(static fn (SessionState $state): SessionStatus => $state->status, $states),
         );
         self::assertSame([], $this->manager()->sessionStates([]));
@@ -101,7 +103,7 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
         $this->manager()->endSession($sid, $alice);
         $this->manager()->endSession($sid, new stdClass());
         $this->manager()->endSession('', $alice);
-        self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState($sid, $alice)->status);
+        self::assertSame(SessionStatus::Revoked, $this->manager()->sessionState($sid, $alice)->status);
         self::assertCount(1, $this->rowsOf($alice), 'Only the ended session goes.');
 
         $phone->request('GET', '/page');
@@ -127,7 +129,7 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
         ]);
 
         $this->manager()->rekey($session, $old);
-        self::assertSame(SessionStatus::Unknown, $this->manager()->sessionState($old, $alice)->status);
+        self::assertSame(SessionStatus::Revoked, $this->manager()->sessionState($old, $alice)->status);
         self::assertTrue($this->manager()->sessionState('migrated-session-id', $alice)->isLive());
         $markers = $this->manager()->markers($session);
         self::assertSame($this->manager()->hash('migrated-session-id'), $markers['main']['h']);
@@ -144,6 +146,32 @@ final class ParkedSessionsTest extends SessionsKernelTestCase
         $this->manager()->rekey($session, 'same-id');
         $this->manager()->rekey($session, 'other-id');
         self::assertFalse($session->has(UserSessionManager::ATTRIBUTE));
+    }
+
+    public function testARevokedAndPurgedSessionStaysRevoked(): void
+    {
+        $this->boot();
+        $alice = $this->member('alice@example.com');
+        $sid   = $this->sid($this->signIn('alice@example.com'));
+        $this->manager()->revokeAll($alice);
+        $this->em()->getConnection()->executeStatement('DELETE FROM user_kit_session');
+        $state = $this->manager()->sessionState($sid, $alice);
+        self::assertSame(SessionStatus::Revoked, $state->status, 'DE-M1: never "unknown" (revivable) after the retention purge.');
+        self::assertSame('signed_out', $state->reason);
+    }
+
+    public function testTheCacheStoreMarkerOutlivesTheRow(): void
+    {
+        $this->boot(['revocation' => ['store' => 'cache', 'cache_pool' => 'test.revocations']], services: static function (ContainerConfigurator $c): void {
+            $c->services()->set('test.revocations', SharedMemoryPool::class)->public();
+        });
+        $alice = $this->member('alice@example.com');
+        $sid   = $this->sid($this->signIn('alice@example.com'));
+        $other = $this->sid($this->signIn('alice@example.com'));
+        $this->manager()->revoke($alice, $this->rowsOf($alice)[1]->getPublicId());
+        $this->em()->getConnection()->executeStatement('DELETE FROM user_kit_session');
+        $states = $this->manager()->sessionStates([[$sid, $alice], [$other, $alice]]);
+        self::assertSame([SessionStatus::Revoked, SessionStatus::Unknown], [$states[0]->status, $states[1]->status], 'The revoked one is still revoked; the other has no row and no marker.');
     }
 
     public function testListingSessionsTriggersNoDoctrineDeprecation(): void

@@ -560,7 +560,7 @@ the same browser), its idle expiry, limits and revocations. The API it uses, als
 
 | Method | Effect |
 | --- | --- |
-| `sessionState($sessionId, $user)` | `SessionState` (`status`: `live`, `revoked` + `reason`, `expired`, `unknown`; `lastSeenAt`). `expired` follows the early check (idle longer than `idle_lifetime` + `touch_interval`). Never exposes the hash |
+| `sessionState($sessionId, $user)` | `SessionState` (`status`: `live`, `revoked` + `reason`, `expired`, `unknown`; `lastSeenAt`). Same verdict as the early check of that session's next request: idle longer than `idle_lifetime` + `touch_interval` is `expired`; the revocation store is consulted (1.11.1), so with the database store a session without a row is `revoked`. `unknown`: empty id, unregistrable user, or no row and no marker (cache store). Never exposes the hash |
 | `sessionStates([[$sessionId, $user], …])` | The same for several sessions (one query per owner), in input order |
 | `endSession($sessionId, $user)` | Signs a session out like a logout: the owner's row is deleted, no event. The caller destroys the session data |
 | `rekey($session, $previousId)` | After `$session->migrate()` outside a sign-in, moves the rows of the session's markers to the new id at once |

@@ -32,6 +32,8 @@ the request's own. Additive API only (BC).
   that owner (another owner never sees the row); `revoked` with the stored reason (built-in or host-defined) for a
   revoked row; `expired` when `now − last_seen_at ≥ idle_lifetime + touch_interval` (the early check's rule); else
   `live`. `sessionStates()` answers in input order with one query per owner.
+- **FR-001b** (1.11.1, audit DE-M1) The revocation store is consulted like the early check: database store, missing
+  row → `revoked` (`signed_out`); cache store, a marker without a row → `revoked`.
 - **FR-002** `endSession($sessionId, $user)` deletes only that owner's row of that session (no-op for an empty id or
   an unresolvable user) and dispatches no event (as a logout); the browser holding that session is signed out on its
   next request (database store: missing row fails closed).

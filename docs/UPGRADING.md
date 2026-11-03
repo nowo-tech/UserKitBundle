@@ -39,6 +39,10 @@
 
 ## Unreleased
 
+From **1.11.0**: `sessionState()` / `sessionStates()` answer `revoked` (reason `signed_out`) for a session without a
+registry row with the database revocation store (it was `unknown`). Callers that treated `unknown` as "can come back"
+(AuthKit 1.34 multi-account before its audit fixes) must treat only `expired` that way.
+
 ## To 1.11.0
 
 From **1.10.1**:
