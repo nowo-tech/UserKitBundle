@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sessions API for sessions that are not the request's own (spec 006, for AuthKitBundle 1.34 multi-account sign-in):
+  `UserSessionManager::sessionState()` / `sessionStates()` (live, revoked with its reason, expired, unknown — one
+  query per owner), `endSession()` (signs a parked session out like a logout: the owner's row is deleted) and
+  `rekey()` (moves the rows of a session's markers to its new id after a `migrate()`); value objects
+  `Sessions\Model\SessionState` / `SessionStatus`; `UserSessionStore::statesOf()`. No behaviour change, no schema
+  change.
+
 ## [1.10.1] - 2026-11-02
 
 remember-me epoch re-issue hardening (CQ N1, N2, F4 docs)

@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -99,6 +100,40 @@ final readonly class UserSessionStore
         $revoked = $row['revoked_at'] !== null;
 
         return ['revoked' => $revoked, 'reason' => $revoked ? (string) ($row['revoked_reason'] ?? RevocationReason::SignedOut->value) : null];
+    }
+
+    /**
+     * State of the owner's rows of several sessions in one query (sessions that are not the request's own, e.g. the
+     * parked sessions of AuthKit's account switcher). Hashes without a row are left out.
+     *
+     * @param list<string> $hashes
+     *
+     * @return array<string, array{revoked: bool, reason: string|null, last_seen_at: DateTimeImmutable}> by hash
+     */
+    public function statesOf(SessionUser $owner, array $hashes): array
+    {
+        if ($hashes === []) {
+            return [];
+        }
+        $rows = $this->connection()->executeQuery(
+            'SELECT session_hash, revoked_at, revoked_reason, last_seen_at FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id AND session_hash IN (:hashes)',
+            ['type' => $owner->type, 'id' => $owner->id, 'hashes' => $hashes],
+            ['hashes' => ArrayParameterType::STRING],
+        )->fetchAllAssociative();
+        $platform = $this->connection()->getDatabasePlatform();
+        $states   = [];
+        foreach ($rows as $row) {
+            $revoked = $row['revoked_at'] !== null;
+            /** @var DateTimeImmutable $lastSeen not-null column */
+            $lastSeen                              = Type::getType(Types::DATETIME_IMMUTABLE)->convertToPHPValue($row['last_seen_at'], $platform);
+            $states[(string) $row['session_hash']] = [
+                'revoked'      => $revoked,
+                'reason'       => $revoked ? (string) ($row['revoked_reason'] ?? RevocationReason::SignedOut->value) : null,
+                'last_seen_at' => $lastSeen,
+            ];
+        }
+
+        return $states;
     }
 
     /**

@@ -38,6 +38,10 @@
 
 ## Unreleased
 
+From **1.10.1**: no action. The new `UserSessionManager` methods (`sessionState()`, `sessionStates()`,
+`endSession()`, `rekey()`) are additions; nothing changes for existing hosts, no schema change. AuthKitBundle 1.34
+multi-account sign-in requires them.
+
 ## To 1.10.1
 
 From **1.10.0**:

@@ -23,6 +23,7 @@
   - [Concurrent-session limit](#concurrent-session-limit)
   - [Device ids](#device-ids)
   - [Automatic sign-outs](#automatic-sign-outs)
+  - [Sessions that are not the request's own (1.11)](#sessions-that-are-not-the-requests-own-111)
   - [AuthKit hook points](#authkit-hook-points)
   - [Retention purge](#retention-purge)
   - [Personal data](#personal-data)
@@ -550,6 +551,22 @@ trust is revoked). A device id is never a credential.
 - **Account disabled**: with `account_status.invalidate_sessions_on_disable: true`, every session (reason
   `account_disabled`).
 - **Anything else** (roles removed, membership suspended…): call `revokeAll($user, null, RevocationReason::AccountChanged)`.
+
+### Sessions that are not the request's own (1.11)
+
+AuthKitBundle's account switcher (1.34, `multi_account`) keeps one session per signed-in account in a browser and
+parks the inactive ones. Each parked session keeps its own registry row (*My sessions* lists it as another session of
+the same browser), its idle expiry, limits and revocations. The API it uses, also available to hosts:
+
+| Method | Effect |
+| --- | --- |
+| `sessionState($sessionId, $user)` | `SessionState` (`status`: `live`, `revoked` + `reason`, `expired`, `unknown`; `lastSeenAt`). `expired` follows the early check (idle longer than `idle_lifetime` + `touch_interval`). Never exposes the hash |
+| `sessionStates([[$sessionId, $user], …])` | The same for several sessions (one query per owner), in input order |
+| `endSession($sessionId, $user)` | Signs a session out like a logout: the owner's row is deleted, no event. The caller destroys the session data |
+| `rekey($session, $previousId)` | After `$session->migrate()` outside a sign-in, moves the rows of the session's markers to the new id at once |
+
+Revoking a parked session (one row, *sign out everywhere*, password change, disable) makes it `revoked`: the switcher
+drops that account only. A session id is a secret: never log it or store it in clear (AuthKit seals it).
 
 ### AuthKit hook points
 
