@@ -40,6 +40,10 @@
 
 ## Unreleased
 
+No breaking change. An eraser that looks data up by the user identifier should read `$request->identifier()` instead
+of `$request->user->getUserIdentifier()`: the latter is already anonymised when a higher-priority identity eraser ran.
+Code that builds `ErasureRequest` itself keeps working (the new argument is optional).
+
 ## To 1.11.1
 
 From **1.11.0**:

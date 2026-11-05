@@ -361,7 +361,7 @@ try {
 
 `erase()` runs every guard first (any veto throws `ErasureVetoedException` with all vetoes, before anything changes), then every supporting eraser in priority order inside **one** Doctrine transaction (`wrapInTransaction()` on the entity manager of the user class), flushed once. An exception from an eraser rolls everything back. Erasers must not call `flush()` or open transactions; DBAL statements on the same connection join the transaction.
 
-`ErasureRequest` carries `user`, `actor` (nullable) and `context` (free array); `isSelfService()` is true without an actor or when the actor is the user. `ErasureVeto` has `reason` (stable code), `message` and `details` (e.g. the blocking projects).
+`ErasureRequest` carries `user`, `actor` (nullable) and `context` (free array); `isSelfService()` is true without an actor or when the actor is the user. Since **1.12** it also carries `originalIdentifier`: `getUserIdentifier()` captured before the first eraser runs, so an eraser that anonymises the e-mail does not hide the person from later erasers keyed by it; use `$request->identifier()` (the original identifier, else the current one). The `sessions` eraser passes it on as `context['original_identifier']` of its `UserSessionsRevokedEvent` (AuthKit's account switcher uses it). `ErasureVeto` has `reason` (stable code), `message` and `details` (e.g. the blocking projects).
 
 Built-in erasers: `last_activity` (`clearLastActivityAt()`, provided by `LastActivityTrait` since 1.5.0), `ui_preferences` (`resetUiPreferences()` from `UiPreferencesTrait`), `product_tour` (`clearProductTourSeen()`). Account status is not changed by the kit: disabling / anonymising the account itself is a host eraser.
 

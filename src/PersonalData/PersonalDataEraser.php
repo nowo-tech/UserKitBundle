@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\PersonalData;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 use function sprintf;
 
@@ -37,7 +38,7 @@ final readonly class PersonalDataEraser
      */
     public function check(object $user, ?object $actor = null, array $context = []): array
     {
-        return $this->vetoes(new ErasureRequest($user, $actor, $context));
+        return $this->vetoes(self::request($user, $actor, $context));
     }
 
     /**
@@ -51,7 +52,8 @@ final readonly class PersonalDataEraser
      */
     public function erase(object $user, ?object $actor = null, array $context = []): array
     {
-        $request = new ErasureRequest($user, $actor, $context);
+        // 1.12: the identifier is captured before any eraser can anonymise it.
+        $request = self::request($user, $actor, $context);
         $vetoes  = $this->vetoes($request);
         if ($vetoes !== []) {
             throw new ErasureVetoedException($vetoes);
@@ -78,6 +80,14 @@ final readonly class PersonalDataEraser
 
             return $ran;
         });
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    private static function request(object $user, ?object $actor, array $context): ErasureRequest
+    {
+        return new ErasureRequest($user, $actor, $context, $user instanceof UserInterface ? $user->getUserIdentifier() : null);
     }
 
     /**

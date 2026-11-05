@@ -15,6 +15,10 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\Security\Core\User\UserInterface;
+
+use function assert;
 
 final class PersonalDataEraserTest extends TestCase
 {
@@ -58,6 +62,102 @@ final class PersonalDataEraserTest extends TestCase
         $this->assertSame(['a', 'c'], (new PersonalDataEraser([$eraser('a', true), $eraser('b', false), $eraser('c', true)], [], $doctrine))->erase(new stdClass()));
     }
 
+    public function testErasersSeeTheIdentifierCapturedBeforeAnyOfThemRan(): void
+    {
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('wrapInTransaction')->willReturnCallback(static fn (callable $func): mixed => $func($entityManager));
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+
+        $user = new class implements UserInterface {
+            /** @var non-empty-string */
+            public string $email = 'alice@example.com';
+
+            public function getUserIdentifier(): string
+            {
+                return $this->email;
+            }
+
+            public function getRoles(): array
+            {
+                return ['ROLE_USER'];
+            }
+
+            public function eraseCredentials(): void
+            {
+            }
+        };
+        $seen     = new Recorder();
+        $identity = new class implements PersonalDataEraserInterface {
+            public function getKey(): string
+            {
+                return 'identity';
+            }
+
+            public function supports(object $user): bool
+            {
+                return true;
+            }
+
+            public function erase(ErasureRequest $request): void
+            {
+                assert(property_exists($request->user, 'email'));
+                $request->user->email = 'erased-1@invalid.local';
+            }
+        };
+        $later = new class($seen) implements PersonalDataEraserInterface {
+            public function __construct(private readonly Recorder $seen)
+            {
+            }
+
+            public function getKey(): string
+            {
+                return 'later';
+            }
+
+            public function supports(object $user): bool
+            {
+                return true;
+            }
+
+            public function erase(ErasureRequest $request): void
+            {
+                $this->seen->items[] = [$request->originalIdentifier, $request->identifier()];
+            }
+        };
+
+        self::assertSame(['identity', 'later'], (new PersonalDataEraser([$identity, $later], [], $doctrine))->erase($user));
+        self::assertSame([['alice@example.com', 'alice@example.com']], $seen->items);
+        self::assertSame('erased-1@invalid.local', $user->getUserIdentifier());
+    }
+
+    public function testRequestIdentifierFallsBack(): void
+    {
+        self::assertSame('bob', (new ErasureRequest(new InMemoryUser('bob', null)))->identifier());
+        self::assertSame('old', (new ErasureRequest(new InMemoryUser('bob', null), originalIdentifier: 'old'))->identifier());
+        self::assertNull((new ErasureRequest(new stdClass()))->identifier());
+    }
+
+    public function testCheckSeesTheIdentifier(): void
+    {
+        $seen  = new Recorder();
+        $guard = new class($seen) implements ErasureGuardInterface {
+            public function __construct(private readonly Recorder $seen)
+            {
+            }
+
+            public function check(ErasureRequest $request): ?ErasureVeto
+            {
+                $this->seen->items[] = $request->originalIdentifier;
+
+                return null;
+            }
+        };
+
+        self::assertSame([], (new PersonalDataEraser([], [$guard], $this->createMock(ManagerRegistry::class)))->check(new InMemoryUser('carol', null)));
+        self::assertSame(['carol'], $seen->items);
+    }
+
     public function testAllVetoesAreCollected(): void
     {
         $guard = static fn (?ErasureVeto $veto): ErasureGuardInterface => new class($veto) implements ErasureGuardInterface {
@@ -99,4 +199,11 @@ final class PersonalDataEraserTest extends TestCase
         $this->assertTrue((new ErasureRequest($user, $user))->isSelfService());
         $this->assertFalse((new ErasureRequest($user, $admin, ['scope' => 'admin']))->isSelfService());
     }
+}
+
+/** Collects what the test erasers saw. */
+final class Recorder
+{
+    /** @var list<mixed> */
+    public array $items = [];
 }
