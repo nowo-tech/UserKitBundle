@@ -7,10 +7,13 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\PersonalData\PersonalDataExporter;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
+use Nowo\UserKitBundle\Sessions\PersonalData\SessionsEraser;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
 use Nowo\UserKitBundle\Sessions\Twig\SessionsTwigExtension;
 use stdClass;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Hooks on other UserKit features: password change, account disabled (SessionInvalidatorInterface), personal data
@@ -83,7 +86,18 @@ final class SessionHooksTest extends SessionsKernelTestCase
 
         $eraser = $this->container()->get('test.eraser');
         self::assertInstanceOf(PersonalDataEraser::class, $eraser);
+        // 1.12: the revocation of the erasure carries the identifier the user had when it started.
+        $contexts = new class {
+            /** @var list<array<string, mixed>> */
+            public array $items = [];
+        };
+        $dispatcher = $this->container()->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+        $dispatcher->addListener(UserSessionsRevokedEvent::class, static function (UserSessionsRevokedEvent $event) use ($contexts): void {
+            $contexts->items[] = $event->context;
+        });
         self::assertContains('sessions', $eraser->erase($alice));
+        self::assertSame([[SessionsEraser::CONTEXT_ORIGINAL_IDENTIFIER => 'alice@example.com']], $contexts->items);
         self::assertSame([], $this->store()->allFor($this->manager()->owner($alice) ?? self::fail()));
         $phone->request('GET', '/page');
         self::assertRedirectsTo($phone, '/login');

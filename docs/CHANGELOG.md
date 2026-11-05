@@ -43,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Original identifier on erasure (DATA-AUTHKIT-VAULT-ERASE).** `ErasureRequest::$originalIdentifier` (optional 4th
+  constructor argument) and `ErasureRequest::identifier()`: `PersonalDataEraser::erase()` / `check()` capture
+  `UserInterface::getUserIdentifier()` before any eraser runs, so erasers that run after an identity eraser
+  anonymised the e-mail still find data keyed by it. The `sessions` eraser passes it on as
+  `context['original_identifier']` (`SessionsEraser::CONTEXT_ORIGINAL_IDENTIFIER`) of the `UserSessionsRevokedEvent`
+  it triggers, so AuthKit removes the person from every browser's account switcher.
+
 ## [1.11.1] - 2026-11-03
 
 Revoked sessions stay revoked after purge

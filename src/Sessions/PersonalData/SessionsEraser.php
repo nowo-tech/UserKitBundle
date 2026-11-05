@@ -39,8 +39,13 @@ final readonly class SessionsEraser implements PersonalDataEraserInterface
         return $this->sessions->owner($user) instanceof SessionUser;
     }
 
+    /** Key of the revoke context holding {@see ErasureRequest::identifier()} (1.12). */
+    public const CONTEXT_ORIGINAL_IDENTIFIER = 'original_identifier';
+
     /**
-     * Revokes (so the browsers are signed out) then deletes the rows. The remember-me epoch row (owner type, id and a
+     * Revokes (so the browsers are signed out) then deletes the rows. The revocation event carries the identifier the
+     * user had when the erasure started (`context['original_identifier']`, 1.12), so listeners keyed by it (AuthKit's
+     * account switcher) still find the person after an earlier eraser anonymised the e-mail. The remember-me epoch row (owner type, id and a
      * timestamp) is kept while the user exists, so old remember-me cookies stay refused; it goes with the user.
      */
     public function erase(ErasureRequest $request): void
@@ -49,7 +54,8 @@ final readonly class SessionsEraser implements PersonalDataEraserInterface
         if (!$owner instanceof SessionUser) {
             return;
         }
-        $this->sessions->revokeAll($request->user, $request->actor, RevocationReason::AccountChanged);
+        $identifier = $request->identifier();
+        $this->sessions->revokeAll($request->user, $request->actor, RevocationReason::AccountChanged, context: $identifier === null ? [] : [self::CONTEXT_ORIGINAL_IDENTIFIER => $identifier]);
         $this->store->deleteFor($owner);
     }
 }
