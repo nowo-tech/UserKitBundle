@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.12.0] - 2026-11-05](#1120---2026-11-05)
 - [[1.11.1] - 2026-11-03](#1111---2026-11-03)
 - [[1.11.0] - 2026-11-03](#1110---2026-11-03)
 - [[1.10.1] - 2026-11-02](#1101---2026-11-02)
@@ -43,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-05
+
+Minor release. See [UPGRADING](UPGRADING.md#to-1120).
+
 ### Added
 
 - **Original identifier on erasure (DATA-AUTHKIT-VAULT-ERASE).** `ErasureRequest::$originalIdentifier` (optional 4th
@@ -51,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anonymised the e-mail still find data keyed by it. The `sessions` eraser passes it on as
   `context['original_identifier']` (`SessionsEraser::CONTEXT_ORIGINAL_IDENTIFIER`) of the `UserSessionsRevokedEvent`
   it triggers, so AuthKit removes the person from every browser's account switcher.
+
+[1.12.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.12.0
 
 ## [1.11.1] - 2026-11-03
 

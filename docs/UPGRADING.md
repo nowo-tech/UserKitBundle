@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.12.0](#to-1120)
 - [To 1.11.1](#to-1111)
 - [To 1.11.0](#to-1110)
 - [To 1.10.1](#to-1101)
@@ -39,6 +40,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.12.0
+
+From **1.11.1**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 No breaking change. An eraser that looks data up by the user identifier should read `$request->identifier()` instead
 of `$request->user->getUserIdentifier()`: the latter is already anonymised when a higher-priority identity eraser ran.
