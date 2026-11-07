@@ -33,16 +33,21 @@ use Nowo\UserKitBundle\Sessions\Security\AllowAllSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\RoleSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
 use Nowo\UserKitBundle\Sessions\SessionUserResolver;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
 use Nowo\UserKitBundle\Sessions\Twig\SessionsTwigExtension;
 use Nowo\UserKitBundle\Sessions\Ui\SessionsPages;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 use Symfony\Component\Security\Http\Event\CheckPassportEvent;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
@@ -83,6 +88,12 @@ final class SessionsLoader
     public const PRIORITY_LOGIN_SUCCESS = -256;
 
     public const PRIORITY_LOGOUT = 64;
+
+    /** `kernel.response`: {@see CommitQueue::release()} runs before {@see RememberMeEpoch::REISSUE_PRIORITY}. */
+    public const PRIORITY_RELEASE = 32;
+
+    /** `kernel.terminate`, `console.terminate`: {@see CommitQueue::finish()} runs after what other listeners commit there. */
+    public const PRIORITY_FINISH = -4096;
 
     /**
      * FormKit profile of the pages (CSRF-only actions; labels in the bundle domain).
@@ -197,7 +208,12 @@ final class SessionsLoader
             $dispatcher,
             new Reference(SessionLimitResolverInterface::class),
             $epoch,
+            new Reference('security.firewall.map', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            new Reference(SessionClientFactory::class),
+            new Reference(CommitQueue::class),
         ]))->setPublic(true));
+
+        self::registerCommitQueue($container, $doctrine);
 
         $client = $sessions['client'];
         $container->setDefinition(SessionClientFactory::class, new Definition(SessionClientFactory::class, [
@@ -328,6 +344,28 @@ final class SessionsLoader
             ->setPublic(true)
             ->addTag('controller.service_arguments')
             ->addTag('container.service_subscriber'));
+    }
+
+    /**
+     * The queue of what must wait for the outermost commit, the driver middleware telling it about transactions (on
+     * every connection, since the user's and the registry's may differ) and the boundaries that release it. Priority of
+     * `kernel.response`: before the remember-me re-issue, which reads the sessions kept by a revocation. The terminate
+     * events run last, so a commit in another terminate listener still gets released.
+     */
+    private static function registerCommitQueue(ContainerBuilder $container, Reference $doctrine): void
+    {
+        $queue = (new Definition(CommitQueue::class, [$doctrine, new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE)]))
+            ->addTag('doctrine.event_listener', ['event' => 'postFlush'])
+            ->addTag('kernel.event_listener', ['event' => KernelEvents::RESPONSE, 'method' => 'release', 'priority' => self::PRIORITY_RELEASE])
+            ->addTag('kernel.event_listener', ['event' => KernelEvents::TERMINATE, 'method' => 'finish', 'priority' => self::PRIORITY_FINISH])
+            ->addTag('kernel.event_listener', ['event' => ConsoleEvents::TERMINATE, 'method' => 'finish', 'priority' => self::PRIORITY_FINISH])
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageHandledEvent::class, 'method' => 'finish'])
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageFailedEvent::class, 'method' => 'finish'])
+            ->addTag('kernel.reset', ['method' => 'reset']);
+        $container->setDefinition(CommitQueue::class, $queue);
+        $container->setDefinition(TransactionBoundaryMiddleware::class, (new Definition(TransactionBoundaryMiddleware::class, [new Reference(CommitQueue::class)]))
+            ->setAbstract(true)
+            ->addTag('doctrine.middleware'));
     }
 
     /**

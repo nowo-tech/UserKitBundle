@@ -23,6 +23,7 @@
   - [Concurrent-session limit](#concurrent-session-limit)
   - [Device ids](#device-ids)
   - [Automatic sign-outs](#automatic-sign-outs)
+  - [Revocations inside a transaction](#revocations-inside-a-transaction)
   - [Sessions that are not the request's own (1.11)](#sessions-that-are-not-the-requests-own-111)
   - [AuthKit hook points](#authkit-hook-points)
   - [Retention purge](#retention-purge)
@@ -475,7 +476,7 @@ Every mutation dispatches an event **after** the rows are written (the session i
 | Event | When |
 | --- | --- |
 | `Sessions\Event\UserSessionStartedEvent` | A session was registered (`atLogin` true at sign-in). |
-| `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `user`, `actor` (null for automatic ones), `reason`, `publicIds`. Explicit user actions dispatch it even when nothing matched. |
+| `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `user`, `actor` (null for automatic ones), `reason`, `publicIds`. Explicit user actions dispatch it even when nothing matched. For `password_changed` inside a transaction: after the outermost commit, see [Revocations inside a transaction](#revocations-inside-a-transaction). |
 | `Sessions\Event\SessionLimitReachedEvent` | A sign-in hit the limit (`isRejected()`, `evicted` public ids). |
 | `Sessions\Event\UserSessionsPurgedEvent` | The retention purge ran (`before`, `deleted`, `revokedBefore`). |
 | `Sessions\Event\UserSessionsDeletedEvent` | Every row of a user was deleted (`forgetUser()` / user removal): `owner`, `user` (null after a Doctrine removal), `deleted`. |
@@ -548,9 +549,41 @@ trust is revoked). A device id is never a credential.
 - **Password change** (`sessions.password_change.revoke_sessions`, default on): a Doctrine `preUpdate` on the profile
   user classes notices the password field change (account page, reset by e-mail, admin, CLI); after the flush every
   other session of that user is revoked (reason `password_changed`); the session that changed it stays.
+  Inside a longer transaction, see [Revocations inside a transaction](#revocations-inside-a-transaction).
 - **Account disabled**: with `account_status.invalidate_sessions_on_disable: true`, every session (reason
   `account_disabled`).
 - **Anything else** (roles removed, membership suspended…): call `revokeAll($user, null, RevocationReason::AccountChanged)`.
+
+### Revocations inside a transaction
+
+A rollback undoes the registry rows, but not a mark in the `cache` store or an event. So while a transaction is open on
+the connection:
+
+| | Inside a transaction | On rollback | With no transaction |
+| --- | --- | --- | --- |
+| Registry rows and the remember-me epoch | Written, in the transaction | Undone by the database | Written |
+| Mark in the `cache` store, every reason | Waits for the outermost commit | Dropped | At once |
+| `UserSessionsRevokedEvent`, `password_changed` | Waits for the outermost commit | Dropped | At once |
+| `UserSessionsRevokedEvent`, any other reason | At once, in the transaction: its listeners take part in it | Stays fired | At once |
+
+A nested commit is only a savepoint and does not count. A savepoint that rolls back while the outer transaction commits
+drops the revocations it undid.
+
+After the commit the waiting effects run on the next `postFlush` or `kernel.response`, or when you ask, unless another
+transaction is open: a listener's writes must not depend on that later transaction. The end of the Messenger message,
+`kernel.terminate` and `console.terminate` run them whatever is open.
+
+```php
+$connection->beginTransaction();
+$user->setPassword($hash);
+$entityManager->flush();
+$connection->commit();
+$sessions->releaseHeldRevocations(); // Optional in a request or command: for a script, or to have them right here.
+```
+
+With the registry on another connection than the users (`sessions.doctrine.entity_manager`), a password change inside a
+transaction on the users' connection revokes after that transaction commits, rows included, since they could not follow
+its rollback.
 
 ### Sessions that are not the request's own (1.11)
 
@@ -564,6 +597,23 @@ the same browser), its idle expiry, limits and revocations. The API it uses, als
 | `sessionStates([[$sessionId, $user], …])` | The same for several sessions (one query per owner), in input order |
 | `endSession($sessionId, $user)` | Signs a session out like a logout: the owner's row is deleted, no event. The caller destroys the session data |
 | `rekey($session, $previousId)` | After `$session->migrate()` outside a sign-in, moves the rows of the session's markers to the new id at once |
+| `adopt($request, $user)` | After a sign-in failed and the session went back to `$user`: registers it at once in the request's firewall context, see below |
+
+**Undoing a failed sign-in.** The sign-in deleted the earlier row and marker, so until its next stateful request the
+session would be out of reach of revocation and idle expiry. Once the earlier token and session attributes are back and
+any transaction of the sign-in has ended, call `adopt()` with the same request:
+
+| What happened to the earlier session | Result |
+| --- | --- |
+| Row deleted by the sign-in, live at that moment | A new row and marker; `UserSessionStartedEvent` with `atLogin: false` |
+| Row brought back by a rollback | The row follows the new session id (same public id and creation time), no event |
+| Revoked before the sign-in deleted its row, or revoked in the row a rollback brought back | Registered as revoked with that reason: its next request signs it out, no event |
+| A marker of `$user` whose row is gone, and this request's sign-in did not delete it | Registered as revoked (`signed_out`), as the early check would decide |
+
+No limit and no eviction, since it is the same session. It does nothing without a session, on a stateless route or
+firewall, for a user the registry cannot own, when the marker is already right, and while a sign-in of this context is
+pending. A revocation landing after the delete and before this call can be missed: see
+[SECURITY](SECURITY.md#threat-model).
 
 **Pending sign-ins (second factor).** A sign-in whose token is not final yet (AuthKit MFA: the code is still to be
 entered) is not registered at `LoginSuccessEvent`. Mark such a token by implementing

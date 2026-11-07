@@ -19,6 +19,7 @@ use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use SortDirection;
 
+use function array_column;
 use function array_map;
 use function bin2hex;
 use function constant;
@@ -178,6 +179,48 @@ final readonly class UserSessionStore
             'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id',
             ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
         );
+    }
+
+    /**
+     * Deletes the owner's row of a session only if it is live: one statement, so a revocation cannot slip between
+     * reading the row and deleting it.
+     *
+     * @return bool false when the row is revoked or does not exist
+     */
+    public function deleteLiveRow(string $hash, SessionUser $owner): bool
+    {
+        return $this->connection()->executeStatement(
+            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+        ) > 0;
+    }
+
+    /**
+     * Marks the owner's row of a session revoked.
+     */
+    public function markRevoked(string $hash, SessionUser $owner, string $reason, DateTimeImmutable $now): void
+    {
+        $this->connection()->executeStatement(
+            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            ['now' => $now, 'reason' => $reason, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+            ['now' => Types::DATETIME_IMMUTABLE],
+        );
+    }
+
+    /**
+     * Those of `$hashes` that have a live row (a revocation of them was undone by a rolled-back savepoint).
+     *
+     * @param non-empty-list<string> $hashes
+     *
+     * @return list<string>
+     */
+    public function liveAmong(array $hashes): array
+    {
+        return array_map(strval(...), $this->connection()->executeQuery(
+            'SELECT session_hash FROM ' . $this->table() . ' WHERE revoked_at IS NULL AND session_hash IN (:hashes)',
+            ['hashes' => $hashes],
+            ['hashes' => ArrayParameterType::STRING],
+        )->fetchFirstColumn());
     }
 
     /**
@@ -378,7 +421,10 @@ final readonly class UserSessionStore
         return $this->entityManager()->getClassMetadata(UserSession::class)->getTableName();
     }
 
-    private function connection(): Connection
+    /**
+     * Connection the registry writes on.
+     */
+    public function connection(): Connection
     {
         return $this->entityManager()->getConnection();
     }

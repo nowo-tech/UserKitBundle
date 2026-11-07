@@ -11,6 +11,7 @@ use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Event\SessionLimitReachedEvent;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionStartedEvent;
+use Nowo\UserKitBundle\Sessions\FirewallContext;
 use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimitPolicy;
@@ -19,7 +20,6 @@ use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Security\SessionLimitReachedException;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\EventDispatcher\EventDispatcherInterface;
-use Symfony\Bundle\SecurityBundle\Security\FirewallConfig;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -90,7 +90,7 @@ final readonly class SessionRegistryListener
     public const PENDING_ATTRIBUTE = '_nowo_user_kit_session_pending';
 
     /** Marker key of requests outside any firewall context. */
-    public const DEFAULT_CONTEXT = 'main';
+    public const DEFAULT_CONTEXT = FirewallContext::DEFAULT_CONTEXT;
 
     /**
      * `$rememberMeCookies`: the remember-me cookies of every firewall (read from the security configuration by
@@ -270,7 +270,7 @@ final readonly class SessionRegistryListener
         }
         $session = $request->getSession();
         $context = $this->context($request);
-        $this->forget($session, $context);
+        $this->forget($session, $context, $request);
         if (PendingAuthentication::isPending($event->getAuthenticatedToken())) {
             // Registered (limit included) on the first request after the token became final.
             $pending           = $this->pendingContexts($session);
@@ -406,7 +406,10 @@ final readonly class SessionRegistryListener
         }
     }
 
-    private function forget(SessionInterface $session, string $context): void
+    /**
+     * The row of this firewall context goes. `$signingIn`: the request of a sign-in, which may still fail.
+     */
+    private function forget(SessionInterface $session, string $context, ?Request $signingIn = null): void
     {
         $markers = $this->sessions->markers($session);
         $marker  = $markers[$context] ?? null;
@@ -414,12 +417,32 @@ final readonly class SessionRegistryListener
             return;
         }
         $owner = SessionUser::fromKey($marker['u']);
-        if ($owner instanceof SessionUser) {
+        if ($owner instanceof SessionUser && $signingIn instanceof Request) {
+            $this->displace($signingIn, $marker['h'], $owner, $context);
+        } elseif ($owner instanceof SessionUser) {
             $this->store->deleteRow($marker['h'], $owner);
         }
         unset($markers[$context]);
         // @igor-ignore - The request's own session (not an injected service): the markers belong to this session.
         $session->set(UserSessionManager::ATTRIBUTE, $markers);
+    }
+
+    /**
+     * Deletes the row of the session a sign-in replaces and leaves on the request whether that session was still live,
+     * since a deleted row reads as revoked afterwards: {@see UserSessionManager::adopt()} could not tell "revoked while
+     * the sign-in ran" from "deleted by this sign-in" otherwise.
+     */
+    private function displace(Request $request, string $hash, SessionUser $owner, string $context): void
+    {
+        $reason = null;
+        if (!$this->store->deleteLiveRow($hash, $owner)) {
+            $reason = $this->store->state($hash, $owner)['reason'] ?? RevocationReason::SignedOut->value;
+            $this->store->deleteRow($hash, $owner);
+        }
+        /** @var array<string, array<string, array{h: string, r: string|null}>> $displaced */
+        $displaced                          = $request->attributes->get(UserSessionManager::DISPLACED_ATTRIBUTE, []);
+        $displaced[$context][$owner->key()] = ['h' => $hash, 'r' => $reason];
+        $request->attributes->set(UserSessionManager::DISPLACED_ATTRIBUTE, $displaced);
     }
 
     /**
@@ -505,12 +528,7 @@ final readonly class SessionRegistryListener
 
     private function stateful(Request $request): bool
     {
-        if ($request->attributes->getBoolean('_stateless')) {
-            return false;
-        }
-        $config = $this->firewalls?->getFirewallConfig($request);
-
-        return !$config instanceof FirewallConfig || !$config->isStateless();
+        return FirewallContext::stateful($this->firewalls, $request);
     }
 
     /**
@@ -518,9 +536,7 @@ final readonly class SessionRegistryListener
      */
     private function context(Request $request): string
     {
-        $config = $this->firewalls?->getFirewallConfig($request);
-
-        return $config?->getContext() ?? $config?->getName() ?? self::DEFAULT_CONTEXT;
+        return FirewallContext::of($this->firewalls, $request);
     }
 
     /**

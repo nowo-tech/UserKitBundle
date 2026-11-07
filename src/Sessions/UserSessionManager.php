@@ -4,28 +4,39 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Sessions;
 
+use Closure;
 use DateTimeImmutable;
+use Doctrine\DBAL\Connection;
 use InvalidArgumentException;
+use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsDeletedEvent;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
+use Nowo\UserKitBundle\Sessions\Event\UserSessionStartedEvent;
+use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
+use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
 use Nowo\UserKitBundle\Sessions\Model\SessionState;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 use function array_column;
+use function array_filter;
+use function array_values;
 use function count;
 use function hash_hmac;
+use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
@@ -35,8 +46,10 @@ use function sprintf;
  * Public API of the session registry (the hook point for AuthKit and host code): list a user's sessions, sign one
  * out, sign out the others, sign out everywhere, sign out a device. Revoking marks the registry rows and the
  * {@see RevocationStoreInterface}; each revoked session is signed out on its **next request** by
- * {@see EventListener\SessionRegistryListener}, whatever the session handler. Every revocation dispatches
- * {@see UserSessionsRevokedEvent} after the rows are written (audit).
+ * {@see SessionRegistryListener}, whatever the session handler. Every revocation dispatches
+ * {@see UserSessionsRevokedEvent} after the rows are written (audit). Inside a database transaction, the mark in a cache
+ * store, and the event of a password change, wait for the outermost commit and are dropped on rollback (HP-L2,
+ * {@see CommitQueue}).
  *
  * Host hooks: every revoke method takes an optional host-defined `customReason` (stored instead of the built-in
  * reason, e.g. `link`; see {@see RevocationReason::isValidCustom()}) and a free-form `context` carried by the event.
@@ -54,6 +67,12 @@ final readonly class UserSessionManager
     public const ATTRIBUTE = '_nowo_user_kit_session';
 
     /**
+     * Request attribute: what the sign-in of this request deleted, `context => owner key => {h: registry hash, r: why
+     * that session was already ended, or null}`. Lives as long as the request, for {@see self::adopt()}.
+     */
+    public const DISPLACED_ATTRIBUTE = '_nowo_user_kit_session_displaced';
+
+    /**
      * @param string $secret HMAC key of the session ids (`sessions.hash_secret`, default `%kernel.secret%`)
      * @param int $idleLifetime `sessions.idle_lifetime` (seconds)
      * @param int $touchInterval `sessions.touch_interval` (seconds)
@@ -69,6 +88,9 @@ final readonly class UserSessionManager
         private ?EventDispatcherInterface $dispatcher = null,
         private ?SessionLimitResolverInterface $limits = null,
         private ?RememberMeEpoch $epoch = null,
+        private ?FirewallMap $firewalls = null,
+        private ?SessionClientFactory $clients = null,
+        private ?CommitQueue $commits = null,
     ) {
     }
 
@@ -407,6 +429,119 @@ final readonly class UserSessionManager
     }
 
     /**
+     * Registers the request's session at once for `$user`, in the request's firewall context: for a sign-in that failed
+     * and handed the session back to the account it had before (GY-L7, HP-I2), so a revocation or idle expiry reaches it
+     * before its next stateful request. Not a sign-in: no limit, no eviction and no `atLogin: true` event.
+     *
+     * The session that sign-in replaced decides:
+     *
+     * - revoked before the sign-in deleted its row, or still revoked after a rollback brought the row back: the session
+     *   is registered **as revoked** with that reason, and its next request signs it out;
+     * - row back after a rollback: the row follows the new session id (same public id and creation time);
+     * - row deleted by the sign-in, still live at that moment: a new row;
+     * - a marker of `$user` whose row is gone, and no sign-in of this request deleted it: treated as revoked, as the
+     *   early check would.
+     *
+     * A row deleted by the sign-in cannot be revoked meanwhile, so a revocation landing **after** that delete and before
+     * this call misses the session when no transaction holds the row (see docs/SECURITY.md).
+     *
+     * No-op without a session, on a stateless route or firewall, for a user the registry cannot own, when the session
+     * already has its marker, and while a sign-in of this context is pending (it registers when the token is final).
+     * Call it with the request the sign-in ran on, once the earlier token and session attributes are back and any
+     * transaction of that sign-in has ended.
+     */
+    public function adopt(Request $request, object $user): void
+    {
+        $owner = $this->owner($user);
+        if (!$owner instanceof SessionUser || !$request->hasSession() || !FirewallContext::stateful($this->firewalls, $request)) {
+            return;
+        }
+        $session = $request->getSession();
+        $context = FirewallContext::of($this->firewalls, $request);
+        $marker  = $this->markers($session)[$context] ?? null;
+        $hash    = $this->hash($session->getId());
+        $pending = $session->get(SessionRegistryListener::PENDING_ATTRIBUTE);
+        if (($marker !== null && $marker['u'] === $owner->key() && $marker['h'] === $hash) || (is_array($pending) && isset($pending[$context]))) {
+            return;
+        }
+        $displaced = $this->displaced($request, $context, $owner);
+        $earlier   = $marker !== null && $marker['u'] === $owner->key() ? $marker['h'] : $displaced['h'] ?? null;
+        $reason    = $displaced['r'] ?? null;
+        if ($marker !== null && $marker['u'] !== $owner->key()) {
+            $previous = SessionUser::fromKey($marker['u']);
+            if ($previous instanceof SessionUser) {
+                $this->store->deleteRow($marker['h'], $previous);
+            }
+        }
+        $state = $earlier !== null ? $this->store->state($earlier, $owner) : null;
+        if ($state !== null) {
+            $this->store->rekey($earlier, $hash, $owner);
+            // Read again after the move: a revocation waiting on this row lands before the rekey gets the lock, and its
+            // mark in a cache store is under the old hash, maybe not even written yet (HU-L3). Not through the revocation
+            // store: with the database store the old hash has no row now, which would read as revoked.
+            $reason ??= ($this->store->state($hash, $owner) ?? $state)['reason'];
+        } elseif ($earlier !== null && $displaced === null) {
+            $reason = RevocationReason::SignedOut->value;
+        }
+        $now      = $this->now();
+        $client   = $this->clients?->fromRequest($request) ?? new SessionClient();
+        $inserted = $state === null && $this->store->insert($owner, $hash, $client, $now);
+        if ($reason !== null) {
+            $this->store->markRevoked($hash, $owner, $reason, $now);
+            $this->revocations->mark([$hash], $reason);
+        } elseif ($state !== null) {
+            $this->store->touch($hash, $owner, $now, $client->deviceId);
+        } elseif ($inserted) {
+            $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, false));
+        }
+        $markers           = $this->markers($session);
+        $markers[$context] = ['h' => $hash, 'u' => $owner->key(), 's' => $now->getTimestamp()];
+        // @igor-ignore - The request's own session (not an injected service): the markers belong to this session.
+        $session->set(self::ATTRIBUTE, $markers);
+    }
+
+    /**
+     * What the sign-in of this request deleted for this owner and context.
+     *
+     * @return array{h: string, r: string|null}|null
+     */
+    private function displaced(Request $request, string $context, SessionUser $owner): ?array
+    {
+        /** @var array<string, array<string, array{h: string, r: string|null}>> $displaced */
+        $displaced = $request->attributes->get(self::DISPLACED_ATTRIBUTE, []);
+
+        return $displaced[$context][$owner->key()] ?? null;
+    }
+
+    /**
+     * For {@see EventListener\PasswordChangeListener}, not an after-commit API: on the registry's connection `$effect`
+     * runs **now**, also in an open transaction, because the registry's writes follow that transaction and only what they
+     * cannot undo needs to wait ({@see self::revokeRows()}). On another connection with a transaction open it is held
+     * until that commit, because the registry's writes could not follow its rollback.
+     *
+     * @internal
+     *
+     * @param Closure(): void $effect
+     */
+    public function whenCommitted(Connection $connection, Closure $effect): void
+    {
+        if (!$this->commits instanceof CommitQueue || $connection === $this->store->connection() || !$this->commits->hold($connection, $effect)) {
+            $effect();
+        }
+    }
+
+    /**
+     * Applies now what committed transactions left waiting: marks in the cache store and `password_changed` events. The
+     * bundle does it after a flush, and at the end of the request, command or Messenger message; call this from a job or
+     * standalone script with no such boundary, or to have them right after your commit. While any transaction is open
+     * nothing runs: a listener's writes must not depend on that later transaction.
+     */
+    public function releaseHeldRevocations(): void
+    {
+        $this->commits?->release();
+    }
+
+    /**
      * Revokes the given sessions of an owner (used by the concurrent-session limit).
      *
      * @param list<string> $publicIds
@@ -448,18 +583,58 @@ final readonly class UserSessionManager
         $bumped = $epoch && $this->epoch instanceof RememberMeEpoch ? $this->epoch->bump($owner) : null;
         $code   = $customReason ?? $reason->value;
         $rows   = $this->store->revoke($owner, $code, $this->now(), $publicIds, $deviceId, $except);
-        if ($rows !== []) {
-            $this->revocations->mark(array_column($rows, 'hash'), $code);
+        $ids    = array_column($rows, 'public_id');
+        $hashes = array_column($rows, 'hash');
+        // Only a password change raises its event after the fact, from a flush the caller may not know is nested. Any
+        // other reason comes from a call the host made inside its own transaction: the listeners stay in it, and their
+        // writes follow it (an erasure's vault and device cleanup must, while the user still has its id).
+        $passwordChange = $reason === RevocationReason::PasswordChanged;
+        // @igor-ignore - Held until the transaction ends, and the queue is reset between requests.
+        $held = $this->commits instanceof CommitQueue && $this->commits->hold($this->store->connection(), function () use ($owner, $user, $actor, $reason, $audit, $customReason, $context, $bumped, $code, $except, $keepCurrent, $rows, $hashes, $passwordChange): void {
+            // A driver sees no savepoint: a revocation undone by one rolled back shows as a live row by now.
+            $live = $hashes !== [] ? $this->store->liveAmong($hashes) : [];
+            $kept = array_values(array_filter($rows, static fn (array $row): bool => !in_array($row['hash'], $live, true)));
+            if ($rows !== [] && $kept === []) {
+                return;
+            }
+            $this->markRevoked($owner, array_column($kept, 'hash'), $code, $bumped, $except, $keepCurrent);
+            if ($passwordChange) {
+                $this->tellRevoked($owner, $user, $actor, $reason, array_column($kept, 'public_id'), $audit, $customReason, $context, $bumped !== null);
+            }
+        });
+        if (!$held) {
+            $this->markRevoked($owner, $hashes, $code, $bumped, $except, $keepCurrent);
         }
-        if ($bumped !== null) {
-            $this->epoch->keep($owner, $bumped, $except, $keepCurrent && $except === null, array_column($rows, 'hash'));
-        }
-        $invalidated = $bumped !== null;
-        $ids         = array_column($rows, 'public_id');
-        if ($ids !== [] || $audit) {
-            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated));
+        if (!$held || !$passwordChange) {
+            $this->tellRevoked($owner, $user, $actor, $reason, $ids, $audit, $customReason, $context, $bumped !== null);
         }
 
         return $ids;
+    }
+
+    /**
+     * What a rollback cannot undo besides the event: the mark in a cache store and the session kept by this revocation.
+     *
+     * @param list<string> $hashes
+     */
+    private function markRevoked(SessionUser $owner, array $hashes, string $code, ?int $bumped, ?string $except, bool $keepCurrent): void
+    {
+        if ($hashes !== []) {
+            $this->revocations->mark($hashes, $code);
+        }
+        if ($bumped !== null) {
+            $this->epoch?->keep($owner, $bumped, $except, $keepCurrent && $except === null, $hashes);
+        }
+    }
+
+    /**
+     * @param list<string> $ids
+     * @param array<string, mixed> $context
+     */
+    private function tellRevoked(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, array $ids, bool $audit, ?string $customReason, array $context, bool $invalidated): void
+    {
+        if ($ids !== [] || $audit) {
+            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated));
+        }
     }
 }
