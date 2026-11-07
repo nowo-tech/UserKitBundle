@@ -80,6 +80,7 @@
         "symfony/cache": "^7.4 || ^8.0",
         "symfony/css-selector": "^7.4 || ^8.0",
         "symfony/dom-crawler": "^7.4 || ^8.0",
+        "symfony/messenger": "^7.4 || ^8.0",
         "symfony/translation": "^7.4 || ^8.0",
         "symfony/yaml": "^7.4 || ^8.0"
     },

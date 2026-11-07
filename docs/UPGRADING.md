@@ -41,27 +41,34 @@
 
 ## Unreleased
 
-No configuration or schema change. REQ-SEC-004: re-verification pending.
+No configuration or schema change. REQ-SEC-004: Appendix HU, HU-M1 fixed, delta check pending.
 
 - **Hosts that change a password inside their own transaction.** `UserSessionsRevokedEvent` with reason
   `password_changed` now fires after the outermost commit, not during the flush, and does not fire on rollback.
   A listener on it no longer takes part in that transaction: its database writes are its own, and a failure in it no
   longer rolls the password change back. With no transaction open (a plain `flush()`) it fires as before, before
   `flush()` returns.
+  A listener's exception can surface from a later `flush()`, from `PersonalDataEraser::erase()` after the erasure
+  committed, or from the response of the request. The password change stays, and later listeners on the event do not run.
 - **`revocation.store: cache`.** Inside a transaction the mark waits for the outermost commit, and goes with a rollback.
   The registry rows are written in the transaction as before.
 - **When the waiting effects run.** After a commit they run on the next of: `postFlush`, `kernel.response` (priority
-  32), `kernel.terminate`, `console.terminate`, the end of a Messenger message. Between the commit and that point the
-  rows are already revoked, so a signed-in request finds out at its next touch at the latest. A standalone script that
-  boots no kernel event should call `UserSessionManager::releaseHeldRevocations()` after its commit. `kernel.reset`
-  drops what is left.
+  32), the end of a Messenger message, and last `kernel.terminate` and `console.terminate` (priority -4096). The first
+  two wait while another transaction is open. A standalone script that boots no kernel event should call
+  `UserSessionManager::releaseHeldRevocations()` after its commit.
+  Between the commit and that point the rows are already revoked, so a signed-in request finds out at its next touch at
+  the latest. With the registry on another connection the rows wait too, so a process that dies in that gap revokes
+  nothing. `kernel.reset` runs what is left; a fatal or an `exit` in that gap loses it.
 - **Other reasons do not wait.** `UserSessionsRevokedEvent` for `everywhere`, `admin`, `account_disabled`, an erasure and
   so on still fires inside the transaction, so a listener's writes follow it, and it still fires if that transaction
   then rolls back.
 - **A connection you built yourself.** Only connections from DoctrineBundle get the middleware. On any other, or with
   the middleware removed, everything runs at once as in 1.12.
-- **AuthKit.** `SocialHandlerSignInRollback::restore()` should call `adopt()` for GY-L7 and HP-I2 to close. Until an
-  AuthKit release does, the earlier session registers on its next request as today.
+- **AuthKit.** Upgrade AuthKit with this release. `SocialHandlerSignInRollback::restore()` must call `adopt()` for GY-L7
+  and HP-I2 to close: without it, a revocation that waits on the row during a failed sign-in is lost until the next
+  sign-out. With AuthKit 1.38.0, a first social link in add mode also loses the account just added to the switcher,
+  because `password_changed` now fires after the sign-in; it can be added again.
+- **DBAL 3.** `Connection::commit()` returns null with the middleware. Do not test its return value.
 
 ## To 1.12.0
 

@@ -569,8 +569,9 @@ the connection:
 A nested commit is only a savepoint and does not count. A savepoint that rolls back while the outer transaction commits
 drops the revocations it undid.
 
-After the commit the waiting effects run on the next `postFlush`, `kernel.response`, `kernel.terminate`,
-`console.terminate` or end of a Messenger message, or when you ask:
+After the commit the waiting effects run on the next `postFlush` or `kernel.response`, or when you ask, unless another
+transaction is open: a listener's writes must not depend on that later transaction. The end of the Messenger message,
+`kernel.terminate` and `console.terminate` run them whatever is open.
 
 ```php
 $connection->beginTransaction();
@@ -582,7 +583,7 @@ $sessions->releaseHeldRevocations(); // Optional in a request or command: for a 
 
 With the registry on another connection than the users (`sessions.doctrine.entity_manager`), a password change inside a
 transaction on the users' connection revokes after that transaction commits, rows included, since they could not follow
-its rollback. `whenCommitted($connection, $effect)` does this for your own code.
+its rollback.
 
 ### Sessions that are not the request's own (1.11)
 

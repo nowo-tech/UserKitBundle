@@ -10,8 +10,11 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
  * HP-L2: what a rollback cannot undo (the mark in a cache store, {@see UserSessionsRevokedEvent})
@@ -79,7 +82,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->setUpDatabase('cache');
         $alice = $this->member('alice@example.com');
         $this->signIn('alice@example.com');
-        $table             = $this->em()->getClassMetadata(Fixtures\Member::class)->getTableName();
+        $table             = $this->em()->getClassMetadata(Member::class)->getTableName();
         $this->log()->then = function () use ($table): void {
             // On PostgreSQL this is a failed SAVEPOINT if it runs while DBAL still counts the transaction as open.
             $this->connection()->transactional(static fn ($connection) => $connection->executeStatement('UPDATE ' . $table . " SET email = 'audited@example.com'"));
@@ -157,7 +160,90 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         self::assertSame([RevocationReason::PasswordChanged->value], $this->revokedReasons(), 'No transaction is open any more: at once.');
     }
 
-    public function testResetDropsEverythingBetweenRequests(): void
+    public function testResetRunsWhatCommittedAndDropsWhatDidNot(): void
+    {
+        $this->setUpDatabase('cache');
+        $alice = $this->member('alice@example.com');
+        $bob   = $this->member('bob@example.com');
+        $phone = $this->signIn('alice@example.com');
+        $other = $this->signIn('bob@example.com');
+        $this->log()->clear();
+
+        $this->connection()->beginTransaction();
+        $this->manager()->revokeAll($this->fresh($alice), null, RevocationReason::PasswordChanged);
+        $this->connection()->commit();
+        $this->connection()->beginTransaction();
+        $this->manager()->revokeAll($this->fresh($bob), null, RevocationReason::PasswordChanged);
+        $this->queue()->reset();
+
+        self::assertCount(1, $this->log()->revoked, 'HU-L2: the committed one runs instead of being dropped, the open one does not.');
+        self::assertSame((string) $alice->getId(), $this->log()->revoked[0]->owner->id);
+        $this->connection()->rollBack();
+        $phone->request('GET', '/page');
+        self::assertRedirectsTo($phone, '/login');
+        $other->request('GET', '/page');
+        self::assertStringStartsWith('bob@example.com', $this->body($other));
+    }
+
+    public function testACommitInALowPriorityTerminateListenerIsStillReleased(): void
+    {
+        $this->setUpDatabase('cache');
+        $alice = $this->member('alice@example.com');
+        $phone = $this->signIn('alice@example.com');
+        $this->log()->clear();
+        $dispatcher = $this->container()->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+        $dispatcher->addListener(KernelEvents::TERMINATE, function () use ($alice): void {
+            $this->connection()->beginTransaction();
+            $this->manager()->revokeAll($this->fresh($alice), null, RevocationReason::PasswordChanged);
+            $this->connection()->commit();
+        }, -100);
+
+        // The browser terminates the kernel at the end of the request.
+        $phone->request('GET', '/page');
+
+        self::assertSame([RevocationReason::PasswordChanged->value], $this->revokedReasons(), 'HU-L2: the release runs after that listener.');
+    }
+
+    /**
+     * HU-M1 (Q9): a batch looping one transaction per user, where one user's failure undid the effects for the previous.
+     */
+    public function testACommittedPasswordChangeIsNotReleasedIntoALaterOpenTransaction(): void
+    {
+        $this->setUpDatabase('cache');
+        $alice = $this->member('alice@example.com');
+        $bob   = $this->member('bob@example.com');
+        $this->signIn('alice@example.com');
+        $this->log()->clear();
+        $table             = $this->em()->getClassMetadata(Member::class)->getTableName();
+        $level             = null;
+        $this->log()->then = function () use (&$level, $table): void {
+            $level = $this->connection()->getTransactionNestingLevel();
+            $this->connection()->executeStatement('UPDATE ' . $table . " SET email = 'audited@example.com' WHERE email = 'bob@example.com'");
+        };
+
+        $this->connection()->beginTransaction();
+        $alice = $this->fresh($alice);
+        $alice->setPassword('changed');
+        $this->em()->flush();
+        $this->connection()->commit();
+
+        // A second unit of work, which then fails: its flush and an explicit release must not run the first one's effects.
+        $this->connection()->beginTransaction();
+        $bob = $this->fresh($bob);
+        $bob->setEnabled(false);
+        $this->em()->flush();
+        $this->manager()->releaseHeldRevocations();
+        self::assertSame([], $this->log()->revoked);
+        $this->connection()->rollBack();
+        $this->manager()->releaseHeldRevocations();
+
+        self::assertSame([RevocationReason::PasswordChanged->value], $this->revokedReasons());
+        self::assertSame(0, $level, 'Outside any transaction.');
+        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM ' . $table . " WHERE email = 'audited@example.com'"), 'The listener\'s write survives.');
+    }
+
+    public function testAClosedConnectionDoesNotHoldEffectsBackForever(): void
     {
         $this->setUpDatabase('cache');
         $alice = $this->member('alice@example.com');
@@ -167,12 +253,19 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $this->manager()->revokeAll($this->fresh($alice), null, RevocationReason::PasswordChanged);
         $this->connection()->commit();
-        $queue = $this->container()->get(CommitQueue::class);
-        self::assertInstanceOf(CommitQueue::class, $queue);
-        $queue->reset();
+        $this->connection()->beginTransaction();
+        $this->connection()->close(); // Sends the driver no rollback.
         $this->manager()->releaseHeldRevocations();
 
-        self::assertSame([], $this->log()->revoked);
+        self::assertSame([RevocationReason::PasswordChanged->value], $this->revokedReasons());
+    }
+
+    private function queue(): CommitQueue
+    {
+        $queue = $this->container()->get(CommitQueue::class);
+        self::assertInstanceOf(CommitQueue::class, $queue);
+
+        return $queue;
     }
 
     public function testWithoutATransactionTheEventFiresAtOnce(): void
@@ -213,6 +306,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
     public function testARevocationUndoneByARolledBackSavepointIsDroppedAtTheOuterCommit(): void
     {
         $this->setUpDatabase('cache');
+        $this->connection()->setNestTransactionsWithSavepoints(true); // Off by default on DBAL 3.
         $alice = $this->member('alice@example.com');
         $phone = $this->signIn('alice@example.com');
         $this->log()->clear();
@@ -232,6 +326,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
     public function testARevocationKeptAtTheOuterCommitWithOneSessionUndoneOnlyCountsTheOther(): void
     {
         $this->setUpDatabase('cache');
+        $this->connection()->setNestTransactionsWithSavepoints(true); // Off by default on DBAL 3.
         $alice  = $this->member('alice@example.com');
         $laptop = $this->signIn('alice@example.com');
         $phone  = $this->signIn('alice@example.com');

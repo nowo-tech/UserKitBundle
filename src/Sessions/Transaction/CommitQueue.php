@@ -8,6 +8,7 @@ use Closure;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
@@ -43,6 +44,7 @@ final class CommitQueue implements ResetInterface
 
     public function __construct(
         private readonly ManagerRegistry $doctrine,
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -95,10 +97,54 @@ final class CommitQueue implements ResetInterface
     }
 
     /**
-     * Runs the effects of committed transactions, oldest first. Effects of transactions still open stay held. One that
-     * throws does not stop the others (another user's revocation must not be lost); the first exception goes on.
+     * Runs the effects of committed transactions, unless a transaction is open: they then wait for a later boundary.
      */
     public function release(): void
+    {
+        if (!$this->transactionOpen()) {
+            $this->run();
+        }
+    }
+
+    /**
+     * The end of the request, command or message: nothing later would run them, so a transaction still open does not hold
+     * them back (with `autoCommit: false` one always is).
+     */
+    public function finish(): void
+    {
+        $this->run();
+    }
+
+    /**
+     * Doctrine's `postFlush`: a flush with no outer transaction has committed by now, so what it held is applied before
+     * `flush()` returns, as it always was.
+     */
+    public function postFlush(): void
+    {
+        $this->release();
+    }
+
+    /**
+     * Between requests (worker mode). What an open transaction held is dropped: that transaction did not commit. Committed
+     * effects are not: they run now, since a `password_changed` event has no other chance. Nothing may throw from here.
+     */
+    public function reset(): void
+    {
+        $this->open = [];
+        $this->held = [];
+
+        try {
+            $this->run();
+        } catch (Throwable $exception) {
+            $this->logger?->error('NowoUserKitBundle: a revocation effect of a committed transaction failed between requests.', ['exception' => $exception]);
+        }
+    }
+
+    /**
+     * Oldest first. One that throws does not stop the others (another user's revocation must not be lost); the first
+     * exception goes on.
+     */
+    private function run(): void
     {
         $failure = null;
         while ($this->committed !== []) {
@@ -116,22 +162,19 @@ final class CommitQueue implements ResetInterface
     }
 
     /**
-     * Doctrine's `postFlush`: a flush with no outer transaction has committed by now, so what it held is applied before
-     * `flush()` returns, as it always was. Inside an outer transaction nothing has committed and nothing runs.
+     * Asks DBAL, and forgets what it says has ended: a connection closed or lost sends the driver no rollback.
      */
-    public function postFlush(): void
+    private function transactionOpen(): bool
     {
-        $this->release();
-    }
+        foreach ($this->open as $name => $open) {
+            $connection = $this->doctrine->getConnection($name);
+            if ($connection instanceof Connection && $connection->isTransactionActive()) {
+                return true;
+            }
+            unset($this->open[$name]);
+        }
 
-    /**
-     * Drops everything between requests (worker mode).
-     */
-    public function reset(): void
-    {
-        $this->open      = [];
-        $this->held      = [];
-        $this->committed = [];
+        return false;
     }
 
     private function nameOf(Connection $connection): ?string

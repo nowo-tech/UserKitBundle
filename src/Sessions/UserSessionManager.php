@@ -476,7 +476,10 @@ final readonly class UserSessionManager
         $state = $earlier !== null ? $this->store->state($earlier, $owner) : null;
         if ($state !== null) {
             $this->store->rekey($earlier, $hash, $owner);
-            $reason ??= $state['reason'];
+            // Read again after the move: a revocation waiting on this row lands before the rekey gets the lock, and its
+            // mark in a cache store is under the old hash, maybe not even written yet (HU-L3). Not through the revocation
+            // store: with the database store the old hash has no row now, which would read as revoked.
+            $reason ??= ($this->store->state($hash, $owner) ?? $state)['reason'];
         } elseif ($earlier !== null && $displaced === null) {
             $reason = RevocationReason::SignedOut->value;
         }
@@ -511,10 +514,12 @@ final readonly class UserSessionManager
     }
 
     /**
-     * Runs `$effect` now, or holds it until the outermost commit of `$connection` when that is another connection than
-     * the registry's and has a transaction open: the registry's own writes could not follow its rollback. On the
-     * registry's connection the effect runs now, because its writes do follow the transaction and only what they
-     * cannot undo needs to wait ({@see self::revokeRows()}).
+     * For {@see EventListener\PasswordChangeListener}, not an after-commit API: on the registry's connection `$effect`
+     * runs **now**, also in an open transaction, because the registry's writes follow that transaction and only what they
+     * cannot undo needs to wait ({@see self::revokeRows()}). On another connection with a transaction open it is held
+     * until that commit, because the registry's writes could not follow its rollback.
+     *
+     * @internal
      *
      * @param Closure(): void $effect
      */
@@ -528,8 +533,8 @@ final readonly class UserSessionManager
     /**
      * Applies now what committed transactions left waiting: marks in the cache store and `password_changed` events. The
      * bundle does it after a flush, and at the end of the request, command or Messenger message; call this from a job or
-     * standalone script with no such boundary, or to have them right after your commit. A transaction still open keeps
-     * its own.
+     * standalone script with no such boundary, or to have them right after your commit. While any transaction is open
+     * nothing runs: a listener's writes must not depend on that later transaction.
      */
     public function releaseHeldRevocations(): void
     {

@@ -37,6 +37,8 @@ use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 
 final class SessionsWiringTest extends TestCase
 {
@@ -61,10 +63,11 @@ final class SessionsWiringTest extends TestCase
             KernelEvents::RESPONSE,
             KernelEvents::TERMINATE,
             ConsoleEvents::TERMINATE,
-            'Symfony\\Component\\Messenger\\Event\\WorkerMessageHandledEvent',
-            'Symfony\\Component\\Messenger\\Event\\WorkerMessageFailedEvent',
+            WorkerMessageHandledEvent::class,
+            WorkerMessageFailedEvent::class,
         ], $events);
         self::assertGreaterThan(RememberMeEpoch::REISSUE_PRIORITY, $queue->getTag('kernel.event_listener')[0]['priority']);
+        self::assertSame(['release', 'finish', 'finish', 'finish', 'finish'], array_column($queue->getTag('kernel.event_listener'), 'method'));
         self::assertSame([['event' => 'postFlush']], $queue->getTag('doctrine.event_listener'));
         self::assertNotSame([], $queue->getTag('kernel.reset'));
         self::assertFalse($this->load([])->hasDefinition(CommitQueue::class), 'Off with the feature.');

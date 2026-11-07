@@ -17,6 +17,8 @@ use Exception;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -104,6 +106,52 @@ final class CommitQueueTest extends TestCase
         $this->connection->commit();
         $this->queue->release();
         self::assertSame(0, $this->ran);
+    }
+
+    public function testNothingIsReleasedWhileATransactionIsOpenButFinishRunsIt(): void
+    {
+        $this->connection->beginTransaction();
+        $this->hold();
+        $this->connection->commit();
+        $this->connection->beginTransaction();
+        $this->queue->release();
+        $this->queue->postFlush();
+        self::assertSame(0, $this->ran);
+        $this->queue->finish();
+        self::assertSame(1, $this->ran);
+        $this->connection->rollBack();
+    }
+
+    public function testWithoutAutoCommitOnlyFinishRuns(): void
+    {
+        $this->connection->setAutoCommit(false);
+        $this->connection->executeQuery('SELECT 1'); // Connecting opens the transaction.
+        self::assertTrue($this->connection->isTransactionActive());
+        self::assertTrue($this->hold());
+        $this->connection->commit();
+        self::assertTrue($this->connection->isTransactionActive(), 'DBAL opened the next one at once.');
+        $this->queue->release();
+        self::assertSame(0, $this->ran);
+        $this->queue->finish();
+        self::assertSame(1, $this->ran);
+    }
+
+    public function testResetLogsAnEffectThatFails(): void
+    {
+        $logger   = $this->createMock(LoggerInterface::class);
+        $registry = $this->registryOf('main', $this->connection);
+        $queue    = new CommitQueue($registry, $logger);
+        $queue->begun('main');
+        $this->connection->beginTransaction();
+        self::assertTrue($queue->hold($this->connection, static function (): never {
+            throw new RuntimeException('A listener failed.');
+        }));
+        $queue->committed('main');
+        $this->connection->rollBack();
+
+        $logger->expects(self::once())->method('error')->with(self::stringContains('failed between requests'), self::callback(static fn (array $context): bool => $context['exception'] instanceof RuntimeException));
+
+        $queue->reset();
     }
 
     public function testASavepointIsNotTheOutermostCommit(): void
