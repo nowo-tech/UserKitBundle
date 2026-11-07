@@ -44,8 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-REQ-SEC-004: Appendix HU on `d8e93dd`, Pass (conditional) / Medium; HU-M1 fixed, delta check pending. See
-[UPGRADING](UPGRADING.md#unreleased).
+REQ-SEC-004: Pass (good) / Low, independent audit, Appendix HU (`2f9db59`). See [UPGRADING](UPGRADING.md#unreleased).
 
 ### Added
 
@@ -79,6 +78,8 @@ REQ-SEC-004: Appendix HU on `d8e93dd`, Pass (conditional) / Medium; HU-M1 fixed,
   that row, misses the session. It ends at the next sign-out everywhere or at the idle lifetime, not at the registry
   touch. `linkAndSignIn()` holds the row, so a revocation waits for it and is not missed. See
   [SECURITY](SECURITY.md#threat-model).
+  Open (Low): a revocation that read the row before a session rekey and updates after it matches nothing, yet counts the
+  session as ended. Never seen unforced; the next sign-out everywhere ends it.
 - A rolled-back password change no longer ends the user's other sessions with `revocation.store: cache` (HP-L2).
 
 ## [1.12.0] - 2026-11-05

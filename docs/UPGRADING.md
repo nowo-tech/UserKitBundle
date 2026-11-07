@@ -41,7 +41,7 @@
 
 ## Unreleased
 
-No configuration or schema change. REQ-SEC-004: Appendix HU, HU-M1 fixed, delta check pending.
+No configuration or schema change. REQ-SEC-004: Pass (good) / Low, Appendix HU.
 
 - **Hosts that change a password inside their own transaction.** `UserSessionsRevokedEvent` with reason
   `password_changed` now fires after the outermost commit, not during the flush, and does not fire on rollback.
@@ -59,6 +59,9 @@ No configuration or schema change. REQ-SEC-004: Appendix HU, HU-M1 fixed, delta 
   Between the commit and that point the rows are already revoked, so a signed-in request finds out at its next touch at
   the latest. With the registry on another connection the rows wait too, so a process that dies in that gap revokes
   nothing. `kernel.reset` runs what is left; a fatal or an `exit` in that gap loses it.
+  `kernel.terminate`, `console.terminate` and the end of a message run them even with a transaction still open, and a
+  listener's writes then follow that transaction. With `autoCommit: false` one always is open, so a `password_changed`
+  listener must commit its own writes.
 - **Other reasons do not wait.** `UserSessionsRevokedEvent` for `everywhere`, `admin`, `account_disabled`, an erasure and
   so on still fires inside the transaction, so a listener's writes follow it, and it still fires if that transaction
   then rolls back.
@@ -69,6 +72,8 @@ No configuration or schema change. REQ-SEC-004: Appendix HU, HU-M1 fixed, delta 
   sign-out. With AuthKit 1.38.0, a first social link in add mode also loses the account just added to the switcher,
   because `password_changed` now fires after the sign-in; it can be added again.
 - **DBAL 3.** `Connection::commit()` returns null with the middleware. Do not test its return value.
+  On PostgreSQL with DBAL 3 the registry does not work, as in earlier releases: ORM maps the id to a sequence and the
+  registry's insert has no id. Use DBAL 4 on PostgreSQL.
 
 ## To 1.12.0
 
