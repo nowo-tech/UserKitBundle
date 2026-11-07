@@ -226,7 +226,7 @@ too): `id`, `public_id` (32 hex, used in URLs), `user_type` / `user_id` (owner: 
 (`doctrine:migrations:diff` after enabling the feature) or MigrationsKit; see [UPGRADING](UPGRADING.md#to-190).
 
 With `remember_me_epoch.enabled` and no custom `store`, a second table `user_kit_session_epoch` (`id`, `user_type`,
-`user_id`, `epoch_at`; unique on the owner) is mapped; see [UPGRADING](UPGRADING.md#unreleased).
+`user_id`, `epoch_at`; unique on the owner) is mapped; see [UPGRADING](UPGRADING.md#to-1130).
 
 ### Routes and access control
 

@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.13.0](#to-1130)
 - [To 1.12.0](#to-1120)
 - [To 1.11.1](#to-1111)
 - [To 1.11.0](#to-1110)
@@ -40,6 +41,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.13.0
+
+From **1.12.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 No configuration or schema change. REQ-SEC-004: Pass (good) / Low, Appendix HU.
 

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.13.0] - 2026-11-07](#1130---2026-11-07)
 - [[1.12.0] - 2026-11-05](#1120---2026-11-05)
 - [[1.11.1] - 2026-11-03](#1111---2026-11-03)
 - [[1.11.0] - 2026-11-03](#1110---2026-11-03)
@@ -44,7 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-REQ-SEC-004: Pass (good) / Low, independent audit, Appendix HU (`2f9db59`). See [UPGRADING](UPGRADING.md#unreleased).
+## [1.13.0] - 2026-11-07
+
+REQ-SEC-004: Pass (good) / Low, independent audit, Appendix HU (`2f9db59`). See [UPGRADING](UPGRADING.md#to-1130).
 
 ### Added
 
@@ -81,6 +84,8 @@ REQ-SEC-004: Pass (good) / Low, independent audit, Appendix HU (`2f9db59`). See 
   Open (Low): a revocation that read the row before a session rekey and updates after it matches nothing, yet counts the
   session as ended. Never seen unforced; the next sign-out everywhere ends it.
 - A rolled-back password change no longer ends the user's other sessions with `revocation.store: cache` (HP-L2).
+
+[1.13.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.13.0
 
 ## [1.12.0] - 2026-11-05
 
