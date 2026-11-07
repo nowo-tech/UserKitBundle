@@ -48,8 +48,8 @@ final class SessionsTestKernel extends Kernel
      * @param array<string, mixed> $userKit `nowo_user_kit` configuration
      * @param Closure(RoutingConfigurator): void|null $routes routes (null = the bundle loader + the test pages)
      * @param list<string> $without bundles / features to leave out (twig)
-     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool} $options extra `remember_me` options of the
-     *                                                                                                   main firewall; a second stateful firewall with its own context under /back
+     * @param array{remember_me?: array<string, mixed>, back_firewall?: bool, catch_all?: bool, database_url?: string|null, registry_manager?: bool} $options extra `remember_me` options of the
+     *                                                                                                                                                        main firewall; a second stateful firewall with its own context under /back; another database than SQLite; the registry on its own connection and entity manager (`registry`)
      */
     public function __construct(
         private readonly string $id,
@@ -171,14 +171,24 @@ final class SessionsTestKernel extends Kernel
         if (!in_array('twig', $this->without, true)) {
             $container->extension('twig', ['strict_variables' => true]);
         }
-        $container->extension('doctrine', [
-            'dbal' => ['url' => 'sqlite:///%kernel.cache_dir%/registry.db'],
-            'orm'  => ['mappings' => ['SessionsTest' => [
-                'type'      => 'attribute',
-                'is_bundle' => false,
-                'dir'       => __DIR__,
-                'prefix'    => __NAMESPACE__,
-            ]]],
+        $mappings = ['SessionsTest' => [
+            'type'      => 'attribute',
+            'is_bundle' => false,
+            'dir'       => __DIR__,
+            'prefix'    => __NAMESPACE__,
+        ]];
+        $container->extension('doctrine', ($this->options['registry_manager'] ?? false) ? [
+            'dbal' => ['default_connection' => 'default', 'connections' => [
+                'default'  => ['url' => 'sqlite:///%kernel.cache_dir%/users.db'],
+                'registry' => ['url' => 'sqlite:///%kernel.cache_dir%/registry.db'],
+            ]],
+            'orm' => ['default_entity_manager' => 'default', 'entity_managers' => [
+                'default'  => ['connection' => 'default', 'mappings' => $mappings],
+                'registry' => ['connection' => 'registry'],
+            ]],
+        ] : [
+            'dbal' => ['url' => $this->options['database_url'] ?? 'sqlite:///%kernel.cache_dir%/registry.db'],
+            'orm'  => ['mappings' => $mappings],
         ]);
         $container->extension('security', [
             'password_hashers' => [Member::class => 'plaintext'],

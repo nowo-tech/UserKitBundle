@@ -13,10 +13,13 @@ use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
+use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
 use Nowo\UserKitBundle\Sessions\Security\AllowAllSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Tests\Support\FakeExtension;
 use PHPUnit\Framework\TestCase;
@@ -27,11 +30,13 @@ use Symfony\Component\Cache\Adapter\ProxyAdapter;
 use Symfony\Component\Cache\Adapter\RedisAdapter;
 use Symfony\Component\Cache\Adapter\TagAwareAdapter;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\HttpKernel\KernelEvents;
 
 final class SessionsWiringTest extends TestCase
 {
@@ -40,6 +45,29 @@ final class SessionsWiringTest extends TestCase
         $container = $this->load([]);
         self::assertFalse($container->hasDefinition(UserSessionManager::class));
         self::assertFalse($container->getParameter('nowo_user_kit.sessions.enabled'));
+    }
+
+    public function testTheCommitQueueWatchesEveryConnectionAndReleasesAtEveryBoundary(): void
+    {
+        $container = $this->load(['enabled' => true]);
+
+        $middleware = $container->getDefinition(TransactionBoundaryMiddleware::class);
+        self::assertTrue($middleware->isAbstract(), 'DoctrineBundle makes one child per connection.');
+        self::assertSame([[]], $middleware->getTag('doctrine.middleware'), 'No `connection`: every connection, since the users and the registry may differ.');
+
+        $queue  = $container->getDefinition(CommitQueue::class);
+        $events = array_column($queue->getTag('kernel.event_listener'), 'event');
+        self::assertSame([
+            KernelEvents::RESPONSE,
+            KernelEvents::TERMINATE,
+            ConsoleEvents::TERMINATE,
+            'Symfony\\Component\\Messenger\\Event\\WorkerMessageHandledEvent',
+            'Symfony\\Component\\Messenger\\Event\\WorkerMessageFailedEvent',
+        ], $events);
+        self::assertGreaterThan(RememberMeEpoch::REISSUE_PRIORITY, $queue->getTag('kernel.event_listener')[0]['priority']);
+        self::assertSame([['event' => 'postFlush']], $queue->getTag('doctrine.event_listener'));
+        self::assertNotSame([], $queue->getTag('kernel.reset'));
+        self::assertFalse($this->load([])->hasDefinition(CommitQueue::class), 'Off with the feature.');
     }
 
     public function testCustomCheckerAndDemoChecker(): void

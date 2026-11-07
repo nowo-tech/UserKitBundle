@@ -41,6 +41,28 @@
 
 ## Unreleased
 
+No configuration or schema change. REQ-SEC-004: re-verification pending.
+
+- **Hosts that change a password inside their own transaction.** `UserSessionsRevokedEvent` with reason
+  `password_changed` now fires after the outermost commit, not during the flush, and does not fire on rollback.
+  A listener on it no longer takes part in that transaction: its database writes are its own, and a failure in it no
+  longer rolls the password change back. With no transaction open (a plain `flush()`) it fires as before, before
+  `flush()` returns.
+- **`revocation.store: cache`.** Inside a transaction the mark waits for the outermost commit, and goes with a rollback.
+  The registry rows are written in the transaction as before.
+- **When the waiting effects run.** After a commit they run on the next of: `postFlush`, `kernel.response` (priority
+  32), `kernel.terminate`, `console.terminate`, the end of a Messenger message. Between the commit and that point the
+  rows are already revoked, so a signed-in request finds out at its next touch at the latest. A standalone script that
+  boots no kernel event should call `UserSessionManager::releaseHeldRevocations()` after its commit. `kernel.reset`
+  drops what is left.
+- **Other reasons do not wait.** `UserSessionsRevokedEvent` for `everywhere`, `admin`, `account_disabled`, an erasure and
+  so on still fires inside the transaction, so a listener's writes follow it, and it still fires if that transaction
+  then rolls back.
+- **A connection you built yourself.** Only connections from DoctrineBundle get the middleware. On any other, or with
+  the middleware removed, everything runs at once as in 1.12.
+- **AuthKit.** `SocialHandlerSignInRollback::restore()` should call `adopt()` for GY-L7 and HP-I2 to close. Until an
+  AuthKit release does, the earlier session registers on its next request as today.
+
 ## To 1.12.0
 
 From **1.11.1**:

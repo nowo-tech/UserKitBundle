@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\PersonalData;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 use function sprintf;
@@ -26,6 +27,7 @@ final readonly class PersonalDataEraser
         private iterable $erasers,
         private iterable $guards,
         private ManagerRegistry $doctrine,
+        private ?CommitQueue $commits = null,
     ) {
     }
 
@@ -65,7 +67,7 @@ final readonly class PersonalDataEraser
         }
 
         // @igor-ignore - Closure runs synchronously inside wrapInTransaction(); it is not stored on the service.
-        return $entityManager->wrapInTransaction(function (EntityManagerInterface $entityManager) use ($request): array {
+        $ran = $entityManager->wrapInTransaction(function (EntityManagerInterface $entityManager) use ($request): array {
             $ran = [];
             foreach ($this->erasers as $eraser) {
                 if (!$eraser->supports($request->user)) {
@@ -80,6 +82,10 @@ final readonly class PersonalDataEraser
 
             return $ran;
         });
+        // Marks in the revocation cache of the session eraser: what was erased is committed now, not at the end of the request.
+        $this->commits?->release();
+
+        return $ran;
     }
 
     /**

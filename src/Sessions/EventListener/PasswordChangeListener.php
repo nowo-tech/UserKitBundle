@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Sessions\EventListener;
 
+use Doctrine\ORM\Event\PostFlushEventArgs;
 use Doctrine\ORM\Event\PreUpdateEventArgs;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
@@ -20,6 +21,9 @@ use function spl_object_id;
  * reset by e-mail, admin, CLI…), every other session of that user is signed out — the session that changed it stays
  * when it belongs to the same user. Collected on `preUpdate` (Doctrine entity listener on each profile user class),
  * applied on `postFlush`, so it hooks on what is written instead of on each password form.
+ *
+ * A flush inside a longer transaction is not the end of the story (HP-L2): what a rollback cannot undo waits for the
+ * outermost commit, see {@see UserSessionManager::whenCommitted()}.
  */
 final class PasswordChangeListener implements ResetInterface
 {
@@ -50,12 +54,19 @@ final class PasswordChangeListener implements ResetInterface
     /**
      * Signs the other sessions out once the change is stored.
      */
-    public function postFlush(): void
+    public function postFlush(?PostFlushEventArgs $args = null): void
     {
         $pending       = $this->pending;
         $this->pending = [];
         foreach ($pending as $change) {
-            $this->sessions->revokeAll($change['user'], null, RevocationReason::PasswordChanged, $change['except']);
+            $revoke = function () use ($change): void {
+                $this->sessions->revokeAll($change['user'], null, RevocationReason::PasswordChanged, $change['except']);
+            };
+            if ($args instanceof PostFlushEventArgs) {
+                $this->sessions->whenCommitted($args->getObjectManager()->getConnection(), $revoke);
+            } else {
+                $revoke();
+            }
         }
     }
 

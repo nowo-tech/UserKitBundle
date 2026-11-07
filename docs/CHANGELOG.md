@@ -44,6 +44,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+REQ-SEC-004: re-verification pending. See [UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **`UserSessionManager::adopt(Request $request, object $user)`** (GY-L7, HP-I2). Registers the request's session at
+  once for `$user`, in the request's firewall context, for a sign-in that failed and handed the session back to the
+  earlier account: no limit, no eviction, no `atLogin: true` event. A session revoked before the sign-in deleted its row
+  comes back registered as revoked with that reason, and its next request signs it out; a row a rollback brought back
+  follows the new session id instead of staying behind. Needs a matching call in AuthKit's
+  `SocialHandlerSignInRollback::restore()`, which this release does not ship.
+- **`UserSessionManager::releaseHeldRevocations()`** and **`whenCommitted()`**. The first applies at once what committed
+  transactions left waiting, for a job or script with no request, command or Messenger boundary.
+
+### Changed
+
+- **Inside a database transaction, what a rollback cannot undo waits for the outermost commit (HP-L2).** The mark in
+  the `cache` revocation store, for every reason, and `UserSessionsRevokedEvent` for `password_changed`. A rollback
+  drops them, so a rolled-back password change no longer signs the user's other sessions out or tells listeners a
+  password changed. Other reasons keep firing their event at once, inside the transaction: their listeners take part in
+  it. With no transaction open nothing changes. A DBAL driver middleware (`doctrine.middleware`, every connection, only
+  with `sessions.enabled`) watches the outermost transaction; it changes no statement or result.
+- With the registry on another connection than the users, a password change inside a transaction on the users'
+  connection revokes after that transaction commits, rows included.
+
+### Security
+
+- A failed sign-in over an existing session can no longer leave that session outside the registry until its next
+  stateful request, once AuthKit makes the call above (GY-L7). Open: a revocation landing after the sign-in deleted the
+  row and before `adopt()`, with no transaction holding that row, misses the session; see
+  [SECURITY](SECURITY.md#threat-model).
+- A rolled-back password change no longer ends the user's other sessions with `revocation.store: cache` (HP-L2).
+
 ## [1.12.0] - 2026-11-05
 
 Minor release. See [UPGRADING](UPGRADING.md#to-1120).
