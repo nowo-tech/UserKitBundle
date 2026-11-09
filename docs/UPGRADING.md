@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.13.2](#to-1132)
 - [To 1.13.1](#to-1131)
 - [To 1.13.0](#to-1130)
 - [To 1.12.0](#to-1120)
@@ -42,6 +43,17 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.13.2
+
+From **1.13.1**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+
+On MySQL and MariaDB the session touch fallback now takes a shared lock (`FOR SHARE` on MySQL 8.0+, `LOCK IN SHARE MODE` on MariaDB and MySQL 5.7), chosen from the DBAL platform. Declare the real server in `serverVersion` (for MariaDB, the `-MariaDB` suffix): a MariaDB or MySQL 5.7 server declared as MySQL 8+ gets `FOR SHARE`, a syntax error there, and the touch then answers 500 (fails closed; audit IY-I3).
 
 ## To 1.13.1
 
