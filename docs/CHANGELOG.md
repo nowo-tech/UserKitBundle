@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.13.1] - 2026-11-09](#1131---2026-11-09)
 - [[1.13.0] - 2026-11-07](#1130---2026-11-07)
 - [[1.12.0] - 2026-11-05](#1120---2026-11-05)
 - [[1.11.1] - 2026-11-03](#1111---2026-11-03)
@@ -45,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-11-09
+
 Patch release (target 1.13.1).
 
 ### Fixed
@@ -59,6 +62,8 @@ Patch release (target 1.13.1).
   MySQL (without `MYSQL_ATTR_FOUND_ROWS`) and PostgreSQL. The other affected-row reads of the bundle were checked:
   `deleteLiveRow()` counts deleted rows (exact on every platform), and the other writes (`markRevoked()`, `revoke()`,
   `rekey()`, the remember-me epoch `bump()`) do not read the count.
+
+[1.13.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.13.1
 
 ## [1.13.0] - 2026-11-07
 
