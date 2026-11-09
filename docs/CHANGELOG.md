@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.14.0] - 2026-11-09](#1140---2026-11-09)
 - [[1.13.2] - 2026-11-09](#1132---2026-11-09)
 - [[1.13.1] - 2026-11-09](#1131---2026-11-09)
 - [[1.13.0] - 2026-11-07](#1130---2026-11-07)
@@ -47,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-09
+
 Target 1.14.0.
 
 ### Added
@@ -77,6 +80,8 @@ Target 1.14.0.
 ### Documentation
 
 - USAGE: new section "Using it from a DDD / hexagonal application" (where the bundle sits in a hexagonal host, the ports, events and DTOs to build an anti-corruption layer on, and the known limitations).
+
+[1.14.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.14.0
 
 ## [1.13.2] - 2026-11-09
 
