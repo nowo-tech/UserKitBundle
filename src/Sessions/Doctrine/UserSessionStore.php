@@ -76,15 +76,29 @@ final readonly class UserSessionStore
     /**
      * Records activity of the owner's live row of a session (and its device id when it was unknown).
      *
-     * @return bool whether a live (not revoked) row was touched
+     * The affected-row count is not the answer: MySQL reports 0 for an UPDATE that writes the values the row already
+     * holds (unless the connection sets CLIENT_FOUND_ROWS), so two requests of one session touching in the same second
+     * would read as a session that is gone. On 0 affected rows the live row is looked up again; a row deleted or revoked
+     * meanwhile is still not found, so the session still ends (no fail-open).
+     *
+     * @return bool whether the owner's live (not revoked) row exists and was touched
      */
     public function touch(string $hash, SessionUser $owner, DateTimeImmutable $now, ?string $deviceId = null): bool
     {
-        return $this->connection()->executeStatement(
+        $params   = ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id];
+        $affected = $this->connection()->executeStatement(
             'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
-            ['now' => $now, 'device' => $deviceId, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+            ['now' => $now, 'device' => $deviceId] + $params,
             ['now' => Types::DATETIME_IMMUTABLE],
-        ) > 0;
+        );
+        if ($affected > 0) {
+            return true;
+        }
+
+        return $this->connection()->fetchOne(
+            'SELECT 1 FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            $params,
+        ) !== false;
     }
 
     /**
