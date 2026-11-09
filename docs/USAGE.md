@@ -35,6 +35,7 @@
   - [Host with its own session UI](#host-with-its-own-session-ui)
 - [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
   - [Override in the application](#override-in-the-application)
+- [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
 - [AuthKit coexistence](#authkit-coexistence)
 - [Forms in Twig (REQ-TWIG-005)](#forms-in-twig-req-twig-005)
 
@@ -793,6 +794,75 @@ account:
 ```
 
 Symfony uses app translations first; missing keys fall back to the bundle.
+
+## Using it from a DDD / hexagonal application
+
+UserKit is an infrastructure adapter around your Symfony security user, plus one bounded context of its own: the
+optional session registry, with its own tables `user_kit_session` / `user_kit_session_epoch`.
+
+**Keeping the domain free of the bundle**
+
+- No Doctrine association and no `resolve_target_entities`: session rows reference their owner by `user_type` + `user_id`
+  strings (`SessionUser`), with no foreign key to your tables.
+- The traits (`EnabledUserTrait`, `LastActivityTrait`, `UiPreferencesTrait`, `ProductTourProgressTrait`) and the
+  embeddables are optional. A domain entity can implement the plain interfaces instead (`AccountStatusInterface`,
+  `LastActivityInterface`, `UiPreferencesInterface`, `ProductTourProgressInterface`; they have no Doctrine
+  imports), or simply expose the field named in `account_status.field` / `last_activity.field`.
+- Every public API takes `object $user`, never one of your classes.
+- Put the session registry in its own entity manager if you want: `sessions.doctrine.entity_manager`.
+
+**Ports you implement (adapters in your infrastructure layer)**
+
+| Port | Config / wiring |
+|---|---|
+| `Session\SessionInvalidatorInterface` | alias the interface |
+| `Sessions\Limit\SessionLimitResolverInterface` (returns `SessionLimit`) | `sessions.limit.resolver` |
+| `Sessions\Security\SessionsAccessCheckerInterface` | `sessions.security.access_checker` |
+| `Sessions\Epoch\SessionEpochStoreInterface` | `sessions.remember_me_epoch.store` |
+| `Sessions\Client\DeviceIdResolverInterface` | `sessions.client.device_id_resolver` |
+| `PersonalData\PersonalDataExportProviderInterface`, `PersonalDataEraserInterface`, `ErasureGuardInterface` | autoconfigured tags |
+
+**Events to translate into your domain** (Symfony EventDispatcher): `UserSessionStartedEvent`,
+`UserSessionsRevokedEvent`, `UserSessionsDeletedEvent`, `UserSessionsPurgedEvent`, `SessionLimitReachedEvent`
+(namespace `Nowo\UserKitBundle\Sessions\Event`). Payloads are bundle value objects (`SessionUser`, `SessionClient`,
+`SessionLimit`, `RevocationReason`) plus the security user as `object`.
+
+**Driving the bundle from domain events.** The `password_change`, `user_removal` and
+`invalidate_sessions_on_disable` features are Doctrine entity listeners on `user_class`. If your domain raises its own
+events, call the bundle from a handler instead:
+
+```php
+#[AsMessageHandler]
+final class RevokeSessionsOnPasswordChanged
+{
+    public function __construct(private UserSessionManager $sessions, private UserRepository $users) {}
+
+    public function __invoke(PasswordChanged $event): void
+    {
+        $user = $this->users->get($event->userId);
+        $this->sessions->revokeAll($user, null, RevocationReason::PasswordChanged);
+    }
+}
+```
+
+Use `UserSessionManager::forgetUser($user)` before deleting a user. `UserSessionManager`, `PersonalDataExporter`,
+`PersonalDataEraser` and `UserPresenceResolver` are final and have no interface, so wrap them in your own port if your
+application layer must not depend on them.
+
+**Known limitations**
+
+- The session owner comes from the Doctrine root class and id of the user (else the class plus `getUserIdentifier()`)
+  and cannot be configured. If your security user is a non-entity adapter around a domain entity, rows written at
+  sign-in and the Doctrine listeners on the domain entity use different owners. Keep the entity listeners off and
+  revoke explicitly with the object you signed in with.
+- Last activity is written with a DQL `UPDATE` on the security user's class, so the security user must be a Doctrine
+  entity.
+- `PersonalDataEraser::erase()` needs a Doctrine ORM entity manager for the user class and runs the erasers in its
+  transaction.
+- The admin sessions page loads the subject with `ManagerRegistry::find(user_class, id)`.
+- `UserSessionManager::listFor()` returns `UserSession` entities. Map them to `SessionRow::of()` (or your own DTO)
+  before they leave the adapter.
+- There are no events for account disabled, last activity or personal-data export/erasure.
 
 ## AuthKit coexistence
 
