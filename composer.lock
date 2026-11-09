@@ -937,16 +937,16 @@
         },
         {
             "name": "nowo-tech/form-kit-bundle",
-            "version": "v2.17.0",
+            "version": "v2.18.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/FormKitBundle.git",
-                "reference": "dbee72ff64fbc452da5865637815d26d6c223019"
+                "reference": "f981fb1d95076de8b532b582f6ea0d679283bf53"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/dbee72ff64fbc452da5865637815d26d6c223019",
-                "reference": "dbee72ff64fbc452da5865637815d26d6c223019",
+                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/f981fb1d95076de8b532b582f6ea0d679283bf53",
+                "reference": "f981fb1d95076de8b532b582f6ea0d679283bf53",
                 "shasum": ""
             },
             "require": {
@@ -1050,7 +1050,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-30T21:58:40+00:00"
+            "time": "2026-11-05T10:20:22+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
