@@ -13,8 +13,8 @@ use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Epoch\EpochRememberMeHandler;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
-use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Symfony\Component\Cache\Adapter\ApcuAdapter;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -218,7 +218,7 @@ final class SessionsPass implements CompilerPassInterface
             $container->setDefinition($decorator, (new Definition(EpochRememberMeHandler::class, [
                 new Reference($decorator . '.inner'),
                 new Reference(RememberMeEpoch::class),
-                new Reference(SessionUserResolver::class),
+                new Reference(SessionOwnerResolverInterface::class),
                 is_int($options['lifetime'] ?? null) ? $options['lifetime'] : 31536000,
                 $persistent ? ($arguments[0] ?? null) : null,
             ]))->setDecoratedService($id));

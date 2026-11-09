@@ -47,6 +47,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target 1.14.0.
+
+### Added
+
+- **Session owner port** (`Sessions\Owner\SessionOwnerResolverInterface`, config `sessions.owner.resolver`): maps a user
+  object to the owner its registry rows and remember-me epoch are stored under. The default is `SessionUserResolver`,
+  unchanged (Doctrine root class + id, else class + user identifier). A host whose security user is a non-entity adapter
+  around a domain entity maps both to one owner, so `password_change`, `user_removal` and
+  `invalidate_sessions_on_disable` reach the rows written at sign-in. Every internal consumer (`UserSessionManager`,
+  `RememberMeEpoch`, `EpochRememberMeHandler`) uses the interface.
+- **Revocations no longer miss silently** (`sessions.owner.on_unresolved: log|exception`, default `log`): `revoke()`,
+  `revokeOthers()`, `revokeAll()`, `revokeDevice()`, `forgetUser()`, the password-change and user-removal listeners and the
+  registry session invalidator log a warning when the user has no owner; with `exception` they throw
+  `Sessions\Owner\UnresolvedSessionOwnerException` (the Doctrine listeners before the write). New
+  `UserSessionManager::revocationOwner()`.
+- **Ports for application services**, aliased to the existing final classes: `Sessions\UserSessionsInterface`
+  (`UserSessionManager`), `PersonalData\PersonalDataExporterInterface`, `PersonalData\PersonalDataErasureInterface`
+  (`PersonalDataEraser`) and `Presence\UserPresenceResolverInterface`.
+- `UserSessionManager::listRowsFor()`: the live sessions as `SessionRow` DTOs (no ORM entity leaves the bundle).
+
+### Changed
+
+- `PersonalDataEraser::erase()` joins a transaction the host already opened on the user's entity manager (flush once;
+  commit, rollback and closing the entity manager stay with the host) instead of nesting its own. Without an open
+  transaction nothing changes.
+
 ### Documentation
 
 - USAGE: new section "Using it from a DDD / hexagonal application" (where the bundle sits in a hexagonal host, the ports, events and DTOs to build an anti-corruption layer on, and the known limitations).

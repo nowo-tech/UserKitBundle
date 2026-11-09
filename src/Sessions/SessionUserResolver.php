@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Sessions;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Stringable;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -20,8 +21,10 @@ use function reset;
  * Owner reference of a session: Doctrine-mapped users by their root entity class and single identifier (stable when
  * the e-mail / username changes); other security users by their class and user identifier. Users without a usable
  * reference (composite or empty id, not persisted yet, too long) are not registered.
+ *
+ * Default {@see SessionOwnerResolverInterface} (`sessions.owner.resolver` unset).
  */
-final readonly class SessionUserResolver
+final readonly class SessionUserResolver implements SessionOwnerResolverInterface
 {
     public function __construct(
         private ?ManagerRegistry $doctrine = null,

@@ -26,6 +26,8 @@ services:
 
     # Resolves whether a user is currently online from lastActivityAt.
     Nowo\UserKitBundle\Presence\UserPresenceResolver: ~
+    Nowo\UserKitBundle\Presence\UserPresenceResolverInterface:
+        alias: Nowo\UserKitBundle\Presence\UserPresenceResolver
 
     # Updates lastActivityAt on authenticated requests (throttled).
     Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber: ~

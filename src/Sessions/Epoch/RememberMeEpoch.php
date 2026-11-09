@@ -7,7 +7,7 @@ namespace Nowo\UserKitBundle\Sessions\Epoch;
 use DateTimeImmutable;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
-use Nowo\UserKitBundle\Sessions\SessionUserResolver;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
@@ -64,7 +64,7 @@ final class RememberMeEpoch implements ResetInterface
      */
     public function __construct(
         private readonly SessionEpochStoreInterface $store,
-        private readonly SessionUserResolver $owners,
+        private readonly SessionOwnerResolverInterface $owners,
         private readonly ClockInterface $clock,
         private readonly string $secret,
         private readonly ?TokenStorageInterface $tokens = null,

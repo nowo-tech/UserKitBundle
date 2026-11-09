@@ -14,7 +14,7 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 /**
  * Tells whether a user is online from its last activity timestamp and the profile online threshold.
  */
-final readonly class UserPresenceResolver
+final readonly class UserPresenceResolver implements UserPresenceResolverInterface
 {
     /**
      * Receives the profile registry, the property accessor and the clock.

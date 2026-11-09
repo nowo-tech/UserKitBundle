@@ -44,6 +44,20 @@
 
 ## Unreleased
 
+Target 1.14.0. Additive; no configuration change is needed.
+
+- **Non-entity security user** (a `SecurityUser` adapter around a domain user): implement
+  `Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface` so the adapter and the Doctrine entity resolve to
+  the same `SessionUser`, and set `nowo_user_kit.sessions.owner.resolver` to its service id. Rows already stored under
+  the old owner (adapter class + user identifier) are not migrated: they are revoked by their idle lifetime, or run
+  `revokeAll()` once with the adapter before switching.
+- A revocation for a user without owner now logs a warning (`sessions.owner.on_unresolved: log`). Set `exception` to make
+  it fail instead (the Doctrine listeners then abort the flush).
+- Application services can type against `UserSessionsInterface`, `PersonalDataExporterInterface`,
+  `PersonalDataErasureInterface` and `UserPresenceResolverInterface` instead of the final classes.
+- `PersonalDataEraser::erase()` called inside your own open transaction now joins it: the erasers' writes are committed or
+  rolled back with your transaction, and an eraser exception no longer closes your entity manager.
+
 ## To 1.13.2
 
 From **1.13.1**:

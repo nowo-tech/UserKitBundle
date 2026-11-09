@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
+use Nowo\UserKitBundle\PersonalData\PersonalDataErasureInterface;
 use Nowo\UserKitBundle\PersonalData\PersonalDataExporter;
+use Nowo\UserKitBundle\PersonalData\PersonalDataExporterInterface;
+use Nowo\UserKitBundle\Presence\UserPresenceResolver;
+use Nowo\UserKitBundle\Presence\UserPresenceResolverInterface;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\PersonalData\SessionsEraser;
@@ -74,7 +78,13 @@ final class SessionHooksTest extends SessionsKernelTestCase
         $this->boot([], ['personal_data' => ['enabled' => true]], services: static function (ContainerConfigurator $c): void {
             $c->services()->alias('test.exporter', PersonalDataExporter::class)->public();
             $c->services()->alias('test.eraser', PersonalDataEraser::class)->public();
+            $c->services()->alias('test.exporter_port', PersonalDataExporterInterface::class)->public();
+            $c->services()->alias('test.erasure_port', PersonalDataErasureInterface::class)->public();
+            $c->services()->alias('test.presence_port', UserPresenceResolverInterface::class)->public();
         });
+        self::assertSame($this->container()->get('test.exporter'), $this->container()->get('test.exporter_port'));
+        self::assertSame($this->container()->get('test.eraser'), $this->container()->get('test.erasure_port'));
+        self::assertInstanceOf(UserPresenceResolver::class, $this->container()->get('test.presence_port'));
         $alice = $this->member('alice@example.com');
         $phone = $this->signIn('alice@example.com');
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Unit\PersonalData;
 
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
@@ -60,6 +61,24 @@ final class PersonalDataEraserTest extends TestCase
         };
 
         $this->assertSame(['a', 'c'], (new PersonalDataEraser([$eraser('a', true), $eraser('b', false), $eraser('c', true)], [], $doctrine))->erase(new stdClass()));
+    }
+
+    public function testAnOpenHostTransactionIsJoinedNotOwned(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $entityManager->expects($this->never())->method('wrapInTransaction');
+        $entityManager->expects($this->once())->method('flush');
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+        $eraser = $this->createMock(PersonalDataEraserInterface::class);
+        $eraser->method('supports')->willReturn(true);
+        $eraser->method('getKey')->willReturn('host');
+        $eraser->expects($this->once())->method('erase');
+
+        self::assertSame(['host'], (new PersonalDataEraser([$eraser], [], $doctrine))->erase(new stdClass()));
     }
 
     public function testErasersSeeTheIdentifierCapturedBeforeAnyOfThemRan(): void

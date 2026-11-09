@@ -21,6 +21,7 @@ use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\EventListener\UserRemovalListener;
 use Nowo\UserKitBundle\Sessions\Limit\ConfiguredSessionLimitResolver;
 use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Nowo\UserKitBundle\Sessions\PersonalData\SessionsEraser;
 use Nowo\UserKitBundle\Sessions\PersonalData\SessionsExportProvider;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
@@ -38,6 +39,7 @@ use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
 use Nowo\UserKitBundle\Sessions\Twig\SessionsTwigExtension;
 use Nowo\UserKitBundle\Sessions\Ui\SessionsPages;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
+use Nowo\UserKitBundle\Sessions\UserSessionsInterface;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\ConsoleEvents;
@@ -165,7 +167,7 @@ final class SessionsLoader
     public static function load(ContainerBuilder $container, array $sessions, array $profiles, bool $personalData): void
     {
         self::assertLiteralBooleans($sessions);
-        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
+        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, owner: array{resolver: string|null, on_unresolved: string}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
         $webUi   = $sessions['web_ui'];
         $enabled = $sessions['enabled'];
         $container->setParameter('nowo_user_kit.sessions.enabled', $enabled);
@@ -187,6 +189,8 @@ final class SessionsLoader
             ->addTag('doctrine.event_listener', ['event' => 'loadClassMetadata']));
         $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager']]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
+        $ownerResolver = $sessions['owner']['resolver'];
+        $container->setAlias(SessionOwnerResolverInterface::class, is_string($ownerResolver) && $ownerResolver !== '' ? $ownerResolver : SessionUserResolver::class);
 
         $ttl       = $sessions['idle_lifetime'] + $sessions['touch_interval'];
         $cachePool = $sessions['revocation']['store'] === 'cache' ? (string) $sessions['revocation']['cache_pool'] : null;
@@ -200,7 +204,7 @@ final class SessionsLoader
         $container->setDefinition(UserSessionManager::class, (new Definition(UserSessionManager::class, [
             new Reference(UserSessionStore::class),
             new Reference(RevocationStoreInterface::class),
-            new Reference(SessionUserResolver::class),
+            new Reference(SessionOwnerResolverInterface::class),
             new Reference(ClockInterface::class),
             $sessions['hash_secret'],
             $sessions['idle_lifetime'],
@@ -211,7 +215,10 @@ final class SessionsLoader
             new Reference('security.firewall.map', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             new Reference(SessionClientFactory::class),
             new Reference(CommitQueue::class),
+            new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            $sessions['owner']['on_unresolved'] === 'exception',
         ]))->setPublic(true));
+        $container->setAlias(UserSessionsInterface::class, UserSessionManager::class);
 
         self::registerCommitQueue($container, $doctrine);
 
@@ -385,7 +392,7 @@ final class SessionsLoader
         }
         $container->setDefinition(RememberMeEpoch::class, (new Definition(RememberMeEpoch::class, [
             new Reference(SessionEpochStoreInterface::class),
-            new Reference(SessionUserResolver::class),
+            new Reference(SessionOwnerResolverInterface::class),
             new Reference(ClockInterface::class),
             $sessions['hash_secret'],
             new Reference('security.token_storage', ContainerInterface::NULL_ON_INVALID_REFERENCE),

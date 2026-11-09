@@ -34,7 +34,7 @@ final class UserRemovalListener implements ResetInterface
      */
     public function preRemove(object $user, PreRemoveEventArgs $args): void
     {
-        $owner = $this->sessions->owner($user);
+        $owner = $this->sessions->revocationOwner($user, 'user_removal');
         if ($owner instanceof SessionUser) {
             $this->pending[spl_object_id($user)] = ['user' => $user, 'owner' => $owner];
         }

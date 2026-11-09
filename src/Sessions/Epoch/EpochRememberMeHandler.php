@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Sessions\Epoch;
 
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
-use Nowo\UserKitBundle\Sessions\SessionUserResolver;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Symfony\Component\Security\Core\Authentication\RememberMe\TokenProviderInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -39,7 +39,7 @@ final readonly class EpochRememberMeHandler implements RememberMeHandlerInterfac
     public function __construct(
         private RememberMeHandlerInterface $inner,
         private RememberMeEpoch $epoch,
-        private SessionUserResolver $owners,
+        private SessionOwnerResolverInterface $owners,
         private int $lifetime,
         private ?TokenProviderInterface $tokenProvider = null,
     ) {
