@@ -8,6 +8,9 @@ use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
@@ -81,6 +84,8 @@ final readonly class UserSessionStore
      * would read as a session that is gone. On 0 affected rows the live row is looked up again; a row deleted or revoked
      * meanwhile is still not found, so the session still ends (no fail-open).
      *
+     * @phpstan-impure
+     *
      * @return bool whether the owner's live (not revoked) row exists and was touched
      */
     public function touch(string $hash, SessionUser $owner, DateTimeImmutable $now, ?string $deviceId = null): bool
@@ -96,9 +101,26 @@ final readonly class UserSessionStore
         }
 
         return $this->connection()->fetchOne(
-            'SELECT 1 FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            'SELECT 1 FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL' . self::sharedLock($this->connection()->getDatabasePlatform()),
             $params,
         ) !== false;
+    }
+
+    /**
+     * Locking clause of the touch fallback: on MySQL/MariaDB (`REPEATABLE READ` by default) a plain `SELECT` inside a
+     * transaction that already read reuses that snapshot and would see a session revoked since as live (IY-L1). A
+     * locking read reads the latest committed version, as the `UPDATE` does. PostgreSQL (each statement takes a new
+     * snapshot under `READ COMMITTED`) and SQLite (one writer) count matched rows and need none.
+     *
+     * @internal
+     */
+    public static function sharedLock(AbstractPlatform $platform): string
+    {
+        return match (true) {
+            $platform instanceof MySQL80Platform       => ' FOR SHARE',
+            $platform instanceof AbstractMySQLPlatform => ' LOCK IN SHARE MODE', // MariaDB, MySQL 5.7
+            default                                    => '',
+        };
     }
 
     /**

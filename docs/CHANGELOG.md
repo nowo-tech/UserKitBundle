@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Patch release (target 1.13.2).
+
+### Security
+
+- **IY-L1 (Low): the touch fallback read an old snapshot inside a host transaction on MySQL.** Since 1.13.1, when the
+  registry touch's `UPDATE` affects 0 rows, a `SELECT` checks whether the live row exists. Under MySQL/MariaDB
+  `REPEATABLE READ`, inside a transaction the host opened and already read in, that `SELECT` reused the old snapshot,
+  so a session revoked after it read as live (until the next request, at most `touch_interval`). The fallback is now a
+  locking read on MySQL (`FOR SHARE`) and MariaDB / MySQL 5.7 (`LOCK IN SHARE MODE`), chosen from the DBAL platform; it
+  reads the latest committed version, as the `UPDATE` does. PostgreSQL and SQLite are unchanged. The auditor's PoC is a
+  regression test (`SessionTouchSnapshotTest`) in the MySQL and PostgreSQL CI job. No configuration or schema change.
+
 ## [1.13.1] - 2026-11-09
 
 Patch release (target 1.13.1).
