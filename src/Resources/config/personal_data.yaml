@@ -18,6 +18,12 @@ services:
             $guards: !tagged_iterator nowo_user_kit.personal_data.erasure_guard
             $commits: '@?Nowo\UserKitBundle\Sessions\Transaction\CommitQueue'
 
+    # Ports for application services (aliases of the classes above).
+    Nowo\UserKitBundle\PersonalData\PersonalDataExporterInterface:
+        alias: Nowo\UserKitBundle\PersonalData\PersonalDataExporter
+    Nowo\UserKitBundle\PersonalData\PersonalDataErasureInterface:
+        alias: Nowo\UserKitBundle\PersonalData\PersonalDataEraser
+
     # Built-in export sections (after host sections, which default to priority 0).
     Nowo\UserKitBundle\PersonalData\Provider\AccountStatusExportProvider:
         tags: [{ name: nowo_user_kit.personal_data.export_provider, priority: -100 }]

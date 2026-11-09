@@ -9,13 +9,15 @@ use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Throwable;
 
 use function sprintf;
 
 /**
- * Runs the erasure guards, then every supporting eraser in one Doctrine transaction (flushed once).
+ * Runs the erasure guards, then every supporting eraser in one Doctrine transaction (flushed once): its own, or the
+ * host's when one is already open on the user's entity manager.
  */
-final readonly class PersonalDataEraser
+final readonly class PersonalDataEraser implements PersonalDataErasureInterface
 {
     /**
      * Receives the tagged erasers and guards plus the Doctrine registry.
@@ -40,11 +42,12 @@ final readonly class PersonalDataEraser
      */
     public function check(object $user, ?object $actor = null, array $context = []): array
     {
-        return $this->vetoes(self::request($user, $actor, $context));
+        return $this->vetoes($this->request($user, $actor, $context));
     }
 
     /**
-     * Runs the guards, then every supporting eraser in one transaction, flushing once.
+     * Runs the guards, then every supporting eraser in one transaction, flushing once. Inside an open host transaction
+     * the erasers join it (the host commits or rolls back); otherwise the eraser opens and commits its own.
      *
      * @param array<string, mixed> $context
      *
@@ -55,7 +58,7 @@ final readonly class PersonalDataEraser
     public function erase(object $user, ?object $actor = null, array $context = []): array
     {
         // 1.12: the identifier is captured before any eraser can anonymise it.
-        $request = self::request($user, $actor, $context);
+        $request = $this->request($user, $actor, $context);
         $vetoes  = $this->vetoes($request);
         if ($vetoes !== []) {
             throw new ErasureVetoedException($vetoes);
@@ -66,22 +69,22 @@ final readonly class PersonalDataEraser
             throw new LogicException(sprintf('No Doctrine ORM entity manager manages "%s".', $user::class));
         }
 
-        // @igor-ignore - Closure runs synchronously inside wrapInTransaction(); it is not stored on the service.
-        $ran = $entityManager->wrapInTransaction(function (EntityManagerInterface $entityManager) use ($request): array {
-            $ran = [];
-            foreach ($this->erasers as $eraser) {
-                if (!$eraser->supports($request->user)) {
-                    continue;
-                }
+        // The host's unit of work is open (an application service erasing inside its own transaction): join it — flush
+        // once, and leave commit, rollback and closing the entity manager to the host. Otherwise, own the transaction.
+        $connection = $entityManager->getConnection();
+        if ($connection->isTransactionActive()) {
+            try {
+                $ran = $this->runErasers($request, $entityManager);
+            } catch (Throwable $exception) {
+                // Earlier erasers' writes are pending or already executed: the host must not commit a partial erasure.
+                $connection->setRollbackOnly();
 
-                $eraser->erase($request);
-                $ran[] = $eraser->getKey();
+                throw $exception;
             }
-
-            $entityManager->flush();
-
-            return $ran;
-        });
+        } else {
+            // @igor-ignore - Closure runs synchronously inside wrapInTransaction(); it is not stored on the service.
+            $ran = $entityManager->wrapInTransaction(fn (EntityManagerInterface $entityManager): array => $this->runErasers($request, $entityManager));
+        }
         // Marks in the revocation cache of the session eraser: what was erased is committed now, not at the end of the request.
         $this->commits?->release();
 
@@ -89,9 +92,31 @@ final readonly class PersonalDataEraser
     }
 
     /**
+     * Every supporting eraser, then one flush.
+     *
+     * @return list<string> keys of the erasers that ran, in order
+     */
+    private function runErasers(ErasureRequest $request, EntityManagerInterface $entityManager): array
+    {
+        $ran = [];
+        foreach ($this->erasers as $eraser) {
+            if (!$eraser->supports($request->user)) {
+                continue;
+            }
+
+            $eraser->erase($request);
+            $ran[] = $eraser->getKey();
+        }
+
+        $entityManager->flush();
+
+        return $ran;
+    }
+
+    /**
      * @param array<string, mixed> $context
      */
-    private static function request(object $user, ?object $actor, array $context): ErasureRequest
+    private function request(object $user, ?object $actor, array $context): ErasureRequest
     {
         return new ErasureRequest($user, $actor, $context, $user instanceof UserInterface ? $user->getUserIdentifier() : null);
     }

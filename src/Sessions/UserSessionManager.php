@@ -23,16 +23,21 @@ use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
 use Nowo\UserKitBundle\Sessions\Model\SessionState;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
+use Nowo\UserKitBundle\Sessions\Owner\UnresolvedSessionOwnerException;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 use function array_column;
 use function array_filter;
+use function array_map;
 use function array_values;
 use function count;
 use function hash_hmac;
@@ -58,7 +63,7 @@ use function sprintf;
  *
  * Holds no state between requests (worker mode).
  */
-final readonly class UserSessionManager
+final readonly class UserSessionManager implements UserSessionsInterface
 {
     /**
      * Session attribute: one marker per firewall context, `context => {h: registry hash, u: owner key, s: last touch}`
@@ -76,11 +81,12 @@ final readonly class UserSessionManager
      * @param string $secret HMAC key of the session ids (`sessions.hash_secret`, default `%kernel.secret%`)
      * @param int $idleLifetime `sessions.idle_lifetime` (seconds)
      * @param int $touchInterval `sessions.touch_interval` (seconds)
+     * @param bool $throwOnUnresolvedOwner `sessions.owner.on_unresolved: exception` (else a warning is logged)
      */
     public function __construct(
         private UserSessionStore $store,
         private RevocationStoreInterface $revocations,
-        private SessionUserResolver $owners,
+        private SessionOwnerResolverInterface $owners,
         private ClockInterface $clock,
         private string $secret,
         private int $idleLifetime = 86400,
@@ -91,6 +97,8 @@ final readonly class UserSessionManager
         private ?FirewallMap $firewalls = null,
         private ?SessionClientFactory $clients = null,
         private ?CommitQueue $commits = null,
+        private ?LoggerInterface $logger = null,
+        private bool $throwOnUnresolvedOwner = false,
     ) {
     }
 
@@ -197,6 +205,29 @@ final readonly class UserSessionManager
     }
 
     /**
+     * Owner of a user whose sessions are about to be revoked or deleted. A user the resolver cannot map is not silently
+     * skipped: a warning is logged, or {@see UnresolvedSessionOwnerException} is thrown with
+     * `sessions.owner.on_unresolved: exception`.
+     *
+     * @param string $operation what was asked (`revoke_all`, `password_change`, `user_removal`…), for the log
+     *
+     * @throws UnresolvedSessionOwnerException
+     */
+    public function revocationOwner(object $user, string $operation): ?SessionUser
+    {
+        $owner = $this->owner($user);
+        if ($owner instanceof SessionUser) {
+            return $owner;
+        }
+        if ($this->throwOnUnresolvedOwner) {
+            throw new UnresolvedSessionOwnerException($user::class, $operation);
+        }
+        $this->logger?->warning('NowoUserKitBundle: the sessions of a "{user_class}" were not revoked ({operation}): the session owner resolver returned no owner for it. Configure sessions.owner.resolver so the security user and the entity resolve to the same owner.', ['user_class' => $user::class, 'operation' => $operation]);
+
+        return null;
+    }
+
+    /**
      * The live sessions of a user, the most recently active first (at most {@see UserSessionStore::MAX_LIST}).
      *
      * @return list<UserSession>
@@ -206,6 +237,17 @@ final readonly class UserSessionManager
         $owner = $this->owner($user);
 
         return $owner instanceof SessionUser ? $this->store->findActive($owner, $this->aliveSince()) : [];
+    }
+
+    /**
+     * {@see self::listFor()} as read DTOs (no ORM entity leaves the bundle); `$currentHash` marks the caller's own
+     * session ({@see self::currentHash()}).
+     *
+     * @return list<SessionRow>
+     */
+    public function listRowsFor(object $user, ?string $currentHash = null): array
+    {
+        return array_map(static fn (UserSession $session): SessionRow => SessionRow::of($session, $currentHash), $this->listFor($user));
     }
 
     /**
@@ -223,7 +265,7 @@ final readonly class UserSessionManager
      */
     public function revoke(object $user, string $publicId, ?object $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false): bool
     {
-        $owner = $this->owner($user);
+        $owner = $this->revocationOwner($user, 'revoke');
         if (!$owner instanceof SessionUser) {
             return false;
         }
@@ -242,7 +284,7 @@ final readonly class UserSessionManager
      */
     public function revokeOthers(object $user, ?string $currentHash, ?object $actor = null, ?string $customReason = null, array $context = []): int
     {
-        $owner = $this->owner($user);
+        $owner = $this->revocationOwner($user, 'revoke_others');
 
         return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor ?? $user, RevocationReason::Others, except: $currentHash, audit: true, customReason: $customReason, context: $context, epoch: true)) : 0;
     }
@@ -258,7 +300,7 @@ final readonly class UserSessionManager
      */
     public function revokeAll(object $user, ?object $actor = null, RevocationReason $reason = RevocationReason::Everywhere, ?string $except = null, ?string $customReason = null, array $context = []): int
     {
-        $owner = $this->owner($user);
+        $owner = $this->revocationOwner($user, 'revoke_all');
         if (!$owner instanceof SessionUser) {
             return 0;
         }
@@ -280,7 +322,7 @@ final readonly class UserSessionManager
      */
     public function revokeDevice(object $user, string $deviceId, ?string $except = null, ?object $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false): int
     {
-        $owner = $this->owner($user);
+        $owner = $this->revocationOwner($user, 'revoke_device');
 
         return $owner instanceof SessionUser ? count($this->revokeRows($owner, $user, $actor, RevocationReason::Device, deviceId: $deviceId, except: $except, customReason: $customReason, context: $context, epoch: $invalidateRememberMe, keepCurrent: !$this->byOther($owner, $actor))) : 0;
     }
@@ -295,7 +337,7 @@ final readonly class UserSessionManager
      */
     public function forgetUser(object $user): int
     {
-        $owner = $this->owner($user);
+        $owner = $this->revocationOwner($user, 'forget_user');
 
         return $owner instanceof SessionUser ? $this->forgetOwner($owner, $user) : 0;
     }

@@ -820,6 +820,7 @@ optional session registry, with its own tables `user_kit_session` / `user_kit_se
 | `Sessions\Security\SessionsAccessCheckerInterface` | `sessions.security.access_checker` |
 | `Sessions\Epoch\SessionEpochStoreInterface` | `sessions.remember_me_epoch.store` |
 | `Sessions\Client\DeviceIdResolverInterface` | `sessions.client.device_id_resolver` |
+| `Sessions\Owner\SessionOwnerResolverInterface` (returns `SessionUser`) | `sessions.owner.resolver` |
 | `PersonalData\PersonalDataExportProviderInterface`, `PersonalDataEraserInterface`, `ErasureGuardInterface` | autoconfigured tags |
 
 **Events to translate into your domain** (Symfony EventDispatcher): `UserSessionStartedEvent`,
@@ -845,23 +846,54 @@ final class RevokeSessionsOnPasswordChanged
 }
 ```
 
-Use `UserSessionManager::forgetUser($user)` before deleting a user. `UserSessionManager`, `PersonalDataExporter`,
-`PersonalDataEraser` and `UserPresenceResolver` are final and have no interface, so wrap them in your own port if your
-application layer must not depend on them.
+Use `UserSessionManager::forgetUser($user)` before deleting a user. Type your application services against the
+ports, not the final classes: `Sessions\UserSessionsInterface` (`UserSessionManager`; `listRowsFor()` returns
+`SessionRow` DTOs), `PersonalData\PersonalDataExporterInterface`, `PersonalData\PersonalDataErasureInterface`
+(`PersonalDataEraser`; it joins a transaction you already opened instead of nesting its own, marks it rollback-only
+if an eraser fails, and its result is final only once you commit) and
+`Presence\UserPresenceResolverInterface`.
+
+**A security user that is not the entity.** Sessions are registered under the owner of the security user signed in at
+the firewall; the Doctrine listeners see your entity. Map both to one owner:
+
+```php
+final readonly class MemberSessionOwner implements SessionOwnerResolverInterface
+{
+    public function resolve(object $user): ?SessionUser
+    {
+        return match (true) {
+            $user instanceof SecurityUser => new SessionUser(Member::class, $user->memberId()),
+            $user instanceof MemberRecord => new SessionUser(Member::class, (string) $user->getId()),
+            default                       => null,
+        };
+    }
+}
+```
+
+```yaml
+nowo_user_kit:
+    sessions:
+        owner:
+            resolver: App\Infrastructure\UserKit\MemberSessionOwner
+            on_unresolved: exception # default: log a warning
+```
+
+The owner `type` must be unique per identity space: use the domain class name (`Member::class` above), never a value
+shared by two user classes whose ids can collide (Admin #5 and Customer #5 would become one owner: shared sessions
+page, limit and remember-me epoch). Switching the resolver on a live site changes every owner key: see UPGRADING for the
+remember-me cookies.
+
+A revocation for a user the resolver does not know is never skipped silently: it logs a warning, or throws
+`UnresolvedSessionOwnerException` with `on_unresolved: exception`.
 
 **Known limitations**
 
-- The session owner comes from the Doctrine root class and id of the user (else the class plus `getUserIdentifier()`)
-  and cannot be configured. If your security user is a non-entity adapter around a domain entity, rows written at
-  sign-in and the Doctrine listeners on the domain entity use different owners. Keep the entity listeners off and
-  revoke explicitly with the object you signed in with.
 - Last activity is written with a DQL `UPDATE` on the security user's class, so the security user must be a Doctrine
   entity.
-- `PersonalDataEraser::erase()` needs a Doctrine ORM entity manager for the user class and runs the erasers in its
-  transaction.
+- `PersonalDataEraser::erase()` needs a Doctrine ORM entity manager for the user class (it opens a transaction there
+  unless one is already open).
 - The admin sessions page loads the subject with `ManagerRegistry::find(user_class, id)`.
-- `UserSessionManager::listFor()` returns `UserSession` entities. Map them to `SessionRow::of()` (or your own DTO)
-  before they leave the adapter.
+- `UserSessionManager::listFor()` still returns `UserSession` entities; use `listRowsFor()` (`SessionRow` DTOs) instead.
 - There are no events for account disabled, last activity or personal-data export/erasure.
 
 ## AuthKit coexistence

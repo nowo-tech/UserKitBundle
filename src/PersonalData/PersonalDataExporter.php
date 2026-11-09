@@ -28,7 +28,7 @@ use const JSON_UNESCAPED_UNICODE;
  * {"schema": "…", "version": 1, "exported_at": "2026-10-13T10:00:00+00:00", "sections": {"key": …}}
  * ```
  */
-final readonly class PersonalDataExporter
+final readonly class PersonalDataExporter implements PersonalDataExporterInterface
 {
     /**
      * Receives the tagged export providers, the clock and the document schema / version.

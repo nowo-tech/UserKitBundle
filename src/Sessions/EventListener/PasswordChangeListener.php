@@ -46,7 +46,8 @@ final class PasswordChangeListener implements ResetInterface
      */
     public function preUpdate(object $user, PreUpdateEventArgs $args): void
     {
-        if ($args->hasChangedField($this->field)) {
+        // 1.14: a user without owner is reported (log or exception, before the write) instead of being skipped silently.
+        if ($args->hasChangedField($this->field) && $this->sessions->revocationOwner($user, 'password_change') instanceof SessionUser) {
             $this->pending[spl_object_id($user)] = ['user' => $user, 'except' => $this->ownSession($user)];
         }
     }
