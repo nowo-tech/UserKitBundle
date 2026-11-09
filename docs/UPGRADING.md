@@ -42,6 +42,18 @@
 
 ## Unreleased
 
+From **1.13.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration or schema change.
+
+- **MySQL hosts that set `PDO::MYSQL_ATTR_FOUND_ROWS` only as a workaround** for random sign-outs of parallel requests
+  (the registry touch read a same-second no-op UPDATE as a missing session) can drop that driver option after
+  upgrading: the touch no longer depends on the affected-row count. Keep it if something else in the host relies on it.
+
 ## To 1.13.0
 
 From **1.12.0**:

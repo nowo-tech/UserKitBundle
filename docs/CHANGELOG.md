@@ -45,6 +45,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Patch release (target 1.13.1).
+
+### Fixed
+
+- **Parallel requests of one session signed the user out on MySQL.** The registry touch (`UPDATE … SET last_seen_at`
+  every `touch_interval`) read 0 affected rows as "the session is gone", then deleted the row and signed the user out.
+  MySQL reports 0 affected rows for an UPDATE that writes the values the row already holds (without
+  `CLIENT_FOUND_ROWS`), so two requests of the same session touching in the same second ended it. On 0 affected rows
+  `UserSessionStore::touch()` now looks the owner's live row up again with a `SELECT`: the session ends only when that
+  row is really missing or revoked, so a deleted, purged or revoked session still signs out (no fail-open). SQLite and
+  PostgreSQL count matched rows and were not affected. The `real-databases` CI job now runs the registry touch tests on
+  MySQL (without `MYSQL_ATTR_FOUND_ROWS`) and PostgreSQL. The other affected-row reads of the bundle were checked:
+  `deleteLiveRow()` counts deleted rows (exact on every platform), and the other writes (`markRevoked()`, `revoke()`,
+  `rekey()`, the remember-me epoch `bump()`) do not read the count.
+
 ## [1.13.0] - 2026-11-07
 
 REQ-SEC-004: Pass (good) / Low, independent audit, Appendix HU (`2f9db59`). See [UPGRADING](UPGRADING.md#to-1130).
