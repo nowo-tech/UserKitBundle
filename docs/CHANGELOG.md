@@ -71,7 +71,8 @@ Target 1.14.0.
 
 - `PersonalDataEraser::erase()` joins a transaction the host already opened on the user's entity manager (flush once;
   commit, rollback and closing the entity manager stay with the host) instead of nesting its own. Without an open
-  transaction nothing changes.
+  transaction nothing changes. If an eraser fails there, the host transaction is marked rollback-only before the
+  exception goes on, so a partial erasure cannot be committed.
 
 ### Documentation
 

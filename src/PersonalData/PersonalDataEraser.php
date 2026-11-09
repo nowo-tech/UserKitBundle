@@ -9,6 +9,7 @@ use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Throwable;
 
 use function sprintf;
 
@@ -70,8 +71,16 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
 
         // The host's unit of work is open (an application service erasing inside its own transaction): join it — flush
         // once, and leave commit, rollback and closing the entity manager to the host. Otherwise, own the transaction.
-        if ($entityManager->getConnection()->isTransactionActive()) {
-            $ran = $this->runErasers($request, $entityManager);
+        $connection = $entityManager->getConnection();
+        if ($connection->isTransactionActive()) {
+            try {
+                $ran = $this->runErasers($request, $entityManager);
+            } catch (Throwable $exception) {
+                // Earlier erasers' writes are pending or already executed: the host must not commit a partial erasure.
+                $connection->setRollbackOnly();
+
+                throw $exception;
+            }
         } else {
             // @igor-ignore - Closure runs synchronously inside wrapInTransaction(); it is not stored on the service.
             $ran = $entityManager->wrapInTransaction(fn (EntityManagerInterface $entityManager): array => $this->runErasers($request, $entityManager));

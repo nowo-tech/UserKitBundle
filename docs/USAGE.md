@@ -849,7 +849,8 @@ final class RevokeSessionsOnPasswordChanged
 Use `UserSessionManager::forgetUser($user)` before deleting a user. Type your application services against the
 ports, not the final classes: `Sessions\UserSessionsInterface` (`UserSessionManager`; `listRowsFor()` returns
 `SessionRow` DTOs), `PersonalData\PersonalDataExporterInterface`, `PersonalData\PersonalDataErasureInterface`
-(`PersonalDataEraser`; it joins a transaction you already opened instead of nesting its own) and
+(`PersonalDataEraser`; it joins a transaction you already opened instead of nesting its own, marks it rollback-only
+if an eraser fails, and its result is final only once you commit) and
 `Presence\UserPresenceResolverInterface`.
 
 **A security user that is not the entity.** Sessions are registered under the owner of the security user signed in at
@@ -861,8 +862,8 @@ final readonly class MemberSessionOwner implements SessionOwnerResolverInterface
     public function resolve(object $user): ?SessionUser
     {
         return match (true) {
-            $user instanceof SecurityUser => new SessionUser('member', $user->memberId()),
-            $user instanceof MemberRecord => new SessionUser('member', (string) $user->getId()),
+            $user instanceof SecurityUser => new SessionUser(Member::class, $user->memberId()),
+            $user instanceof MemberRecord => new SessionUser(Member::class, (string) $user->getId()),
             default                       => null,
         };
     }
@@ -876,6 +877,11 @@ nowo_user_kit:
             resolver: App\Infrastructure\UserKit\MemberSessionOwner
             on_unresolved: exception # default: log a warning
 ```
+
+The owner `type` must be unique per identity space: use the domain class name (`Member::class` above), never a value
+shared by two user classes whose ids can collide (Admin #5 and Customer #5 would become one owner: shared sessions
+page, limit and remember-me epoch). Switching the resolver on a live site changes every owner key: see UPGRADING for the
+remember-me cookies.
 
 A revocation for a user the resolver does not know is never skipped silently: it logs a warning, or throws
 `UnresolvedSessionOwnerException` with `on_unresolved: exception`.

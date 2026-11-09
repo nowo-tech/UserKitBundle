@@ -15,6 +15,9 @@ use Nowo\UserKitBundle\Sessions\SessionUserResolver;
  * at the firewall, and the entity the Doctrine listeners (`password_change`, `user_removal`,
  * `invalidate_sessions_on_disable`) see. A host whose security user is a non-entity adapter around a domain user maps
  * both to one owner here (for example `new SessionUser(DomainUser::class, $id)`).
+ *
+ * The owner type must be unique per identity space (the domain class name): two user classes sharing a type and an id
+ * would be one owner (shared sessions, limit and remember-me epoch).
  */
 interface SessionOwnerResolverInterface
 {
