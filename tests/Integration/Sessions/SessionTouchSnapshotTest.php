@@ -6,7 +6,8 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\DriverManager;
-use Doctrine\DBAL\Platforms\SQLitePlatform;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Types\Types;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 
@@ -21,8 +22,10 @@ final class SessionTouchSnapshotTest extends TransactionalSessionsTestCase
     {
         [$hash, $owner] = $this->session();
         $connection     = $this->connection();
-        if ($connection->getDatabasePlatform() instanceof SQLitePlatform) {
-            self::markTestSkipped('SQLite has one writer: a second connection cannot commit inside the transaction.');
+        $platform       = $connection->getDatabasePlatform();
+        if (!$platform instanceof AbstractMySQLPlatform && !$platform instanceof PostgreSQLPlatform) {
+            // SQLite (class name differs between DBAL 3 and 4) has one writer: a second connection cannot commit here.
+            self::markTestSkipped('Needs a second writer: MySQL/MariaDB or PostgreSQL.');
         }
 
         $connection->beginTransaction();

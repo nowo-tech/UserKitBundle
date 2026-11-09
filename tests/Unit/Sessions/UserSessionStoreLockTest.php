@@ -9,7 +9,6 @@ use Doctrine\DBAL\Platforms\MariaDBPlatform;
 use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
-use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -28,7 +27,6 @@ final class UserSessionStoreLockTest extends TestCase
         yield 'MySQL 5.7' => [new MySQLPlatform(), ' LOCK IN SHARE MODE'];
         yield 'MariaDB' => [new MariaDBPlatform(), ' LOCK IN SHARE MODE'];
         yield 'PostgreSQL' => [new PostgreSQLPlatform(), ''];
-        yield 'SQLite' => [new SQLitePlatform(), ''];
     }
 
     #[DataProvider('platforms')]
