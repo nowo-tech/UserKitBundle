@@ -301,6 +301,9 @@ jobs:
       - name: PHPStan (level and ignoreErrors from phpstan.neon.dist; fails the build on any error)
         run: composer phpstan --no-interaction
 
+      - name: Igor worker-state audit (REQ-CS-008, FrankenPHP worker mode without kernel reset)
+        run: composer igor --no-interaction
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest

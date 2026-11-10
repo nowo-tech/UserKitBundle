@@ -58,7 +58,8 @@ Target 1.14.1.
   every pending change of the unit of work, including unrelated host entities and edits of the user itself. It now
   writes only the user's row: the mapped columns that the setter changed, with a DQL `UPDATE` by identifier, and marks
   them as the original values. A user not persisted yet, or a setter that changes no mapped column, is not written.
-  Affects 1.6.0 to 1.14.0 with such a field (before 1.6.0 every update was a full flush).
+  Affects `>= 1.0.0, < 1.14.1` with `last_activity.enabled`: every configuration before 1.6.0 (every update was a
+  full flush), and from 1.6.0 an unmapped field.
 
 ### Fixed
 
