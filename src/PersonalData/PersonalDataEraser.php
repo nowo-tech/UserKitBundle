@@ -77,6 +77,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
                 $ran = $this->runErasers($request, $entityManager);
             } catch (Throwable $exception) {
                 // Earlier erasers' writes are pending or already executed: the host must not commit a partial erasure.
+                // @igor-ignore - marks the host's open transaction only; DBAL clears the flag when that transaction ends.
                 $connection->setRollbackOnly();
 
                 throw $exception;

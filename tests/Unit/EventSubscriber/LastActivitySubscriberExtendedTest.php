@@ -76,7 +76,7 @@ final class LastActivitySubscriberExtendedTest extends TestCase
         $tokenStorage->setToken(new UsernamePasswordToken($user, 'main', ['ROLE_USER']));
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->once())->method('flush');
+        $em->expects($this->once())->method('getClassMetadata');
 
         $subscriber = new LastActivitySubscriber(
             ProfileRegistryFactory::single(PropertyActivityUser::class),
