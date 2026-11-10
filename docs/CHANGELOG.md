@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.14.1] - 2026-11-10](#1141---2026-11-10)
 - [[1.14.0] - 2026-11-09](#1140---2026-11-09)
 - [[1.13.2] - 2026-11-09](#1132---2026-11-09)
 - [[1.13.1] - 2026-11-09](#1131---2026-11-09)
@@ -48,7 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Target 1.14.1.
+## [1.14.1] - 2026-11-10
+
+Last-activity tracking writes only the user's changed columns and no longer flushes the host's entity manager. See [UPGRADING](https://github.com/nowo-tech/UserKitBundle/blob/v1.14.1/docs/UPGRADING.md#to-1141).
+
 
 ### Security
 
@@ -65,6 +69,8 @@ Target 1.14.1.
 
 - A closed EntityManager is reset only when it is the manager of the user class; other closed managers of the
   registry are left alone.
+
+[1.14.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.14.1
 
 ## [1.14.0] - 2026-11-09
 
