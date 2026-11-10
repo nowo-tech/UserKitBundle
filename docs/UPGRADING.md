@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.14.1](#to-1141)
 - [To 1.14.0](#to-1140)
 - [To 1.13.2](#to-1132)
 - [To 1.13.1](#to-1131)
@@ -44,6 +45,20 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.14.1
+
+From **1.14.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration change. If your `last_activity.field` is not a mapped column (your setter writes another property),
+last activity is now written with a DQL `UPDATE` of the columns that setter changed, instead of a `flush()` of the whole
+EntityManager. Your other pending changes are no longer committed on `kernel.request`, and Doctrine lifecycle callbacks
+/ entity listeners no longer run for this write (as already the case for a mapped field since 1.6.0). A setter that
+writes no mapped column is not persisted. A user that is not persisted yet is not written by the subscriber.
 
 ## To 1.14.0
 

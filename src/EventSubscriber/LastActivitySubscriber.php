@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\EventSubscriber;
 
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
@@ -25,10 +26,13 @@ use Throwable;
 
 use function array_filter;
 use function array_key_first;
+use function array_keys;
 use function count;
 use function max;
 use function spl_object_id;
 use function sprintf;
+
+use const ARRAY_FILTER_USE_BOTH;
 
 /**
  * Updates the last activity timestamp of the authenticated user on main requests, throttled per profile and user.
@@ -115,15 +119,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
             return;
         }
 
-        if ($user instanceof LastActivityInterface) {
-            // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
-            $user->setLastActivityAt($now);
-        } elseif ($this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
-            // Writes the user entity; the (readonly, stateless) accessor itself is not mutated. Igor reads a setter call
-            // on $this->propertyAccessor as a mutation of that property, hence the local variable.
-            $accessor = $this->propertyAccessor;
-            $accessor->setValue($user, $profile->lastActivityField, $now);
-        } else {
+        if (!$user instanceof LastActivityInterface && !$this->propertyAccessor->isWritable($user, $profile->lastActivityField)) {
             return;
         }
 
@@ -136,7 +132,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
                 'exception' => $exception::class,
                 'message'   => $exception->getMessage(),
             ]);
-            $this->resetClosedManagers();
+            $this->resetClosedManager($entityManager);
 
             return;
         }
@@ -154,24 +150,43 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
     }
 
     /**
-     * Writes only the timestamp column with a DQL UPDATE by identifier and marks the new value as the original one, so
-     * the request never flushes unrelated pending changes of the unit of work (and a later flush does not write it
-     * again). Falls back to a full flush when the field is not a mapped column (custom setter on an unmapped property).
+     * Sets the timestamp on the user and writes only the columns that this changed, with a DQL UPDATE of the user's row
+     * by identifier, then marks the new values as the original ones. The request never flushes the unit of work, so
+     * pending changes of other entities, and of the user itself, are never committed here (and a later flush does not
+     * write the timestamp again).
+     *
+     * When the profile field is not a mapped column (a custom setter that writes another property), the mapped fields
+     * changed by the setter are written. A user without identifier (not persisted yet) or whose setter changed no
+     * mapped field is not written.
      */
     private function store(EntityManagerInterface $entityManager, UserInterface $user, string $field, DateTimeImmutable $now): void
     {
-        $metadata   = $entityManager->getClassMetadata($user::class);
-        $identifier = $metadata->getIdentifierValues($user);
-        if (!$metadata->hasField($field) || $identifier === []) {
-            $entityManager->flush();
+        $metadata = $entityManager->getClassMetadata($user::class);
+        $before   = $metadata->hasField($field) ? [] : $this->mappedValues($metadata, $user);
 
+        if ($user instanceof LastActivityInterface) {
+            // @igor-ignore - Event subscriber clears request/runtime bridges; not cross-request leak.
+            $user->setLastActivityAt($now);
+        } else {
+            // Writes the user entity; the (readonly, stateless) accessor itself is not mutated. Igor reads a setter call
+            // on $this->propertyAccessor as a mutation of that property, hence the local variable.
+            $accessor = $this->propertyAccessor;
+            $accessor->setValue($user, $field, $now);
+        }
+
+        $fields = $metadata->hasField($field)
+            ? [$field]
+            : array_keys(array_filter($this->mappedValues($metadata, $user), static fn (mixed $value, string $name): bool => $value !== $before[$name], ARRAY_FILTER_USE_BOTH));
+        $identifier = $metadata->getIdentifierValues($user);
+        if ($fields === [] || $identifier === []) {
             return;
         }
 
-        $queryBuilder = $entityManager->createQueryBuilder()
-            ->update($metadata->getName(), 'u')
-            ->set('u.' . $field, ':now')
-            ->setParameter('now', $now, $metadata->getTypeOfField($field));
+        $queryBuilder = $entityManager->createQueryBuilder()->update($metadata->getName(), 'u');
+        foreach ($fields as $index => $name) {
+            $queryBuilder->set('u.' . $name, ':value' . $index)
+                ->setParameter('value' . $index, $metadata->getFieldValue($user, $name), $metadata->getTypeOfField($name));
+        }
         $index = 0;
         foreach ($identifier as $name => $value) {
             $queryBuilder->andWhere(sprintf('u.%s = :id%d', $name, $index))->setParameter('id' . $index, $value);
@@ -180,8 +195,30 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
         $queryBuilder->getQuery()->execute();
 
         if ($entityManager->contains($user)) {
-            $entityManager->getUnitOfWork()->setOriginalEntityProperty(spl_object_id($user), $field, $metadata->getFieldValue($user, $field));
+            $unitOfWork = $entityManager->getUnitOfWork();
+            foreach ($fields as $name) {
+                $unitOfWork->setOriginalEntityProperty(spl_object_id($user), $name, $metadata->getFieldValue($user, $name));
+            }
         }
+    }
+
+    /**
+     * Values of the mapped fields (identifiers excluded) of the user.
+     *
+     * @param ClassMetadata<object> $metadata
+     *
+     * @return array<string, mixed>
+     */
+    private function mappedValues(ClassMetadata $metadata, UserInterface $user): array
+    {
+        $values = [];
+        foreach ($metadata->getFieldNames() as $name) {
+            if (!$metadata->isIdentifier($name)) {
+                $values[$name] = $metadata->getFieldValue($user, $name);
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -209,22 +246,27 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
 
         $manager = $this->managerRegistry->getManagerForClass($user::class);
         if ($manager instanceof EntityManagerInterface && !$manager->isOpen()) {
-            $this->resetClosedManagers();
+            $this->resetClosedManager($manager);
             $manager = $this->managerRegistry->getManagerForClass($user::class);
         }
 
         return $manager instanceof EntityManagerInterface && $manager->isOpen() ? $manager : null;
     }
 
-    private function resetClosedManagers(): void
+    /**
+     * Resets the user's manager when it is closed; other managers of the registry are never touched.
+     */
+    private function resetClosedManager(EntityManagerInterface $manager): void
     {
-        if (!$this->managerRegistry instanceof ManagerRegistry) {
+        if (!$this->managerRegistry instanceof ManagerRegistry || $manager->isOpen()) {
             return;
         }
 
-        foreach ($this->managerRegistry->getManagers() as $name => $manager) {
-            if ($manager instanceof EntityManagerInterface && !$manager->isOpen()) {
+        foreach ($this->managerRegistry->getManagers() as $name => $candidate) {
+            if ($candidate === $manager) {
                 $this->managerRegistry->resetManager($name);
+
+                return;
             }
         }
     }

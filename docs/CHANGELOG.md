@@ -48,6 +48,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target 1.14.1.
+
+### Security
+
+- **Last activity no longer flushes the host's EntityManager (rule 6).** When the profile's `last_activity.field` was
+  not a mapped column (a `LastActivityInterface` setter or property path that writes another property),
+  `LastActivitySubscriber` fell back to a full `flush()` of the user's manager on `kernel.request`, which committed
+  every pending change of the unit of work, including unrelated host entities and edits of the user itself. It now
+  writes only the user's row: the mapped columns that the setter changed, with a DQL `UPDATE` by identifier, and marks
+  them as the original values. A user not persisted yet, or a setter that changes no mapped column, is not written.
+  Affects `>= 1.0.0, < 1.14.1` with `last_activity.enabled`: every configuration before 1.6.0 (every update was a
+  full flush), and from 1.6.0 an unmapped field.
+
+### Fixed
+
+- A closed EntityManager is reset only when it is the manager of the user class; other closed managers of the
+  registry are left alone.
+
 ## [1.14.0] - 2026-11-09
 
 Target 1.14.0.

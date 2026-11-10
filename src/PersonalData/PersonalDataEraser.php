@@ -77,6 +77,10 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
                 $ran = $this->runErasers($request, $entityManager);
             } catch (Throwable $exception) {
                 // Earlier erasers' writes are pending or already executed: the host must not commit a partial erasure.
+                // The rollback-only flag is cleared only by the outermost rollBack(), not by Connection::close(): the host
+                // must roll back (not just close) after a failed erasure, or its next commit on this connection throws
+                // CommitFailedRollbackOnly.
+                // @igor-ignore - marks the host's open transaction, which the host must roll back (see above)
                 $connection->setRollbackOnly();
 
                 throw $exception;

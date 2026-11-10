@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Unit\EventSubscriber;
 
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
@@ -35,7 +36,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
     {
         $tokenStorage = new TokenStorage();
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->exactly(5))->method('flush');
+        $em->expects($this->exactly(5))->method('getClassMetadata');
 
         $subscriber = $this->subscriber(
             ProfileRegistryFactory::single(WorkerActivityUser::class, ['last_activity' => ['update_throttle' => 600]]),
@@ -61,7 +62,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         $tokenStorage = new TokenStorage();
         $clock        = new MockClock('2026-09-23 10:00:00');
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->exactly(3))->method('flush');
+        $em->expects($this->exactly(3))->method('getClassMetadata');
 
         $subscriber = $this->subscriber(
             ProfileRegistryFactory::single(WorkerActivityUser::class, ['last_activity' => ['update_throttle' => 60]]),
@@ -84,7 +85,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         $tokenStorage = new TokenStorage();
         $clock        = new MockClock('2026-09-23 10:00:00');
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->exactly(2))->method('flush');
+        $em->expects($this->exactly(2))->method('getClassMetadata');
 
         $subscriber = $this->subscriber(
             ProfileRegistryFactory::single(WorkerActivityUser::class, ['last_activity' => ['update_throttle' => 60]]),
@@ -114,7 +115,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
     {
         $tokenStorage = new TokenStorage();
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->exactly(2))->method('flush');
+        $em->expects($this->exactly(2))->method('getClassMetadata');
 
         $subscriber = $this->subscriber(ProfileRegistryFactory::single(WorkerActivityUser::class), $em, $tokenStorage, new MockClock());
 
@@ -131,7 +132,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         ]);
         $tokenStorage = new TokenStorage();
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->exactly(2))->method('flush');
+        $em->expects($this->exactly(2))->method('getClassMetadata');
 
         $subscriber = $this->subscriber($registry, $em, $tokenStorage, new MockClock());
 
@@ -146,7 +147,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
     {
         $tokenStorage = new TokenStorage();
         $em           = $this->createMock(EntityManagerInterface::class);
-        $em->expects($this->once())->method('flush');
+        $em->expects($this->once())->method('getClassMetadata');
 
         $security = $this->createMock(Security::class);
         $security->method('getFirewallConfig')->willReturnCallback(
@@ -203,7 +204,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         $em->method('isOpen')->willReturnCallback(static function () use (&$open): bool {
             return $open;
         });
-        $em->expects($this->once())->method('flush');
+        $em->expects($this->once())->method('getClassMetadata');
 
         $registry = $this->createMock(ManagerRegistry::class);
         $registry->method('getManagerForClass')->willReturn($em);
@@ -230,7 +231,7 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         self::assertNotNull($user->getLastActivityAt());
     }
 
-    public function testFlushFailureIsLoggedResetsManagerAndIsRetriedOnNextRequest(): void
+    public function testWriteFailureIsLoggedResetsManagerAndIsRetriedOnNextRequest(): void
     {
         $open     = true;
         $failures = 1;
@@ -238,12 +239,15 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         $em->method('isOpen')->willReturnCallback(static function () use (&$open): bool {
             return $open;
         });
-        $em->expects($this->exactly(2))->method('flush')->willReturnCallback(static function () use (&$open, &$failures): void {
+        $metadata = $this->createMock(ClassMetadata::class);
+        $em->expects($this->exactly(2))->method('getClassMetadata')->willReturnCallback(static function () use (&$open, &$failures, $metadata): ClassMetadata {
             if ($failures-- > 0) {
                 $open = false;
 
                 throw new RuntimeException('Deadlock');
             }
+
+            return $metadata;
         });
 
         $registry = $this->createMock(ManagerRegistry::class);
@@ -280,10 +284,64 @@ final class LastActivitySubscriberWorkerTest extends TestCase
         self::assertCount(1, $this->throttleMap($subscriber));
     }
 
-    public function testFlushFailureWithoutRegistryDoesNotBreakTheRequest(): void
+    public function testOnlyTheUsersClosedManagerIsReset(): void
+    {
+        $open = false;
+        $em   = $this->createMock(EntityManagerInterface::class);
+        $em->method('isOpen')->willReturnCallback(static function () use (&$open): bool {
+            return $open;
+        });
+        $otherClosed = $this->createMock(EntityManagerInterface::class);
+        $otherClosed->method('isOpen')->willReturn(false);
+
+        $registry = $this->createMock(ManagerRegistry::class);
+        $registry->method('getManagerForClass')->willReturn($em);
+        $registry->method('getManagers')->willReturn(['other' => $otherClosed, 'default' => $em]);
+        $registry->expects($this->once())->method('resetManager')->with('default')
+            ->willReturnCallback(static function () use (&$open, $em): EntityManagerInterface {
+                $open = true;
+
+                return $em;
+            });
+
+        $tokenStorage = new TokenStorage();
+        $subscriber   = $this->subscriber(
+            ProfileRegistryFactory::single(WorkerActivityUser::class),
+            $this->createMock(EntityManagerInterface::class),
+            $tokenStorage,
+            new MockClock(),
+            managerRegistry: $registry,
+        );
+
+        $user = new WorkerActivityUser('alice');
+        $this->request($subscriber, $tokenStorage, $user);
+
+        self::assertNotNull($user->getLastActivityAt());
+    }
+
+    public function testAClosedManagerUnknownToTheRegistryIsNotReset(): void
     {
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('flush')->willThrowException(new RuntimeException('Connection lost'));
+        $em->method('isOpen')->willReturn(false);
+
+        $registry = $this->createMock(ManagerRegistry::class);
+        $registry->method('getManagerForClass')->willReturn($em);
+        $registry->method('getManagers')->willReturn([]);
+        $registry->expects($this->never())->method('resetManager');
+
+        $tokenStorage = new TokenStorage();
+        $subscriber   = $this->subscriber(ProfileRegistryFactory::single(WorkerActivityUser::class), $em, $tokenStorage, new MockClock(), managerRegistry: $registry);
+
+        $user = new WorkerActivityUser('alice');
+        $this->request($subscriber, $tokenStorage, $user);
+
+        self::assertNull($user->getLastActivityAt());
+    }
+
+    public function testWriteFailureWithoutRegistryDoesNotBreakTheRequest(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getClassMetadata')->willThrowException(new RuntimeException('Connection lost'));
 
         $tokenStorage = new TokenStorage();
         $subscriber   = $this->subscriber(ProfileRegistryFactory::single(WorkerActivityUser::class), $em, $tokenStorage, new MockClock());
