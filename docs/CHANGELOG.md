@@ -49,6 +49,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Sessions: with `sessions.remember_me_epoch.enabled`, a revocation's kept session leaked into later requests in
+  FrankenPHP worker mode with the kernel kept alive and not reset (1.10.0 – 1.14.1).** `RememberMeEpoch` remembered
+  the session kept by a revocation of the current request, and only `kernel.reset` emptied it. After "sign out this
+  device" with `invalidateRememberMe`, a later request of another session of the same user in that worker got a fresh
+  remember-me cookie, undoing the invalidation for that browser. The memo is now emptied at the end of the main
+  `kernel.response` and at the main `kernel.request`, `kernel.terminate`, `console.terminate` and the Messenger worker
+  events; `kernel.reset` still empties it (REQ-RUNTIME-002). Tests: `RememberMeEpochWorkerTest` (one kernel, no
+  reset, alice and bob alternating, 1,000 requests, memory margin) and `HostHooksTest`. Worker audit: W-04 in
+  `docs/FRANKENPHP-WORKER-AUDIT.md`.
+- **Sessions: a password change whose flush failed signed the user out on a later flush (1.9.0 – 1.14.1).**
+  `PasswordChangeListener` kept the user from `preUpdate` until `postFlush`, and only `kernel.reset` emptied it
+  otherwise. When the flush failed, the next flush of any user (in a FrankenPHP worker with the kernel not reset, any
+  later request) signed out every other session of that user although the new password was never stored. Pending
+  changes are now kept per entity manager and unit of work, dropped by the `onFlush` of a new unit of work, `onClear`
+  and the request / console / Messenger boundaries; a nested flush of the same unit of work keeps them (audit MD-U-M1,
+  worker audit W-05).
+- **Sessions: with `user_removal.delete_sessions` and several entity managers mapping the user class, a pending removal
+  could delete the sessions of a user that was not removed (1.10.0 – 1.14.1).** `UserRemovalListener` now keeps
+  pending removals per entity manager and unit of work, applies them only on that manager's `postFlush`, and clears
+  them at the request / console / Messenger boundaries (audit MD-U-L1, worker audit W-06). Test:
+  `SessionListenersWorkerTest`.
+
 ## [1.14.1] - 2026-11-10
 
 Last-activity tracking writes only the user's changed columns and no longer flushes the host's entity manager. See [UPGRADING](https://github.com/nowo-tech/UserKitBundle/blob/v1.14.1/docs/UPGRADING.md#to-1141).
