@@ -22,6 +22,7 @@ use function preg_match;
 use function sprintf;
 use function str_contains;
 use function str_repeat;
+use function strtolower;
 use function substr;
 use function trigger_error;
 
@@ -117,23 +118,33 @@ final readonly class SessionClientFactory
         return $id === null || $id === '' ? null : mb_substr($id, 0, 64);
     }
 
+    /** Credential-bearing headers never copied into a {@see DeviceContext}. */
+    public const STRIPPED_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
     /**
      * HTTP-edge adapter: the framework-free {@see DeviceContext} of a request (client IP with trusted proxies applied,
-     * user agent, first value of each header, cookies).
+     * user agent, first value of each header, cookies). The session cookie and the `Authorization`, `Cookie` and
+     * `Proxy-Authorization` headers are left out: they are credentials, never device data.
      */
     public static function deviceContext(Request $request): DeviceContext
     {
         $headers = [];
         foreach ($request->headers->keys() as $name) {
+            $name = strtolower((string) $name);
+            if (in_array($name, self::STRIPPED_HEADERS, true)) {
+                continue;
+            }
             $value = $request->headers->get($name);
             if ($value !== null) {
                 $headers[$name] = $value;
             }
         }
-        $cookies = [];
+        $sessionCookie = $request->hasSession() ? $request->getSession()->getName() : null;
+        $cookies       = [];
         foreach ($request->cookies->all() as $name => $value) {
-            if (is_string($value)) {
-                $cookies[(string) $name] = $value;
+            $name = (string) $name;
+            if (is_string($value) && $name !== $sessionCookie) {
+                $cookies[$name] = $value;
             }
         }
 

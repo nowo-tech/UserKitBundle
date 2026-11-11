@@ -58,6 +58,7 @@ final class SessionRefEquivalenceTest extends SessionsKernelTestCase
             self::assertNull($manager->sessionHash($manager->sessionRef($case)));
         }
         self::assertNull($manager->sessionHash(null));
+        self::assertNull($manager->sessionHash(''), 'An empty id has no hash');
     }
 
     public function testRevokeOthersKeepsTheSameSessionWithTheNewHash(): void

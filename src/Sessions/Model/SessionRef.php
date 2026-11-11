@@ -56,4 +56,14 @@ final readonly class SessionRef
     {
         throw new InvalidArgumentException('A session reference cannot be serialized; pass its registry hash instead.');
     }
+
+    /**
+     * A session reference is never rebuilt from a serialized string (no forged references).
+     *
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        throw new InvalidArgumentException('A session reference cannot be unserialized.');
+    }
 }

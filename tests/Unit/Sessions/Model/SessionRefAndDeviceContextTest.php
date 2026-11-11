@@ -12,6 +12,8 @@ use PHPUnit\Framework\TestCase;
 use function json_encode;
 use function print_r;
 use function serialize;
+use function strlen;
+use function unserialize;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -47,6 +49,37 @@ final class SessionRefAndDeviceContextTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/^A session reference cannot be serialized; pass its registry hash instead\.$/');
         serialize(new SessionRef(self::SESSION_ID));
+    }
+
+    public function testSessionRefIsNeverUnserialized(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('A session reference cannot be unserialized.');
+        unserialize('O:' . strlen(SessionRef::class) . ':"' . SessionRef::class . '":1:{s:9:"sessionId";s:3:"abc";}');
+    }
+
+    public function testDeviceContextIsNeverSerialized(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('A device context cannot be serialized.');
+        serialize(new DeviceContext());
+    }
+
+    public function testDeviceContextIsNeverUnserialized(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('A device context cannot be unserialized.');
+        unserialize('O:' . strlen(DeviceContext::class) . ':"' . DeviceContext::class . '":1:{s:8:"clientIp";N;}');
+    }
+
+    public function testDeviceContextAcceptsNumericHeaderNames(): void
+    {
+        /** @var array<string, string> $headers */
+        $headers = [1 => 'one', 'X-Device' => 'd'];
+        $context = new DeviceContext(null, '', $headers);
+
+        self::assertSame('one', $context->header('1'));
+        self::assertSame('d', $context->header('x-device'));
     }
 
     public function testDeviceContextLooksUpHeadersCaseInsensitively(): void

@@ -54,7 +54,7 @@ Minor release (1.15.0), no breaking change; nothing to do for a standard host.
 | Deprecated | Replacement |
 |---|---|
 | `UserSessionsInterface::currentHash($requestOrSession)` | `$manager->sessionHash($manager->sessionRef($requestOrSession))`; type application services against `SessionHashesInterface` |
-| `Sessions\Client\DeviceIdResolverInterface::deviceId(Request)` | `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)` (`$request->headers->get('X')` becomes `$context->header('X')`, `$request->cookies->get('x')` becomes `$context->cookie('x')`, `$request->getClientIp()` becomes `$context->clientIp`) |
+| `Sessions\Client\DeviceIdResolverInterface::deviceId(Request)` | `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)`; the context leaves out the session cookie and the `Authorization`, `Cookie`, `Proxy-Authorization` headers (`$request->headers->get('X')` becomes `$context->header('X')`, `$request->cookies->get('x')` becomes `$context->cookie('x')`, `$request->getClientIp()` becomes `$context->clientIp`) |
 
 Both deprecated forms keep working and trigger a `E_USER_DEPRECATED` notice (`currentHash()` on each call, the legacy
 resolver once when the session client factory is built). `sessionHash(sessionRef($x))` returns the same hash as

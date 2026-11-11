@@ -18,6 +18,8 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
 final class ClientAndLimitTest extends TestCase
 {
@@ -136,6 +138,35 @@ final class ClientAndLimitTest extends TestCase
         self::assertSame('tablet-1', $context->header('X-Device'));
         self::assertSame('d-1', $context->cookie('device'));
         self::assertNull($context->cookie('nested'));
+    }
+
+    public function testDeviceContextLeavesCredentialsOut(): void
+    {
+        $request = Request::create('/', cookies: ['SESSID' => 'REDACTED-TEST-session', 'device' => 'd-1'], server: [
+            'HTTP_AUTHORIZATION'       => 'REDACTED-TEST-auth',
+            'HTTP_PROXY_AUTHORIZATION' => 'REDACTED-TEST-proxy',
+            'HTTP_COOKIE'              => 'SESSID=REDACTED-TEST-session',
+            'HTTP_X_DEVICE'            => 'tablet-1',
+        ]);
+        $session = new Session(new MockArraySessionStorage(name: 'SESSID'));
+        $request->setSession($session);
+        $request->headers->set('1', 'numeric');
+
+        $context = SessionClientFactory::deviceContext($request);
+
+        self::assertNull($context->header('Authorization'));
+        self::assertNull($context->header('Proxy-Authorization'));
+        self::assertNull($context->header('Cookie'));
+        self::assertNull($context->cookie('SESSID'), 'The session cookie is a credential');
+        self::assertSame('d-1', $context->cookie('device'));
+        self::assertSame('tablet-1', $context->header('X-Device'));
+        self::assertSame('numeric', $context->header('1'), 'A numeric header name does not throw');
+        self::assertSame('tablet-1', (new SessionClientFactory(deviceIds: new class implements DeviceIdProviderInterface {
+            public function deviceIdFor(DeviceContext $context): ?string
+            {
+                return $context->header('x-device');
+            }
+        }))->deviceId($request));
     }
 
     public function testInvalidModes(): void

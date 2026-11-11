@@ -565,7 +565,8 @@ final class DeviceCookieId implements DeviceIdProviderInterface
 ```
 
 `DeviceContext` is a framework-free view of the request (client IP with trusted proxies applied, user agent, first
-value of each header, cookies; dumps show names only). The `Request`-typed `DeviceIdResolverInterface` still works and
+value of each header, cookies; dumps show names only). It never holds the session cookie nor the `Authorization`,
+`Cookie` and `Proxy-Authorization` headers: a provider that needs a credential is not a device id provider. The `Request`-typed `DeviceIdResolverInterface` still works and
 is **deprecated since 1.15** (removed in 2.0); a service implementing both is called through `DeviceIdProviderInterface`.
 
 ### Automatic sign-outs

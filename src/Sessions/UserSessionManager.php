@@ -32,6 +32,7 @@ use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use SensitiveParameter;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
@@ -126,7 +127,7 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
     /**
      * Registry key of a session id: an HMAC, so the id itself is never stored.
      */
-    public function hash(string $sessionId): string
+    public function hash(#[SensitiveParameter] string $sessionId): string
     {
         return hash_hmac('sha256', $sessionId, $this->secret);
     }
@@ -163,15 +164,15 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
     }
 
     /**
-     * Registry hash of a session reference or raw session id (null for null).
+     * Registry hash of a session reference or raw session id (null for null and for an empty id).
      */
-    public function sessionHash(SessionRef|string|null $session): ?string
+    public function sessionHash(#[SensitiveParameter] SessionRef|string|null $session): ?string
     {
         if ($session instanceof SessionRef) {
             return $this->hash($session->sessionId());
         }
 
-        return $session === null ? null : $this->hash($session);
+        return $session === null || $session === '' ? null : $this->hash($session);
     }
 
     /**

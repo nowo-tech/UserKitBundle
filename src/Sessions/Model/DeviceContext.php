@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Sessions\Model;
 
+use InvalidArgumentException;
 use Nowo\UserKitBundle\Sessions\Client\DeviceIdProviderInterface;
 
 use function array_keys;
@@ -14,7 +15,9 @@ use function strtolower;
  * {@see DeviceIdProviderInterface}: the client IP as seen by the application (trusted proxies applied), the user agent,
  * the request headers (lower-case names, first value) and the cookies.
  *
- * Cookies and headers can carry credentials (the session cookie, `Authorization`): dumps show their names only.
+ * Built by `SessionClientFactory::deviceContext()` without the session cookie and the `Authorization`, `Cookie` and
+ * `Proxy-Authorization` headers. Cookies and headers can still carry other secrets: dumps show their names only, and a
+ * device context is request-scoped and cannot be serialized.
  */
 final readonly class DeviceContext
 {
@@ -33,7 +36,7 @@ final readonly class DeviceContext
     ) {
         $normalized = [];
         foreach ($headers as $name => $value) {
-            $normalized[strtolower($name)] = $value;
+            $normalized[strtolower((string) $name)] = $value;
         }
         $this->headers = $normalized;
     }
@@ -52,6 +55,24 @@ final readonly class DeviceContext
     public function cookie(string $name): ?string
     {
         return $this->cookies[$name] ?? null;
+    }
+
+    /**
+     * A device context is request-scoped: it is never serialized (it can carry cookies and headers).
+     *
+     * @return array<string, mixed>
+     */
+    public function __serialize(): array
+    {
+        throw new InvalidArgumentException('A device context cannot be serialized.');
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        throw new InvalidArgumentException('A device context cannot be unserialized.');
     }
 
     /**

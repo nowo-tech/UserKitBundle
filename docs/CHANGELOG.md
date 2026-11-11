@@ -55,9 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Framework-free session ports (REQ-ARCH-001 rule 3).** `Sessions\SessionHashesInterface::sessionHash(SessionRef|string|null)`
   (aliased to `UserSessionManager`) and the `Sessions\Model\SessionRef` value object, built at the HTTP edge by
   `UserSessionManager::sessionRef(Request|SessionInterface|null)`; `SessionRef` hides the session id from dumps and
-  refuses serialization. `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)` with the
-  `Sessions\Model\DeviceContext` value object (client IP, user agent, headers, cookies; dumps show names only),
-  accepted by `sessions.client.device_id_resolver`.
+  refuses serialization and unserialization. `sessionHash()` returns null for null and for an empty id, and its
+  argument is a `#[SensitiveParameter]`. `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)`
+  with the `Sessions\Model\DeviceContext` value object (client IP, user agent, headers, cookies; dumps show names
+  only; never serialized), accepted by `sessions.client.device_id_resolver`. The context never carries the session
+  cookie nor the `Authorization`, `Cookie` and `Proxy-Authorization` headers, and a numeric header name is accepted
+  (audit MO).
 - **XML mapping of the `UiPreferences` / `ProductTourProgress` embeddables (REQ-ARCH-001 rule 2)** in
   `src/Resources/config/doctrine/model`, opt-in for DDD / XML-mapped hosts, plus the field list of every trait for
   hosts that map them in XML (USAGE).
