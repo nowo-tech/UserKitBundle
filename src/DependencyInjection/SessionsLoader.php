@@ -33,6 +33,7 @@ use Nowo\UserKitBundle\Sessions\Security\AccessGuard;
 use Nowo\UserKitBundle\Sessions\Security\AllowAllSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\RoleSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
+use Nowo\UserKitBundle\Sessions\SessionHashesInterface;
 use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
@@ -220,6 +221,7 @@ final class SessionsLoader
             $sessions['owner']['on_unresolved'] === 'exception',
         ]))->setPublic(true));
         $container->setAlias(UserSessionsInterface::class, UserSessionManager::class);
+        $container->setAlias(SessionHashesInterface::class, UserSessionManager::class);
 
         self::registerCommitQueue($container, $doctrine);
 

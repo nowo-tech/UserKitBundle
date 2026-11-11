@@ -35,7 +35,10 @@
   - [Host with its own session UI](#host-with-its-own-session-ui)
 - [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
   - [Override in the application](#override-in-the-application)
+- [Standard Symfony host](#standard-symfony-host)
 - [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
+  - [DDD host: XML mapping of the embeddables and trait fields](#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields)
+  - [DDD host: framework-free session ports](#ddd-host-framework-free-session-ports)
 - [AuthKit coexistence](#authkit-coexistence)
 - [Forms in Twig (REQ-TWIG-005)](#forms-in-twig-req-twig-005)
 
@@ -442,7 +445,7 @@ final class AccountSecurity
     public function afterTwoFactorChange(User $user, Request $request): void
     {
         // Everything but the current browser.
-        $this->sessions->revokeOthers($user, $this->sessions->currentHash($request));
+        $this->sessions->revokeOthers($user, $this->sessions->sessionHash($this->sessions->sessionRef($request)));
     }
 
     public function suspend(User $user, User $admin): void
@@ -460,7 +463,9 @@ final class AccountSecurity
 | `revokeOthers($user, $currentHash, $actor = null, ?string $customReason = null, array $context = [])` | Every session but `$currentHash` (reason `others`); bumps the remember-me epoch when enabled. |
 | `revokeAll($user, $actor = null, $reason = Everywhere, $except = null, ?string $customReason = null, array $context = [])` | Every session (reason `everywhere`, `admin` when `$actor` is someone else, or yours); bumps the remember-me epoch when enabled. |
 | `revokeDevice($user, $deviceId, $except = null, $actor = null, ?string $customReason = null, array $context = [], bool $invalidateRememberMe = false)` | The sessions of one device (reason `device`); `invalidateRememberMe` as for `revoke()`. |
-| `currentHash($requestOrSession)` | Registry hash of the current session (null before it is registered). |
+| `sessionRef($requestOrSession)` | HTTP-edge adapter (1.15): `SessionRef` of the current session, or null before it is registered. |
+| `sessionHash(SessionRef\|string\|null $session)` | Registry hash of a `SessionRef` or raw session id (null for null); framework-free port `Sessions\SessionHashesInterface` (1.15). |
+| `currentHash($requestOrSession)` | **Deprecated since 1.15** (removed in 2.0): `sessionHash(sessionRef($requestOrSession))`. |
 | `limitFor($user)` | `SessionLimit` from the configured resolver (`maxSessions`, `policy`, `maxTrustedDevices`, `extra`). |
 | `invalidatesRememberMe()` | Whether the epoch is enabled (revokeAll / revokeOthers, and revoke / revokeDevice with `invalidateRememberMe`, void remember-me cookies). |
 | `forgetUser($user)` / `forgetOwner(SessionUser $owner, $user = null)` | Revoke, then delete every row of a user; the epoch is bumped, not deleted. |
@@ -541,9 +546,28 @@ if ($limit->limitsTrustedDevices() && $this->devices->countTrusted($user) >= $li
 
 ### Device ids
 
-Implement `DeviceIdResolverInterface` (for example from a device-fingerprinting bundle) and set
+Implement `Sessions\Client\DeviceIdProviderInterface` (for example from a device-fingerprinting bundle) and set
 `sessions.client.device_id_resolver`; then `revokeDevice($user, $deviceId)` ends that device's sessions (e.g. when its
 trust is revoked). A device id is never a credential.
+
+```php
+use Nowo\UserKitBundle\Sessions\Client\DeviceIdProviderInterface;
+use Nowo\UserKitBundle\Sessions\Model\DeviceContext;
+
+final class DeviceCookieId implements DeviceIdProviderInterface
+{
+    public function deviceIdFor(DeviceContext $context): ?string
+    {
+        // Also: $context->header('X-Device-Id'), $context->clientIp, $context->userAgent.
+        return $context->cookie('device_id');
+    }
+}
+```
+
+`DeviceContext` is a framework-free view of the request (client IP with trusted proxies applied, user agent, first
+value of each header, cookies; dumps show names only). It never holds the session cookie nor the `Authorization`,
+`Cookie` and `Proxy-Authorization` headers: a provider that needs a credential is not a device id provider. The `Request`-typed `DeviceIdResolverInterface` still works and
+is **deprecated since 1.15** (removed in 2.0); a service implementing both is called through `DeviceIdProviderInterface`.
 
 ### Automatic sign-outs
 
@@ -744,7 +768,7 @@ final class DevicesController
 
     public function list(Request $request, #[CurrentUser] User $user): Response
     {
-        $current = $this->sessions->currentHash($request);
+        $current = $this->sessions->sessionHash($this->sessions->sessionRef($request));
         $rows    = array_map(static fn (UserSession $s): array => [
             'id'        => $s->getPublicId(),               // opaque, safe in URLs and forms
             'browser'   => $s->getBrowser(),
@@ -768,7 +792,7 @@ final class DevicesController
     public function signOutOthers(Request $request, #[CurrentUser] User $user): Response
     {
         // your CSRF check, then (also refreshes this browser's remember-me cookie with the epoch):
-        $this->sessions->revokeOthers($user, $this->sessions->currentHash($request), customReason: 'link');
+        $this->sessions->revokeOthers($user, $this->sessions->sessionHash($this->sessions->sessionRef($request)), customReason: 'link');
     }
 }
 ```
@@ -795,6 +819,15 @@ account:
 
 Symfony uses app translations first; missing keys fall back to the bundle.
 
+## Standard Symfony host
+
+The default path needs no extra configuration: put the traits (`EnabledUserTrait`, `LastActivityTrait`,
+`UiPreferencesTrait`, `ProductTourProgressTrait`) or the attribute-mapped embeddables in your attribute-mapped `User`
+entity (see [Entity traits](#entity-traits-optional), [UI preferences](#ui-preferences) and the
+[embeddables mapping entry](CONFIGURATION.md#doctrine-mapping-for-the-kit-embeddables)), let `user_class` point at it,
+and use `UserSessionManager` / the session pages from your controllers. The session registry maps its own tables by
+attributes on its own (`sessions.doctrine.entity_manager` optional).
+
 ## Using it from a DDD / hexagonal application
 
 UserKit is an infrastructure adapter around your Symfony security user, plus one bounded context of its own: the
@@ -819,7 +852,7 @@ optional session registry, with its own tables `user_kit_session` / `user_kit_se
 | `Sessions\Limit\SessionLimitResolverInterface` (returns `SessionLimit`) | `sessions.limit.resolver` |
 | `Sessions\Security\SessionsAccessCheckerInterface` | `sessions.security.access_checker` |
 | `Sessions\Epoch\SessionEpochStoreInterface` | `sessions.remember_me_epoch.store` |
-| `Sessions\Client\DeviceIdResolverInterface` | `sessions.client.device_id_resolver` |
+| `Sessions\Client\DeviceIdProviderInterface` (takes a `DeviceContext` VO; the `Request`-typed `DeviceIdResolverInterface` is deprecated since 1.15) | `sessions.client.device_id_resolver` |
 | `Sessions\Owner\SessionOwnerResolverInterface` (returns `SessionUser`) | `sessions.owner.resolver` |
 | `PersonalData\PersonalDataExportProviderInterface`, `PersonalDataEraserInterface`, `ErasureGuardInterface` | autoconfigured tags |
 
@@ -895,6 +928,82 @@ A revocation for a user the resolver does not know is never skipped silently: it
 - The admin sessions page loads the subject with `ManagerRegistry::find(user_class, id)`.
 - `UserSessionManager::listFor()` still returns `UserSession` entities; use `listRowsFor()` (`SessionRow` DTOs) instead.
 - There are no events for account disabled, last activity or personal-data export/erasure.
+
+### DDD host: XML mapping of the embeddables and trait fields
+
+The ready-made embeddables ship an XML mapping (1.15) in `src/Resources/config/doctrine/model`
+(`UiPreferences.orm.xml`, `ProductTourProgress.orm.xml`; same columns as the attribute mapping). Register it **instead
+of** the attribute entry for `Nowo\UserKitBundle\Model`, never both:
+
+```yaml
+doctrine:
+    orm:
+        mappings:
+            NowoUserKitModel:
+                type: xml
+                is_bundle: false
+                dir: '%kernel.project_dir%/vendor/nowo-tech/user-kit-bundle/src/Resources/config/doctrine/model'
+                prefix: 'Nowo\UserKitBundle\Model'
+```
+
+```xml
+<!-- your aggregate's mapping -->
+<embedded name="uiPreferences" class="Nowo\UserKitBundle\Model\UiPreferences" use-column-prefix="false"/>
+<embedded name="productTour" class="Nowo\UserKitBundle\Model\ProductTourProgress" use-column-prefix="false"/>
+```
+
+Traits cannot carry XML mapping. If you `use` a trait in an XML-mapped class, map its fields yourself:
+
+| Trait | Field | Column | Type | Length | Nullable / default |
+|---|---|---|---|---|---|
+| `EnabledUserTrait` | `enabled` | `enabled` | `boolean` | — | not null, `options: {default: true}` |
+| `LastActivityTrait` | `lastActivityAt` | `last_activity_at` | `datetime_immutable` | — | nullable |
+| `UiPreferencesTrait` | `preferredLocale` | `preferred_locale` | `string` | 8 | nullable |
+| | `preferredTheme` | `preferred_theme` | `string` | 8 | nullable |
+| | `preferredContentWidth` | `preferred_content_width` | `string` | 8 | nullable |
+| | `preferredUiDensity` | `preferred_ui_density` | `string` | 16 | nullable |
+| | `preferredMotion` | `preferred_motion` | `string` | 16 | nullable |
+| | `preferredFontScale` | `preferred_font_scale` | `string` | 8 | nullable |
+| | `preferredContrast` | `preferred_contrast` | `string` | 8 | nullable |
+| | `preferredSidebar` | `preferred_sidebar` | `string` | 16 | nullable |
+| | `preferredFooter` | `preferred_footer` | `string` | 16 | nullable |
+| `ProductTourProgressTrait` | `productTourSeenAt` | `product_tour_seen_at` | `datetime_immutable` | — | nullable |
+| | `productTourSeenPages` | `product_tour_seen_pages` | `json` | — | nullable |
+
+No index is required. The column names follow Doctrine's default naming strategy (`enabled`, `last_activity_at`);
+keep them if you switch an existing table from attributes to XML.
+
+### DDD host: framework-free session ports
+
+Since 1.15 no session port needs `Request` or `SessionInterface`:
+
+- `Sessions\SessionHashesInterface::sessionHash(SessionRef|string|null)` gives the registry hash that
+  `listRowsFor()`, `revokeOthers()`, `revokeAll()` and `revokeDevice()` take as `$currentHash` / `$except`. Build the
+  `Sessions\Model\SessionRef` in your HTTP adapter with `UserSessionManager::sessionRef($request)` (null until the
+  session is registered) and pass it to the application service. `SessionRef` never shows the session id in a dump and
+  cannot be serialized: put the hash, not the reference, in a queued message, and never log either.
+- `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)` replaces the `Request`-typed device id
+  resolver.
+
+```php
+// Application layer: ports and value objects only.
+final readonly class SignOutOtherDevices
+{
+    public function __construct(private UserSessionsInterface $sessions, private SessionHashesInterface $hashes) {}
+
+    public function __invoke(object $user, ?SessionRef $current): int
+    {
+        return $this->sessions->revokeOthers($user, $this->hashes->sessionHash($current));
+    }
+}
+
+// HTTP adapter.
+$count = ($this->signOutOtherDevices)($this->getUser(), $this->sessionManager->sessionRef($request));
+```
+
+`tests/Integration/DddHost/DddHostKernelTest.php` boots such a host: an XML-mapped aggregate with no attribute, base
+class or trait embedding the kit embeddables through the shipped XML, a non-entity security user mapped to the
+aggregate id, the framework-free device id port, and an application service using the ports only.
 
 ## AuthKit coexistence
 

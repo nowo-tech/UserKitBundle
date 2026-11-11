@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Sessions\Client;
 
 use InvalidArgumentException;
+use Nowo\UserKitBundle\Sessions\Model\DeviceContext;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Symfony\Component\HttpFoundation\IpUtils;
 use Symfony\Component\HttpFoundation\Request;
@@ -15,13 +16,17 @@ use function in_array;
 use function inet_ntop;
 use function inet_pton;
 use function intdiv;
+use function is_string;
 use function mb_substr;
 use function preg_match;
 use function sprintf;
 use function str_contains;
 use function str_repeat;
+use function strtolower;
 use function substr;
+use function trigger_error;
 
+use const E_USER_DEPRECATED;
 use const FILTER_VALIDATE_IP;
 
 /**
@@ -31,7 +36,8 @@ use const FILTER_VALIDATE_IP;
  *   string); `none` keeps nothing;
  * - IP (`sessions.client.ip`): `truncate` keeps the network (`/24` and `/48` by default), `hash` keeps a keyed
  *   HMAC of the truncated network (`h:` + 16 hex, not displayable, useful only to compare), `none` keeps nothing;
- * - device id: only from the optional host {@see DeviceIdResolverInterface}.
+ * - device id: only from the optional host {@see DeviceIdProviderInterface} (framework-free, given a
+ *   {@see DeviceContext}) or the deprecated {@see DeviceIdResolverInterface} (given the `Request`).
  */
 final readonly class SessionClientFactory
 {
@@ -70,8 +76,11 @@ final readonly class SessionClientFactory
         private int $ipv6Prefix = 48,
         private string $userAgentMode = 'label',
         private string $secret = '',
-        private ?DeviceIdResolverInterface $deviceIds = null,
+        private DeviceIdProviderInterface|DeviceIdResolverInterface|null $deviceIds = null,
     ) {
+        if ($deviceIds instanceof DeviceIdResolverInterface && !$deviceIds instanceof DeviceIdProviderInterface) {
+            @trigger_error('Since nowo-tech/user-kit-bundle 1.15: implementing "DeviceIdResolverInterface" for "sessions.client.device_id_resolver" is deprecated, implement "DeviceIdProviderInterface" instead.', E_USER_DEPRECATED);
+        }
         if (!in_array($ipMode, self::IP_MODES, true) || !in_array($userAgentMode, self::USER_AGENT_MODES, true)) {
             throw new InvalidArgumentException('Invalid session client mode.');
         }
@@ -100,9 +109,46 @@ final readonly class SessionClientFactory
      */
     public function deviceId(Request $request): ?string
     {
-        $id = $this->deviceIds?->deviceId($request);
+        $id = match (true) {
+            $this->deviceIds instanceof DeviceIdProviderInterface => $this->deviceIds->deviceIdFor(self::deviceContext($request)),
+            $this->deviceIds instanceof DeviceIdResolverInterface => $this->deviceIds->deviceId($request),
+            default                                               => null,
+        };
 
         return $id === null || $id === '' ? null : mb_substr($id, 0, 64);
+    }
+
+    /** Credential-bearing headers never copied into a {@see DeviceContext}. */
+    public const STRIPPED_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
+    /**
+     * HTTP-edge adapter: the framework-free {@see DeviceContext} of a request (client IP with trusted proxies applied,
+     * user agent, first value of each header, cookies). The session cookie and the `Authorization`, `Cookie` and
+     * `Proxy-Authorization` headers are left out: they are credentials, never device data.
+     */
+    public static function deviceContext(Request $request): DeviceContext
+    {
+        $headers = [];
+        foreach ($request->headers->keys() as $name) {
+            $name = strtolower((string) $name);
+            if (in_array($name, self::STRIPPED_HEADERS, true)) {
+                continue;
+            }
+            $value = $request->headers->get($name);
+            if ($value !== null) {
+                $headers[$name] = $value;
+            }
+        }
+        $sessionCookie = $request->hasSession() ? $request->getSession()->getName() : null;
+        $cookies       = [];
+        foreach ($request->cookies->all() as $name => $value) {
+            $name = (string) $name;
+            if (is_string($value) && $name !== $sessionCookie) {
+                $cookies[$name] = $value;
+            }
+        }
+
+        return new DeviceContext($request->getClientIp(), (string) $request->headers->get('User-Agent', ''), $headers, $cookies);
     }
 
     /**

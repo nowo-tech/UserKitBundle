@@ -50,6 +50,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Framework-free session ports (REQ-ARCH-001 rule 3).** `Sessions\SessionHashesInterface::sessionHash(SessionRef|string|null)`
+  (aliased to `UserSessionManager`) and the `Sessions\Model\SessionRef` value object, built at the HTTP edge by
+  `UserSessionManager::sessionRef(Request|SessionInterface|null)`; `SessionRef` hides the session id from dumps and
+  refuses serialization and unserialization. `sessionHash()` returns null for null and for an empty id, and its
+  argument is a `#[SensitiveParameter]`. `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)`
+  with the `Sessions\Model\DeviceContext` value object (client IP, user agent, headers, cookies; dumps show names
+  only; never serialized), accepted by `sessions.client.device_id_resolver`. The context never carries the session
+  cookie nor the `Authorization`, `Cookie` and `Proxy-Authorization` headers, and a numeric header name is accepted
+  (audit MO).
+- **XML mapping of the `UiPreferences` / `ProductTourProgress` embeddables (REQ-ARCH-001 rule 2)** in
+  `src/Resources/config/doctrine/model`, opt-in for DDD / XML-mapped hosts, plus the field list of every trait for
+  hosts that map them in XML (USAGE).
+- USAGE "Standard Symfony host" and "DDD host" sections; a DDD-host kernel test (XML-mapped aggregate without
+  attributes, base class or trait; non-entity security user; ports only).
+
+### Changed
+
+- The bundle's own listeners and session pages use `sessionHash(sessionRef(...))` instead of `currentHash()`; the
+  hashes, the kept session of a password change and "sign out other sessions", and the revocation semantics are
+  unchanged (old-vs-new equivalence tests: `SessionRefEquivalenceTest`, `ClientAndLimitTest`).
+
+### Deprecated
+
+- `UserSessionsInterface::currentHash(Request|SessionInterface|null)` / `UserSessionManager::currentHash()`: use
+  `sessionHash(sessionRef($request))`. Removed in 2.0, where `UserSessionsInterface` extends `SessionHashesInterface`.
+- `Sessions\Client\DeviceIdResolverInterface` (`deviceId(Request)`): implement `DeviceIdProviderInterface`. Removed
+  in 2.0.
+
 ## [1.14.2] - 2026-11-11
 
 ### Security

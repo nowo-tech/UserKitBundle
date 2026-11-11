@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures;
 
-use Nowo\UserKitBundle\Sessions\Client\DeviceIdResolverInterface;
-use Symfony\Component\HttpFoundation\Request;
+use Nowo\UserKitBundle\Sessions\Client\DeviceIdProviderInterface;
+use Nowo\UserKitBundle\Sessions\Model\DeviceContext;
 
 /**
- * Device id from the `X-Device` test header.
+ * Device id from the `X-Device` test header (framework-free port).
  */
-final class HeaderDeviceIdResolver implements DeviceIdResolverInterface
+final class HeaderDeviceIdResolver implements DeviceIdProviderInterface
 {
-    public function deviceId(Request $request): ?string
+    public function deviceIdFor(DeviceContext $context): ?string
     {
-        return $request->headers->get('X-Device');
+        return $context->header('X-Device');
     }
 }

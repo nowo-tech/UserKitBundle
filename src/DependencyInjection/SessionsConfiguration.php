@@ -207,7 +207,7 @@ final class SessionsConfiguration
                 ->end()
                 ->scalarNode('device_id_resolver')
                     ->defaultNull()
-                    ->info('Service id implementing Sessions\\Client\\DeviceIdResolverInterface (optional device id per session).')
+                    ->info('Service id implementing Sessions\\Client\\DeviceIdProviderInterface (or the deprecated DeviceIdResolverInterface): optional device id per session.')
                 ->end()
             ->end();
 

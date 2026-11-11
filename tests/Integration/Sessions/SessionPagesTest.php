@@ -91,7 +91,7 @@ final class SessionPagesTest extends SessionsKernelTestCase
         self::assertCount(1, $this->rowsOf($this->find('bob@example.com')));
 
         // A stale form (the row was revoked meanwhile): 404.
-        $this->manager()->revokeOthers($alice, $this->manager()->currentHash($laptop->getRequest()->getSession()));
+        $this->manager()->revokeOthers($alice, $this->manager()->sessionHash($this->manager()->sessionRef($laptop->getRequest()->getSession())));
         $laptop->request('POST', (string) $form->attr('action'), ['csrf_only' => ['_token' => $token]]);
         self::assertSame(404, $laptop->getResponse()->getStatusCode());
     }
@@ -193,7 +193,7 @@ final class SessionPagesTest extends SessionsKernelTestCase
      */
     private function other(Member $member, KernelBrowser $own): string
     {
-        $hash = $this->manager()->currentHash($own->getRequest()->getSession());
+        $hash = $this->manager()->sessionHash($this->manager()->sessionRef($own->getRequest()->getSession()));
         foreach ($this->rowsOf($member) as $row) {
             if ($row->getSessionHash() !== $hash) {
                 return $row->getPublicId();

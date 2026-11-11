@@ -233,7 +233,7 @@ final readonly class SessionRegistryListener
         }
         $user      = $event->getPassport()->getUser();
         $owner     = $this->sessions->owner($user);
-        $rejection = $owner instanceof SessionUser ? $this->rejection($user, $owner, $this->sessions->currentHash($request)) : null;
+        $rejection = $owner instanceof SessionUser ? $this->rejection($user, $owner, $this->sessions->sessionHash($this->sessions->sessionRef($request))) : null;
         if ($rejection !== null) {
             throw new SessionLimitReachedException($rejection);
         }

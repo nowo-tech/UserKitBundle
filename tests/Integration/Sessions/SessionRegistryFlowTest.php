@@ -55,7 +55,7 @@ final class SessionRegistryFlowTest extends SessionsKernelTestCase
         $this->dispatcher()->addListener(UserSessionsRevokedEvent::class, static function (UserSessionsRevokedEvent $e) use (&$revoked): void {
             $revoked[] = $e;
         });
-        $count = $this->manager()->revokeOthers($alice, $this->manager()->currentHash($laptop->getRequest()->getSession()));
+        $count = $this->manager()->revokeOthers($alice, $this->manager()->sessionHash($this->manager()->sessionRef($laptop->getRequest()->getSession())));
         self::assertSame(1, $count);
         self::assertSame(RevocationReason::Others, $revoked[0]->reason);
         self::assertSame(1, $revoked[0]->count());

@@ -70,7 +70,7 @@ final class SessionsController extends AbstractController
         $user = $this->ownUser();
 
         return $this->noStore($this->render($this->pages->template('index'), [
-            'page' => $this->pages->ownPage($this->sessions->listFor($user), $this->sessions->currentHash($request)),
+            'page' => $this->pages->ownPage($this->sessions->listFor($user), $this->sessions->sessionHash($this->sessions->sessionRef($request))),
         ]));
     }
 
@@ -98,7 +98,7 @@ final class SessionsController extends AbstractController
     {
         $user = $this->ownUser();
         $this->requireCsrf($request, SessionsPages::CSRF_REVOKE_OTHERS);
-        $count = $this->sessions->revokeOthers($user, $this->sessions->currentHash($request));
+        $count = $this->sessions->revokeOthers($user, $this->sessions->sessionHash($this->sessions->sessionRef($request)));
         $this->flash($count === 0 ? 'sessions.flash.no_others' : 'sessions.flash.revoked_others', ['%count%' => $count]);
 
         return $this->back(SessionsPages::ROUTE_INDEX);

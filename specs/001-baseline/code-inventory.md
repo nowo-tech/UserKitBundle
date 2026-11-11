@@ -111,7 +111,9 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `Sessions/Doctrine/UserSessionStore.php` | Registry table: ORM reads, one parameterised DBAL statement per write, capped lists | FR-SES-003, FR-SES-004 | Mapped |
 | `Sessions/Doctrine/TablePrefixListener.php` | `sessions.doctrine.table_prefix` on bundle-owned tables / indexes only (REQ-ORM-002) | FR-SES-009 | Mapped |
 | `Sessions/Client/SessionClientFactory.php` | Client of a request with data minimisation (browser / OS names, truncated or hashed IP) | FR-SES-003 | Mapped |
-| `Sessions/Client/DeviceIdResolverInterface.php` | Optional host hook: device id stored with the session (`revokeDevice()`) | FR-SES-003, FR-SES-007 | Mapped |
+| `Sessions/Client/DeviceIdResolverInterface.php` | Optional host hook: device id stored with the session (`revokeDevice()`); deprecated since 1.15 | FR-SES-003, FR-SES-007 | Mapped |
+| `Sessions/Client/DeviceIdProviderInterface.php` | Framework-free device id hook (`DeviceContext`), 1.15 | FR-SES-003, FR-SES-007 | Mapped |
+| `Sessions/SessionHashesInterface.php`, `Sessions/Model/SessionRef.php`, `Sessions/Model/DeviceContext.php` | Framework-free session ports and VOs (REQ-ARCH-001 rule 3), 1.15 | FR-SES-003, FR-SES-007 | Mapped |
 | `Sessions/Model/SessionClient.php` | Value object: browser, OS, device id, stored IP form | FR-SES-003 | Mapped |
 | `Sessions/Model/SessionUser.php` | Value object: owner class + id | FR-SES-003 | Mapped |
 | `Sessions/Model/SessionLimit.php` | Value object: limit of one user (null = unlimited) | FR-SES-006 | Mapped |

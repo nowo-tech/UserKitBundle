@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    XML mapping of the ready-made ProductTourProgress embeddable (REQ-ARCH-001 rule 2, DDD / hexagonal hosts).
+    Same columns as the attribute mapping of ProductTourProgressTrait: register either this directory as an `xml`
+    mapping with prefix `Nowo\UserKitBundle\Model`, or the `src/Model` attribute mapping, never both.
+-->
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+    <embeddable name="Nowo\UserKitBundle\Model\ProductTourProgress">
+        <field name="productTourSeenAt" column="product_tour_seen_at" type="datetime_immutable" nullable="true"/>
+        <field name="productTourSeenPages" column="product_tour_seen_pages" type="json" nullable="true"/>
+    </embeddable>
+</doctrine-mapping>

@@ -20,6 +20,7 @@ use Nowo\UserKitBundle\Sessions\Limit\SessionLimitResolverInterface;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
+use Nowo\UserKitBundle\Sessions\Model\SessionRef;
 use Nowo\UserKitBundle\Sessions\Model\SessionState;
 use Nowo\UserKitBundle\Sessions\Model\SessionStatus;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
@@ -31,6 +32,7 @@ use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use SensitiveParameter;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
@@ -46,6 +48,9 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function sprintf;
+use function trigger_error;
+
+use const E_USER_DEPRECATED;
 
 /**
  * Public API of the session registry (the hook point for AuthKit and host code): list a user's sessions, sign one
@@ -63,7 +68,7 @@ use function sprintf;
  *
  * Holds no state between requests (worker mode).
  */
-final readonly class UserSessionManager implements UserSessionsInterface
+final readonly class UserSessionManager implements UserSessionsInterface, SessionHashesInterface
 {
     /**
      * Session attribute: one marker per firewall context, `context => {h: registry hash, u: owner key, s: last touch}`
@@ -122,19 +127,52 @@ final readonly class UserSessionManager implements UserSessionsInterface
     /**
      * Registry key of a session id: an HMAC, so the id itself is never stored.
      */
-    public function hash(string $sessionId): string
+    public function hash(#[SensitiveParameter] string $sessionId): string
     {
         return hash_hmac('sha256', $sessionId, $this->secret);
     }
 
     /**
      * Registry hash of the session (null before its first registered request).
+     *
+     * @deprecated since 1.15, use `sessionHash($manager->sessionRef($request))`; removed in 2.0
      */
     public function currentHash(Request|SessionInterface|null $session): ?string
     {
+        @trigger_error('Since nowo-tech/user-kit-bundle 1.15: "UserSessionsInterface::currentHash()" is deprecated, use "SessionHashesInterface::sessionHash()" with "UserSessionManager::sessionRef()" instead.', E_USER_DEPRECATED);
+
         $session = $this->session($session);
 
         return $session instanceof SessionInterface && $this->markers($session) !== [] ? $this->hash($session->getId()) : null;
+    }
+
+    /**
+     * HTTP-edge adapter: the framework-free reference of a registered session, or null when there is no session or it
+     * is not registered yet (no marker). For every started session `sessionHash(sessionRef($x))` equals the deprecated
+     * `currentHash($x)`; a session without an id (never started) gives null here, where `currentHash()` hashed the
+     * empty string (a hash that matches no registry row, so the registry behaves the same).
+     */
+    public function sessionRef(Request|SessionInterface|null $session): ?SessionRef
+    {
+        $session = $this->session($session);
+        if (!$session instanceof SessionInterface || $this->markers($session) === []) {
+            return null;
+        }
+        $id = $session->getId();
+
+        return $id === '' ? null : new SessionRef($id);
+    }
+
+    /**
+     * Registry hash of a session reference or raw session id (null for null and for an empty id).
+     */
+    public function sessionHash(#[SensitiveParameter] SessionRef|string|null $session): ?string
+    {
+        if ($session instanceof SessionRef) {
+            return $this->hash($session->sessionId());
+        }
+
+        return $session === null || $session === '' ? null : $this->hash($session);
     }
 
     /**

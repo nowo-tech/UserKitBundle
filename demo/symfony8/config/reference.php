@@ -1567,7 +1567,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             ip?: "truncate"|"hash"|"none"|Param, // truncate: the network (ipv4_prefix / ipv6_prefix). hash: keyed HMAC of that network (not shown). none: nothing. // Default: "truncate"
  *             ipv4_prefix?: 8|16|24|Param, // Default: 24
  *             ipv6_prefix?: 8|16|24|32|40|48|56|64|Param, // Default: 48
- *             device_id_resolver?: scalar|Param|null, // Service id implementing Sessions\Client\DeviceIdResolverInterface (optional device id per session). // Default: null
+ *             device_id_resolver?: scalar|Param|null, // Service id implementing Sessions\Client\DeviceIdProviderInterface (or the deprecated DeviceIdResolverInterface): optional device id per session. // Default: null
  *         },
  *         limit?: array{ // Concurrent-session limit applied at sign-in.
  *             max_sessions?: int|Param, // Live sessions a user may hold at once (null = unlimited). // Default: null

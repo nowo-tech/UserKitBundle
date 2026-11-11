@@ -179,7 +179,7 @@ final class SessionMaintenanceTest extends SessionsKernelTestCase
         $this->boot();
         $manager = $this->manager();
         self::assertSame([], $manager->markers(null));
-        self::assertNull($manager->currentHash(new Request()));
+        self::assertNull($manager->sessionHash($manager->sessionRef(new Request())));
         self::assertSame([], $manager->listFor(new stdClass()));
         self::assertFalse($manager->revoke(new stdClass(), 'x'));
         self::assertSame(0, $manager->revokeOthers(new stdClass(), null));
