@@ -10,6 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Nowo\UserKitBundle\NowoUserKitBundle;
+use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Psr\Log\NullLogger;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
@@ -137,6 +138,22 @@ final class SessionsTestKernel extends Kernel
         return new Response('changed');
     }
 
+    /**
+     * Signs out the signed-in member's session `?id=` (public id) and voids the member's remember-me cookies; the
+     * current session is the kept one ("sign out this device" with `invalidateRememberMe`).
+     */
+    public function revokeRememberMe(Request $request): Response
+    {
+        $tokens   = $this->service('security.token_storage');
+        $member   = $tokens instanceof TokenStorageInterface ? $tokens->getToken()?->getUser() : null;
+        $sessions = $this->service(UserSessionManager::class);
+        if ($member instanceof Member && $sessions instanceof UserSessionManager) {
+            $sessions->revoke($member, (string) $request->query->get('id'), invalidateRememberMe: true);
+        }
+
+        return new Response('revoked');
+    }
+
     private function service(string $id): ?object
     {
         $container = $this->getContainer()->get('test.service_container');
@@ -239,6 +256,7 @@ final class SessionsTestKernel extends Kernel
         $routes->add('api_page', '/api/page')->controller('kernel::page');
         $routes->add('login', '/login')->controller('kernel::login');
         $routes->add('password', '/page/password')->controller('kernel::password');
+        $routes->add('revoke_remember_me', '/page/revoke-remember-me')->controller('kernel::revokeRememberMe');
         $routes->add('page_stateless', '/page/stateless')->controller('kernel::statelessPage')->defaults(['_stateless' => true]);
         $routes->add('back_page', '/back/page')->controller('kernel::page');
         $routes->add('back_login', '/back/login')->controller('kernel::login');

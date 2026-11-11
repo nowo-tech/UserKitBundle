@@ -50,6 +50,7 @@ use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageReceivedEvent;
 use Symfony\Component\Security\Http\Event\CheckPassportEvent;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
@@ -401,6 +402,13 @@ final class SessionsLoader
             [],
         ]))
             ->addTag('kernel.event_listener', ['event' => KernelEvents::RESPONSE, 'method' => 'onResponse', 'priority' => RememberMeEpoch::REISSUE_PRIORITY])
+            // REQ-RUNTIME-002: the kept sessions never outlive their request, console command or Messenger message.
+            ->addTag('kernel.event_listener', ['event' => KernelEvents::REQUEST, 'method' => 'onRequest', 'priority' => 4096])
+            ->addTag('kernel.event_listener', ['event' => KernelEvents::TERMINATE, 'method' => 'reset', 'priority' => -4096])
+            ->addTag('kernel.event_listener', ['event' => 'console.terminate', 'method' => 'reset', 'priority' => -4096])
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageReceivedEvent::class, 'method' => 'reset', 'priority' => 4096])
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageHandledEvent::class, 'method' => 'reset', 'priority' => -4096])
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageFailedEvent::class, 'method' => 'reset', 'priority' => -4096])
             ->addTag('kernel.reset', ['method' => 'reset']));
 
         return new Reference(RememberMeEpoch::class);

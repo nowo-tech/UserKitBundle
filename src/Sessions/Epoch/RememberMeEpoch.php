@@ -14,6 +14,7 @@ use Psr\Container\ContainerInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -44,7 +45,11 @@ use function is_string;
  * CQ N1), and a cookie issued while the epoch is still ahead (a sign-in in the revocation's second) is re-issued the
  * same way (CQ N2).
  *
- * Remembers the kept sessions of the current request only (`kernel.reset`, worker mode).
+ * Remembers the kept sessions of the current request only. FrankenPHP worker mode with the kernel kept alive and NOT
+ * reset (REQ-RUNTIME-002): the memo is emptied at the end of the main request's `kernel.response` (where it is used), at
+ * the main `kernel.request`, `kernel.terminate`, `console.terminate` and the Messenger worker events; `kernel.reset`
+ * still empties it, but correctness never depends on it (1.14.2: before, a revocation's kept "current session" stayed
+ * in the worker and a later request of another session of that user got a fresh remember-me cookie).
  */
 final class RememberMeEpoch implements ResetInterface
 {
@@ -140,8 +145,31 @@ final class RememberMeEpoch implements ResetInterface
      */
     public function onResponse(ResponseEvent $event): void
     {
+        if (!$event->isMainRequest()) {
+            return;
+        }
+        try {
+            $this->reissue($event);
+        } finally {
+            // The revocations of this request are handled: never carry them into the next request of the worker.
+            $this->reset();
+        }
+    }
+
+    /**
+     * Request / console / Messenger boundaries (main `kernel.request` only).
+     */
+    public function onRequest(RequestEvent $event): void
+    {
+        if ($event->isMainRequest()) {
+            $this->reset();
+        }
+    }
+
+    private function reissue(ResponseEvent $event): void
+    {
         $request = $event->getRequest();
-        if (!$event->isMainRequest() || $request->attributes->getBoolean('_stateless')
+        if ($request->attributes->getBoolean('_stateless')
             || $request->attributes->get(SessionRegistryListener::SIGNED_OUT_ATTRIBUTE) === true) {
             return;
         }
@@ -218,7 +246,7 @@ final class RememberMeEpoch implements ResetInterface
     }
 
     /**
-     * Drops the kept sessions between requests (worker mode).
+     * Drops the kept sessions (boundaries above and `kernel.reset`).
      */
     public function reset(): void
     {

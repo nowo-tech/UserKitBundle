@@ -29,6 +29,7 @@ use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Tests\Support\FakeExtension;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use Symfony\Bundle\SecurityBundle\Security\FirewallConfig;
 use Symfony\Bundle\SecurityBundle\Security\FirewallContext;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
@@ -41,8 +42,12 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageReceivedEvent;
 use Symfony\Component\Security\Core\Authentication\RememberMe\InMemoryTokenProvider;
 use Symfony\Component\Security\Core\Authentication\RememberMe\PersistentToken;
 use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
@@ -55,6 +60,7 @@ use Symfony\Component\Security\Http\RememberMe\RememberMeDetails;
 use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
 use Symfony\Component\Security\Http\RememberMe\ResponseListener;
 
+use function array_column;
 use function hash_hmac;
 use function time;
 
@@ -150,7 +156,9 @@ final class HostHooksTest extends TestCase
         // Another session of the user (signed out by the revocation): nothing.
         [$other] = $this->request();
         $epoch->onResponse($event($other));
-        // Same second as the epoch: deferred to the session's next request.
+        self::assertSame([], (new ReflectionProperty(RememberMeEpoch::class, 'kept'))->getValue($epoch), 'A main response empties the kept sessions (REQ-RUNTIME-002).');
+        // Same second as the epoch: deferred to the session's next request (the revocation's own response).
+        $epoch->keep($owner, $at, $hash);
         $epoch->onResponse($event($request));
         self::assertSame(['u' => $owner->key(), 'e' => $at], $session->get(RememberMeEpoch::PENDING_ATTRIBUTE));
         $epoch->reset();
@@ -194,6 +202,27 @@ final class HostHooksTest extends TestCase
         $epoch->forget($owner);
         $epoch->keep($owner, $at, null);
         $epoch->reset();
+    }
+
+    /** REQ-RUNTIME-002: reset() and the main kernel.request empty the kept sessions; a sub-request does not. */
+    public function testResetAndTheMainRequestDropTheKeptSessions(): void
+    {
+        $epoch = $this->epoch(100);
+        $owner = new SessionUser(InMemoryUser::class, 'alice');
+        $kept  = new ReflectionProperty(RememberMeEpoch::class, 'kept');
+
+        $epoch->keep($owner, 100, 'hash');
+        self::assertCount(1, (array) $kept->getValue($epoch));
+        $epoch->reset();
+        self::assertSame([], $kept->getValue($epoch));
+
+        $epoch->keep($owner, 100, null, true, ['revoked']);
+        $epoch->onRequest(new RequestEvent(self::kernel(), Request::create('/'), HttpKernelInterface::SUB_REQUEST));
+        self::assertCount(1, (array) $kept->getValue($epoch), 'A sub-request runs inside the revoking request.');
+        $epoch->onResponse(new ResponseEvent(self::kernel(), Request::create('/'), HttpKernelInterface::SUB_REQUEST, new Response()));
+        self::assertCount(1, (array) $kept->getValue($epoch));
+        $epoch->onRequest(new RequestEvent(self::kernel(), Request::create('/'), HttpKernelInterface::MAIN_REQUEST));
+        self::assertSame([], $kept->getValue($epoch));
     }
 
     /** CQ N2: a cookie issued while the user's epoch is still ahead is re-issued from the epoch second on. */
@@ -285,6 +314,17 @@ final class HostHooksTest extends TestCase
         $container = $this->load(['enabled' => true, 'remember_me_epoch' => ['enabled' => true, 'store' => 'app.epochs'], 'user_removal' => ['delete_sessions' => true], 'limit' => ['max_trusted_devices' => 4], 'purge' => ['revoked_retention' => 60], 'early_check' => ['json_response' => true]]);
         self::assertSame('app.epochs', (string) $container->getAlias(SessionEpochStoreInterface::class));
         self::assertTrue($container->hasDefinition(RememberMeEpoch::class));
+        // REQ-RUNTIME-002: the kept sessions are dropped at every request / console / Messenger boundary, not only by kernel.reset.
+        $events = array_column($container->getDefinition(RememberMeEpoch::class)->getTag('kernel.event_listener'), 'method', 'event');
+        self::assertSame([
+            'kernel.response'                 => 'onResponse',
+            'kernel.request'                  => 'onRequest',
+            'kernel.terminate'                => 'reset',
+            'console.terminate'               => 'reset',
+            WorkerMessageReceivedEvent::class => 'reset',
+            WorkerMessageHandledEvent::class  => 'reset',
+            WorkerMessageFailedEvent::class   => 'reset',
+        ], $events);
         self::assertTrue($container->hasDefinition(UserRemovalListener::class));
 
         $default = $this->load(['enabled' => true, 'remember_me_epoch' => ['enabled' => true]]);
