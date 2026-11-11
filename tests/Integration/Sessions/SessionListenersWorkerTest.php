@@ -52,7 +52,7 @@ final class SessionListenersWorkerTest extends SessionsKernelTestCase
         $connection = $this->em()->getConnection();
         $connection->executeStatement("CREATE TRIGGER worker_test_abort BEFORE UPDATE ON user_kit_test_member WHEN NEW.email = 'alice@example.com' BEGIN SELECT RAISE(ABORT, 'worker test: forced flush failure'); END");
         $member = $this->em()->find(Member::class, $alice->getId()) ?? self::fail();
-        $member->setPassword('never-stored');
+        $member->setPassword('REDACTED-TEST-a');
         try {
             $this->em()->flush();
             self::fail('The flush must fail.');
@@ -70,7 +70,7 @@ final class SessionListenersWorkerTest extends SessionsKernelTestCase
 
         // Later, same kernel and no reset: bob changes his password. Only bob is signed out.
         $member = $this->em()->find(Member::class, $bob->getId()) ?? self::fail();
-        $member->setPassword('bob-new');
+        $member->setPassword('REDACTED-TEST-b');
         $this->em()->flush();
         self::assertCount(0, $this->rowsOf($bob));
         self::assertCount(2, $this->rowsOf($alice), 'Alice keeps her sessions: her change was never stored.');
@@ -83,7 +83,7 @@ final class SessionListenersWorkerTest extends SessionsKernelTestCase
         $listener = $this->container()->get(PasswordChangeListener::class);
         self::assertInstanceOf(PasswordChangeListener::class, $listener);
         $em     = $this->em();
-        $change = ['password' => ['secret', 'changed']];
+        $change = ['password' => ['REDACTED-TEST-old', 'REDACTED-TEST-new']];
 
         // A nested flush of the same unit of work keeps the outer change.
         $listener->preUpdate($alice, new PreUpdateEventArgs($alice, $em, $change));
