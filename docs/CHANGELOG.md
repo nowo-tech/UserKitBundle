@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.14.2] - 2026-11-11](#1142---2026-11-11)
 - [[1.14.1] - 2026-11-10](#1141---2026-11-10)
 - [[1.14.0] - 2026-11-09](#1140---2026-11-09)
 - [[1.13.2] - 2026-11-09](#1132---2026-11-09)
@@ -49,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-11-11
+
 ### Security
 
 - **Sessions: with `sessions.remember_me_epoch.enabled`, a revocation's kept session leaked into later requests in
@@ -73,10 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them at the request / console / Messenger boundaries (audit MD-U-L1, worker audit W-06). Test:
   `SessionListenersWorkerTest`.
 
+[1.14.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.14.2
+
 ## [1.14.1] - 2026-11-10
 
 Last-activity tracking writes only the user's changed columns and no longer flushes the host's entity manager. See [UPGRADING](https://github.com/nowo-tech/UserKitBundle/blob/v1.14.1/docs/UPGRADING.md#to-1141).
-
 
 ### Security
 
