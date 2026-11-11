@@ -59,6 +59,8 @@ use Symfony\Component\Security\Http\Event\LogoutEvent;
 use function array_filter;
 use function array_key_exists;
 use function array_replace_recursive;
+use function array_unique;
+use function array_values;
 use function is_array;
 use function is_bool;
 use function is_string;
@@ -169,7 +171,7 @@ final class SessionsLoader
     public static function load(ContainerBuilder $container, array $sessions, array $profiles, bool $personalData): void
     {
         self::assertLiteralBooleans($sessions);
-        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, owner: array{resolver: string|null, on_unresolved: string}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
+        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, owner: array{resolver: string|null, on_unresolved: string}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null, context_attributes: list<string>}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
         $webUi   = $sessions['web_ui'];
         $enabled = $sessions['enabled'];
         $container->setParameter('nowo_user_kit.sessions.enabled', $enabled);
@@ -233,6 +235,7 @@ final class SessionsLoader
             $client['user_agent'],
             $sessions['hash_secret'],
             is_string($client['device_id_resolver']) && $client['device_id_resolver'] !== '' ? new Reference($client['device_id_resolver']) : null,
+            array_values(array_unique($client['context_attributes'])),
         ]));
 
         $limit = $sessions['limit'];

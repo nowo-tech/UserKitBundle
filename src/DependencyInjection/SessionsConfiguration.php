@@ -209,6 +209,11 @@ final class SessionsConfiguration
                     ->defaultNull()
                     ->info('Service id implementing Sessions\\Client\\DeviceIdProviderInterface (or the deprecated DeviceIdResolverInterface): optional device id per session.')
                 ->end()
+                ->arrayNode('context_attributes')
+                    ->info('Request attributes (exact names) a DeviceIdProviderInterface receives with their raw value, objects included, through DeviceContext::attribute() (e.g. "_device" from DeviceIntelligence). Default: none. Name only what your provider needs. Since 1.16.0.')
+                    ->scalarPrototype()->cannotBeEmpty()->end()
+                    ->defaultValue([])
+                ->end()
             ->end();
 
         return $node;

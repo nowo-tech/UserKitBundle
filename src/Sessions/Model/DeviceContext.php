@@ -18,6 +18,12 @@ use function strtolower;
  * Built by `SessionClientFactory::deviceContext()` without the session cookie and the `Authorization`, `Cookie` and
  * `Proxy-Authorization` headers. Cookies and headers can still carry other secrets: dumps show their names only, and a
  * device context is request-scoped and cannot be serialized.
+ *
+ * Since 1.16, the host can name request attributes in `sessions.client.context_attributes` (default: none) to receive
+ * their **raw** value, objects included, through {@see attribute()} (for example DeviceIntelligence's `_device`).
+ * Nothing is copied unless the host names it, and naming an attribute is the host's decision and responsibility. These
+ * values are never stored in a property of this object (they live in an internal {@see \WeakMap} keyed by it), so no
+ * dump, `var_export()`, `(array)` cast or `json_encode()` of the context shows them; a `clone` has none.
  */
 final readonly class DeviceContext
 {
@@ -27,13 +33,20 @@ final readonly class DeviceContext
     /**
      * @param array<string, string> $headers header name => first value (names are lower-cased)
      * @param array<string, string> $cookies cookie name => value
+     * @param array<string, mixed> $attributes the raw values of the request attributes named in
+     *                                         `sessions.client.context_attributes` that the request has (kept outside
+     *                                         the object's properties)
      */
     public function __construct(
         public ?string $clientIp = null,
         public string $userAgent = '',
         array $headers = [],
         private array $cookies = [],
+        array $attributes = [],
     ) {
+        if ($attributes !== []) {
+            DeviceContextAttributes::put($this, $attributes);
+        }
         $normalized = [];
         foreach ($headers as $name => $value) {
             $normalized[strtolower((string) $name)] = $value;
@@ -55,6 +68,23 @@ final readonly class DeviceContext
     public function cookie(string $name): ?string
     {
         return $this->cookies[$name] ?? null;
+    }
+
+    /**
+     * The raw value (objects included) of a request attribute the host named in `sessions.client.context_attributes`,
+     * or null when the name is not allowlisted or the request has no such attribute. Since 1.16.
+     */
+    public function attribute(string $name): mixed
+    {
+        return DeviceContextAttributes::get($this, $name);
+    }
+
+    /**
+     * True when the host allowlisted this request attribute and the request has it (even with a null value). Since 1.16.
+     */
+    public function hasAttribute(string $name): bool
+    {
+        return DeviceContextAttributes::has($this, $name);
     }
 
     /**

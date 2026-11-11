@@ -26,6 +26,7 @@ final class SessionsConfigurationTest extends TestCase
         self::assertSame([], $sessions['remember_me_cookies']);
         self::assertSame('truncate', $sessions['client']['ip']);
         self::assertSame('label', $sessions['client']['user_agent']);
+        self::assertSame([], $sessions['client']['context_attributes'], 'Opt-in: no request attribute by default.');
         self::assertNull($sessions['limit']['max_sessions']);
         self::assertSame('evict_oldest', $sessions['limit']['policy']);
         self::assertTrue($sessions['password_change']['revoke_sessions']);

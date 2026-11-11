@@ -51,6 +51,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target **1.16.0** (minor; opt-in, no behaviour change for existing hosts).
+
+### Added
+
+- `sessions.client.context_attributes` (default `[]`): an explicit allowlist of request attribute names (exact,
+  case-sensitive) whose **raw** value, objects included, a `DeviceIdProviderInterface` reads through the new
+  `DeviceContext::attribute(string): mixed` / `hasAttribute(string): bool` (for example DeviceIntelligence's `_device`
+  attribute). Nothing is copied unless the host names it. The values are kept outside the context's properties (an
+  internal `WeakMap` keyed by the context), so VarDumper, `var_export()`, `(array)` and `json_encode()` never show
+  them; a clone has none, and `DeviceContext` still refuses serialization. The context is built per call
+  (REQ-RUNTIME-002). `SessionClientFactory::deviceContext()` takes the names as a new optional second argument. With the
+  default empty list the context is exactly as in 1.15.0.
+
 ## [1.15.0] - 2026-11-11
 
 ### Added

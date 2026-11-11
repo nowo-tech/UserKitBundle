@@ -12,6 +12,7 @@ use Nowo\UserKitBundle\DependencyInjection\NowoUserKitExtension;
 use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
@@ -47,6 +48,13 @@ final class SessionsWiringTest extends TestCase
         $container = $this->load([]);
         self::assertFalse($container->hasDefinition(UserSessionManager::class));
         self::assertFalse($container->getParameter('nowo_user_kit.sessions.enabled'));
+    }
+
+    public function testTheContextAttributesReachTheClientFactory(): void
+    {
+        self::assertSame([], $this->load(['enabled' => true])->getDefinition(SessionClientFactory::class)->getArgument(6), 'None by default.');
+        $listed = $this->load(['enabled' => true, 'client' => ['context_attributes' => ['_device', 'tenant', '_device']]]);
+        self::assertSame(['_device', 'tenant'], $listed->getDefinition(SessionClientFactory::class)->getArgument(6));
     }
 
     public function testTheCommitQueueWatchesEveryConnectionAndReleasesAtEveryBoundary(): void

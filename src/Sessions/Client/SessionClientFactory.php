@@ -69,6 +69,8 @@ final readonly class SessionClientFactory
      * @param int $ipv6Prefix `sessions.client.ipv6_prefix` (multiple of 8, 8–64)
      * @param string $userAgentMode `sessions.client.user_agent` (label | none)
      * @param string $secret HMAC key of the `hash` mode
+     * @param list<string> $contextAttributes `sessions.client.context_attributes`: request attributes a
+     *                                        {@see DeviceIdProviderInterface} receives with their raw value (exact names)
      */
     public function __construct(
         private string $ipMode = 'truncate',
@@ -77,6 +79,7 @@ final readonly class SessionClientFactory
         private string $userAgentMode = 'label',
         private string $secret = '',
         private DeviceIdProviderInterface|DeviceIdResolverInterface|null $deviceIds = null,
+        private array $contextAttributes = [],
     ) {
         if ($deviceIds instanceof DeviceIdResolverInterface && !$deviceIds instanceof DeviceIdProviderInterface) {
             @trigger_error('Since nowo-tech/user-kit-bundle 1.15: implementing "DeviceIdResolverInterface" for "sessions.client.device_id_resolver" is deprecated, implement "DeviceIdProviderInterface" instead.', E_USER_DEPRECATED);
@@ -110,7 +113,7 @@ final readonly class SessionClientFactory
     public function deviceId(Request $request): ?string
     {
         $id = match (true) {
-            $this->deviceIds instanceof DeviceIdProviderInterface => $this->deviceIds->deviceIdFor(self::deviceContext($request)),
+            $this->deviceIds instanceof DeviceIdProviderInterface => $this->deviceIds->deviceIdFor(self::deviceContext($request, $this->contextAttributes)),
             $this->deviceIds instanceof DeviceIdResolverInterface => $this->deviceIds->deviceId($request),
             default                                               => null,
         };
@@ -125,8 +128,13 @@ final readonly class SessionClientFactory
      * HTTP-edge adapter: the framework-free {@see DeviceContext} of a request (client IP with trusted proxies applied,
      * user agent, first value of each header, cookies). The session cookie and the `Authorization`, `Cookie` and
      * `Proxy-Authorization` headers are left out: they are credentials, never device data.
+     *
+     * Request attributes are copied only when named in `$attributes` (`sessions.client.context_attributes`, default
+     * none): exact names, raw values (objects included), readable through {@see DeviceContext::attribute()}.
+     *
+     * @param list<string> $attributes request attribute names to copy with their raw value
      */
-    public static function deviceContext(Request $request): DeviceContext
+    public static function deviceContext(Request $request, array $attributes = []): DeviceContext
     {
         $headers = [];
         foreach ($request->headers->keys() as $name) {
@@ -148,7 +156,14 @@ final readonly class SessionClientFactory
             }
         }
 
-        return new DeviceContext($request->getClientIp(), (string) $request->headers->get('User-Agent', ''), $headers, $cookies);
+        $allowlisted = [];
+        foreach ($attributes as $name) {
+            if ($request->attributes->has($name)) {
+                $allowlisted[$name] = $request->attributes->get($name);
+            }
+        }
+
+        return new DeviceContext($request->getClientIp(), (string) $request->headers->get('User-Agent', ''), $headers, $cookies, $allowlisted);
     }
 
     /**
