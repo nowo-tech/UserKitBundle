@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Sessions;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimit;
+use Nowo\UserKitBundle\Sessions\Model\SessionRef;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Owner\UnresolvedSessionOwnerException;
 use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
@@ -19,6 +20,11 @@ use Symfony\Component\HttpFoundation\Session\SessionInterface;
  *
  * The revoking methods log a warning (or throw {@see UnresolvedSessionOwnerException} with
  * `sessions.owner.on_unresolved: exception`) when the user has no session owner.
+ *
+ * The registry hash of a session comes from the framework-free {@see SessionHashesInterface::sessionHash()} (same
+ * service; 2.0 makes this interface extend it). {@see self::currentHash()} is deprecated since 1.15.
+ *
+ * @method string|null sessionHash(SessionRef|string|null $session) registry hash of a session ({@see SessionHashesInterface}); declared on this interface in 2.0
  */
 interface UserSessionsInterface
 {
@@ -34,6 +40,9 @@ interface UserSessionsInterface
 
     /**
      * Registry hash of the current session, to pass as `$currentHash` / `$except`.
+     *
+     * @deprecated since 1.15, use {@see SessionHashesInterface::sessionHash()} with `UserSessionManager::sessionRef()`
+     *             at the HTTP edge; removed in 2.0
      */
     public function currentHash(Request|SessionInterface|null $session): ?string;
 

@@ -120,6 +120,8 @@ doctrine:
                 prefix: 'Nowo\UserKitBundle\Model'
 ```
 
+DDD / XML-mapped hosts (1.15): register the shipped XML mapping instead (`type: xml`, `dir: '%kernel.project_dir%/vendor/nowo-tech/user-kit-bundle/src/Resources/config/doctrine/model'`, same prefix), never both; see [USAGE](USAGE.md#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields).
+
 Not needed when you only use the traits (`UiPreferencesTrait`, `ProductTourProgressTrait`) inside your own entity or embeddable. No other configuration key is involved: the preference columns are plain entity mapping. See [USAGE](USAGE.md#ui-preferences).
 
 ## Personal data (GDPR)
@@ -170,7 +172,7 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.client.ip` | `truncate` \| `hash` \| `none` | `truncate` | `truncate` keeps the network (`203.0.113.0/24`, `2001:db8:85a3::/48`); `hash` keeps `h:` + 16 hex of an HMAC of that network (not shown in the pages); `none` keeps nothing. |
 | `sessions.client.ipv4_prefix` | `8` \| `16` \| `24` | `24` | Network kept for IPv4. |
 | `sessions.client.ipv6_prefix` | `8` … `64` (multiple of 8) | `48` | Network kept for IPv6. |
-| `sessions.client.device_id_resolver` | service id \| null | `null` | Service implementing `Sessions\Client\DeviceIdResolverInterface` (device id stored per session; enables `UserSessionManager::revokeDevice()`). |
+| `sessions.client.device_id_resolver` | service id \| null | `null` | Service implementing `Sessions\Client\DeviceIdProviderInterface` (1.15; or the deprecated `DeviceIdResolverInterface`): device id stored per session; enables `UserSessionManager::revokeDevice()`. |
 | `sessions.limit.max_sessions` | int ≥ 1 \| null | `null` | Live sessions a user may hold at once (`null` = unlimited). |
 | `sessions.limit.policy` | `evict_oldest` \| `reject_new` | `evict_oldest` | Over the limit: sign the least recently active sessions out, or refuse the sign-in (authentication failure on the login form). |
 | `sessions.limit.max_trusted_devices` | int ≥ 0 \| null | `null` | Since 1.10. Trusted devices a user may keep; **not enforced** by the bundle (no trusted-device store): carried in `SessionLimit` for the host. |

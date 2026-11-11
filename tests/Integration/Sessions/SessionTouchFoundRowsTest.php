@@ -106,7 +106,7 @@ final class SessionTouchFoundRowsTest extends TransactionalSessionsTestCase
      */
     private function sessionOf(KernelBrowser $browser, Member $member): array
     {
-        $hash  = $this->manager()->currentHash($browser->getRequest()->getSession());
+        $hash  = $this->manager()->sessionHash($this->manager()->sessionRef($browser->getRequest()->getSession()));
         $owner = $this->manager()->owner($member);
         self::assertIsString($hash);
         self::assertInstanceOf(SessionUser::class, $owner);

@@ -150,6 +150,6 @@ final class PasswordChangeListener implements ResetInterface
             return null;
         }
 
-        return $this->sessions->currentHash($this->requests?->getMainRequest());
+        return $this->sessions->sessionHash($this->sessions->sessionRef($this->requests?->getMainRequest()));
     }
 }

@@ -47,6 +47,25 @@
 
 ## Unreleased
 
+Minor release (1.15.0), no breaking change; nothing to do for a standard host.
+
+**Deprecations (removed in 2.0)**
+
+| Deprecated | Replacement |
+|---|---|
+| `UserSessionsInterface::currentHash($requestOrSession)` | `$manager->sessionHash($manager->sessionRef($requestOrSession))`; type application services against `SessionHashesInterface` |
+| `Sessions\Client\DeviceIdResolverInterface::deviceId(Request)` | `Sessions\Client\DeviceIdProviderInterface::deviceIdFor(DeviceContext)` (`$request->headers->get('X')` becomes `$context->header('X')`, `$request->cookies->get('x')` becomes `$context->cookie('x')`, `$request->getClientIp()` becomes `$context->clientIp`) |
+
+Both deprecated forms keep working and trigger a `E_USER_DEPRECATED` notice (`currentHash()` on each call, the legacy
+resolver once when the session client factory is built). `sessionHash(sessionRef($x))` returns the same hash as
+`currentHash($x)` for every started session. In 2.0, `UserSessionsInterface` extends `SessionHashesInterface`: if you
+implement `UserSessionsInterface` yourself (a hand-written fake), add `sessionHash()` now.
+
+**Migrating a DDD / XML-mapped host to the shipped embeddable mapping (optional).** Replace the `attribute` mapping
+entry for `Nowo\UserKitBundle\Model` with the `xml` entry of
+[USAGE](USAGE.md#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields). The columns are identical, so
+`doctrine:schema:validate` / `doctrine:migrations:diff` show no change. Keep exactly one of the two entries.
+
 ## To 1.14.2
 
 From **1.14.1**:

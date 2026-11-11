@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Unit\Sessions;
 
 use InvalidArgumentException;
+use Nowo\UserKitBundle\Sessions\Client\DeviceIdProviderInterface;
 use Nowo\UserKitBundle\Sessions\Client\DeviceIdResolverInterface;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Limit\ConfiguredSessionLimitResolver;
+use Nowo\UserKitBundle\Sessions\Model\DeviceContext;
 use Nowo\UserKitBundle\Sessions\Model\SessionLimitPolicy;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\CacheRevocationStore;
@@ -71,9 +73,69 @@ final class ClientAndLimitTest extends TestCase
                 return $request->headers->get('X-Device');
             }
         };
+        $this->expectUserDeprecationMessage('Since nowo-tech/user-kit-bundle 1.15: implementing "DeviceIdResolverInterface" for "sessions.client.device_id_resolver" is deprecated, implement "DeviceIdProviderInterface" instead.');
         $factory = new SessionClientFactory(deviceIds: $resolver);
         self::assertNull($factory->deviceId(Request::create('/', server: ['HTTP_X_DEVICE' => ''])));
         self::assertSame(str_repeat('d', 64), $factory->deviceId(Request::create('/', server: ['HTTP_X_DEVICE' => str_repeat('d', 80)])));
+    }
+
+    /**
+     * The framework-free provider and the deprecated `Request` resolver give the same stored device id for the same
+     * request (empty → null, cut to 64 characters, header lookup case-insensitive), and a service implementing both is
+     * called through the new port.
+     */
+    public function testDeviceIdProviderIsEquivalentToTheLegacyResolver(): void
+    {
+        $legacy = new class implements DeviceIdResolverInterface {
+            public function deviceId(Request $request): ?string
+            {
+                return $request->headers->get('X-Device');
+            }
+        };
+        $provider = new class implements DeviceIdProviderInterface {
+            public function deviceIdFor(DeviceContext $context): ?string
+            {
+                return $context->header('X-Device');
+            }
+        };
+        $both = new class implements DeviceIdProviderInterface, DeviceIdResolverInterface {
+            public function deviceIdFor(DeviceContext $context): string
+            {
+                return 'provider';
+            }
+
+            public function deviceId(Request $request): string
+            {
+                return 'legacy';
+            }
+        };
+
+        $this->expectUserDeprecationMessageMatches('/DeviceIdResolverInterface/');
+        $old = new SessionClientFactory('hash', userAgentMode: 'none', secret: 'k', deviceIds: $legacy);
+        $new = new SessionClientFactory('hash', userAgentMode: 'none', secret: 'k', deviceIds: $provider);
+        foreach ([null, '', 'tablet-1', str_repeat('d', 80), 'ñandú-é'] as $device) {
+            $request = Request::create('/', server: ['REMOTE_ADDR' => '203.0.113.9'] + ($device === null ? [] : ['HTTP_X_DEVICE' => $device]));
+            self::assertSame($old->deviceId($request), $new->deviceId($request), (string) $device);
+            self::assertEquals($old->fromRequest($request), $new->fromRequest($request), (string) $device);
+        }
+        self::assertSame('provider', (new SessionClientFactory(deviceIds: $both))->deviceId(new Request()));
+        self::assertNull((new SessionClientFactory())->deviceId(new Request()));
+    }
+
+    public function testDeviceContextOfARequest(): void
+    {
+        $request = Request::create('/', cookies: ['device' => 'd-1', 'nested' => ['a' => 'b']], server: [
+            'REMOTE_ADDR'     => '203.0.113.9',
+            'HTTP_USER_AGENT' => 'Firefox/131.0',
+            'HTTP_X_DEVICE'   => 'tablet-1',
+        ]);
+        $context = SessionClientFactory::deviceContext($request);
+
+        self::assertSame('203.0.113.9', $context->clientIp);
+        self::assertSame('Firefox/131.0', $context->userAgent);
+        self::assertSame('tablet-1', $context->header('X-Device'));
+        self::assertSame('d-1', $context->cookie('device'));
+        self::assertNull($context->cookie('nested'));
     }
 
     public function testInvalidModes(): void

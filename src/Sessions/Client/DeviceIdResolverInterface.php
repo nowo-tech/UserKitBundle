@@ -12,6 +12,8 @@ use Symfony\Component\HttpFoundation\Request;
  * device-fingerprinting bundle's device id), stored with the session so
  * {@see UserSessionManager::revokeDevice()} can end that device's sessions. A device id
  * is never a credential.
+ *
+ * @deprecated since 1.15, implement the framework-free {@see DeviceIdProviderInterface} instead; removed in 2.0
  */
 interface DeviceIdResolverInterface
 {

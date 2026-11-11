@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    XML mapping of the ready-made UiPreferences embeddable (REQ-ARCH-001 rule 2, DDD / hexagonal hosts).
+    Same columns as the attribute mapping of UiPreferencesTrait: register either this directory as an `xml` mapping
+    with prefix `Nowo\UserKitBundle\Model`, or the `src/Model` attribute mapping, never both.
+-->
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+    <embeddable name="Nowo\UserKitBundle\Model\UiPreferences">
+        <field name="preferredLocale" column="preferred_locale" type="string" length="8" nullable="true"/>
+        <field name="preferredTheme" column="preferred_theme" type="string" length="8" nullable="true"/>
+        <field name="preferredContentWidth" column="preferred_content_width" type="string" length="8" nullable="true"/>
+        <field name="preferredUiDensity" column="preferred_ui_density" type="string" length="16" nullable="true"/>
+        <field name="preferredMotion" column="preferred_motion" type="string" length="16" nullable="true"/>
+        <field name="preferredFontScale" column="preferred_font_scale" type="string" length="8" nullable="true"/>
+        <field name="preferredContrast" column="preferred_contrast" type="string" length="8" nullable="true"/>
+        <field name="preferredSidebar" column="preferred_sidebar" type="string" length="16" nullable="true"/>
+        <field name="preferredFooter" column="preferred_footer" type="string" length="16" nullable="true"/>
+    </embeddable>
+</doctrine-mapping>

@@ -26,7 +26,7 @@ use function dirname;
 final class UiPreferencesMappingKernelTest extends TestCase
 {
     /** column => [type, length, nullable] */
-    private const EXPECTED_COLUMNS = [
+    public const EXPECTED_COLUMNS = [
         'preferred_locale'        => ['string', 8, true],
         'preferred_theme'         => ['string', 8, true],
         'preferred_content_width' => ['string', 8, true],
