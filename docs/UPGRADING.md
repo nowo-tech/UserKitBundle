@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.15.0](#to-1150)
 - [To 1.14.2](#to-1142)
 - [To 1.14.1](#to-1141)
 - [To 1.14.0](#to-1140)
@@ -46,6 +47,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.15.0
+
+From **1.14.2**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 Minor release (1.15.0), no breaking change; nothing to do for a standard host.
 
