@@ -7,6 +7,7 @@
 | Audit date | 2026-09-25; 2026-11-11 (W-04, REQ-RUNTIME-002 sweep) |
 | Method | Manual review of every file under `src/` (services, subscriber, Doctrine listener, user checker, Twig extension, DI extension, config) + PHPStan `ruleset-classic` + `ruleset-worker-no-kernel-reset` |
 | **Verdict** | ✅ **Viable under scenario B (100%)** — the last-activity throttle map is bounded, the subscriber never flushes (targeted `UPDATE` of the user's row), resets only the user's closed manager and survives write failures, and it ignores tokens outside a security-enabled firewall. Safe under FrankenPHP worker with `FRANKENPHP_RESET_KERNEL` unset/false (kernel reused; `services_resetter` still runs). |
+| Remediation (2026-11-11, delta audit MD) | W-05 / W-06 resolved: `PasswordChangeListener` and `UserRemovalListener` key their pending entries by entity manager and unit of work and clear them at the request / console / Messenger boundaries. Tests: `tests/Integration/Sessions/SessionListenersWorkerTest.php` |
 | Remediation (2026-11-11) | W-04 resolved: `RememberMeEpoch::$kept` is emptied at the end of the main `kernel.response`, at the main `kernel.request`, `kernel.terminate`, `console.terminate` and the Messenger worker events, not only by `kernel.reset`. Tests: `tests/Integration/Sessions/RememberMeEpochWorkerTest.php`, `HostHooksTest::testResetAndTheMainRequestDropTheKeptSessions`, `HostHooksTest::testWiring` |
 | Remediation | W-01 and W-02 resolved in `src/EventSubscriber/LastActivitySubscriber.php`; `NowoUserKitBundle` no longer mutates `$extension` (convention-based DI extension). Regression tests in `tests/Unit/EventSubscriber/LastActivitySubscriberWorkerTest.php` |
 
@@ -19,6 +20,8 @@
   - [W-01 — Last-activity throttle map grows without bound (Medium)](#w-01--last-activity-throttle-map-grows-without-bound-medium)
   - [W-02 — `flush()` on `kernel.request` depends on a healthy EntityManager (Medium)](#w-02--flush-on-kernelrequest-depends-on-a-healthy-entitymanager-medium)
   - [W-03 — Profile resolution cache is class-keyed and bounded (Info)](#w-03--profile-resolution-cache-is-class-keyed-and-bounded-info)
+  - [W-05 — Password-change revocation survives a failed flush (Medium)](#w-05--password-change-revocation-survives-a-failed-flush-medium)
+  - [W-06 — Pending user removal applied by another entity manager (Low)](#w-06--pending-user-removal-applied-by-another-entity-manager-low)
   - [W-04 — Remember-me epoch "kept session" survives its request (Medium, security)](#w-04--remember-me-epoch-kept-session-survives-its-request-medium-security)
 - [Worker tests](#worker-tests)
 - [Usage recommendations in worker mode](#usage-recommendations-in-worker-mode)
@@ -39,7 +42,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 |------|--------|-------|
 | Mutable state in shared services | ✅ | `LastActivitySubscriber::$throttledUntil` is pruned and capped (W-01 resolved); `ProfileRegistry::$resolveCache` is keyed by class name (bounded) |
 | Static properties / `static` locals | ✅ | None (only static closures in `Configuration`, compile time) |
-| `ResetInterface` / `kernel.reset` coverage | ✅ | Session registry (1.10+): `RememberMeEpoch`, `CommitQueue`, `UserRemovalListener`, `PasswordChangeListener` implement `ResetInterface` and are also emptied at their own boundaries (W-04; `CommitQueue` at `kernel.response` / `kernel.terminate` / `console.terminate` / Messenger; the two listeners at `postFlush` / `onClear`), so correctness never depends on `kernel.reset`. `ProfileRegistry` and `LastActivitySubscriber` implement `ResetInterface` (autoconfigured `kernel.reset`). `ProfileRegistry::reset()` drops the resolution memo; `LastActivitySubscriber::reset()` evicts only expired throttle windows, so the throttle still spans requests (2026-10-30, REQ-CS-006) |
+| `ResetInterface` / `kernel.reset` coverage | ✅ | Session registry (1.10+): `RememberMeEpoch`, `CommitQueue`, `UserRemovalListener`, `PasswordChangeListener` implement `ResetInterface` and are also emptied at their own boundaries (W-04, W-05, W-06; `CommitQueue` at `kernel.response` / `kernel.terminate` / `console.terminate` / Messenger; the two Doctrine listeners keep their pending entries per entity manager and unit of work, drop them at `postFlush` / `onClear` (and `PasswordChangeListener` at the `onFlush` of a new unit of work), and at the main `kernel.request`, `kernel.terminate`, `console.terminate` and the Messenger worker events), so correctness never depends on `kernel.reset`. `ProfileRegistry` and `LastActivitySubscriber` implement `ResetInterface` (autoconfigured `kernel.reset`). `ProfileRegistry::reset()` drops the resolution memo; `LastActivitySubscriber::reset()` evicts only expired throttle windows, so the throttle still spans requests (2026-10-30, REQ-CS-006) |
 | Request / user / locale captured in services | ✅ | User is read from `TokenStorage` inside `onKernelRequest()`, only on requests behind a security-enabled firewall; time comes from `ClockInterface` |
 | Superglobals, `$_ENV`, `putenv`, `ini_set`, `setlocale`, timezone | ✅ | None used |
 | Doctrine / EntityManager | ✅ | `LastActivitySubscriber` resolves the manager per request (`ManagerRegistry::getManagerForClass()`), resets it when closed and catches flush failures (W-02 resolved) |
@@ -108,6 +111,31 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
   `kernel.reset` still calls `reset()`. Tests: `tests/Integration/Sessions/RememberMeEpochWorkerTest.php`,
   `tests/Unit/Sessions/HostHooksTest.php`.
 
+### W-05 — Password-change revocation survives a failed flush (Medium)
+
+- **Where:** `src/Sessions/EventListener/PasswordChangeListener.php` (1.9.0 – 1.14.1, session registry with
+  `sessions.password_change.revoke_sessions`, the default). `preUpdate` stored the user in `$pending`; only `postFlush`
+  and `reset()` (`kernel.reset`) emptied it (there was no `onClear`, despite what this document said before).
+- **Impact:** a flush that failed after `preUpdate` (constraint error, deadlock, commit failure) never reached
+  `postFlush`; the next flush of any user (any request in a worker with reset false, or later in the same request on a
+  classic host) signed out every other session of the user whose password change was never stored. Fail-safe
+  (over-revocation), audit MD-U-M1.
+- **Status:** Resolved in 1.14.2 — pending changes are kept per entity manager with the unit of work that collected
+  them; the `onFlush` of a new unit of work, `onClear`, `postFlush` of that manager, the main `kernel.request`,
+  `kernel.terminate`, `console.terminate` and the Messenger worker events drop them. A nested flush of the same unit
+  of work keeps them. Test: `SessionListenersWorkerTest`.
+
+### W-06 — Pending user removal applied by another entity manager (Low)
+
+- **Where:** `src/Sessions/EventListener/UserRemovalListener.php` (1.10.0 – 1.14.1, with
+  `sessions.user_removal.delete_sessions`). `preRemove` (at `remove()`, not at flush) stored the user in one shared
+  list; the `postFlush` of any manager that also maps the user class saw it as neither scheduled nor managed and
+  deleted the user's sessions and epoch, although the user was never removed. Entries also stayed for the worker's
+  lifetime when nothing flushed or cleared. Audit MD-U-L1.
+- **Status:** Resolved in 1.14.2 — pending removals are kept per entity manager and unit of work; only that manager's
+  `postFlush` applies them, a removal of a unit of work the manager no longer has is dropped, and the same request /
+  console / Messenger boundaries clear them. Test: `SessionListenersWorkerTest`.
+
 No other findings. `AccountStatusUserChecker` reads the enabled flag from the user object on every call and caches nothing, which is the correct security behaviour in a long-lived worker.
 
 ## Worker tests
@@ -117,6 +145,7 @@ Kept-alive kernel, services resetter never called:
 | Test | What it serves | N | Users | Memory |
 |------|----------------|---|-------|--------|
 | `tests/Integration/Sessions/RememberMeEpochWorkerTest.php` (requests through the `http_kernel` service) | `GET /page`, with a "sign out this device" + `invalidateRememberMe` every 50th request; plus a 3-session revocation scenario | 1,000 | alice and bob alternating | < 4 MB growth between request 100 and the end |
+| `tests/Integration/Sessions/SessionListenersWorkerTest.php` | failed password flush then another user's flush on one kernel; removals across two managers; stale unit of work; boundaries | — | alice and bob | — |
 | `tests/Integration/LastActivityKernelTest.php` | last-activity subscriber on `kernel.request` | 1,200 | alice and bob alternating | flat, per-user rows |
 
 Static checks: `composer igor` and the PHPStan FrankenPHP rulesets (`phpstan.neon.dist`) pass in CI.

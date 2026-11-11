@@ -60,6 +60,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   events; `kernel.reset` still empties it (REQ-RUNTIME-002). Tests: `RememberMeEpochWorkerTest` (one kernel, no
   reset, alice and bob alternating, 1,000 requests, memory margin) and `HostHooksTest`. Worker audit: W-04 in
   `docs/FRANKENPHP-WORKER-AUDIT.md`.
+- **Sessions: a password change whose flush failed signed the user out on a later flush (1.9.0 – 1.14.1).**
+  `PasswordChangeListener` kept the user from `preUpdate` until `postFlush`, and only `kernel.reset` emptied it
+  otherwise. When the flush failed, the next flush of any user (in a FrankenPHP worker with the kernel not reset, any
+  later request) signed out every other session of that user although the new password was never stored. Pending
+  changes are now kept per entity manager and unit of work, dropped by the `onFlush` of a new unit of work, `onClear`
+  and the request / console / Messenger boundaries; a nested flush of the same unit of work keeps them (audit MD-U-M1,
+  worker audit W-05).
+- **Sessions: with `user_removal.delete_sessions` and several entity managers mapping the user class, a pending removal
+  could delete the sessions of a user that was not removed (1.10.0 – 1.14.1).** `UserRemovalListener` now keeps
+  pending removals per entity manager and unit of work, applies them only on that manager's `postFlush`, and clears
+  them at the request / console / Messenger boundaries (audit MD-U-L1, worker audit W-06). Test:
+  `SessionListenersWorkerTest`.
 
 ## [1.14.1] - 2026-11-10
 

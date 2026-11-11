@@ -402,16 +402,26 @@ final class SessionsLoader
             [],
         ]))
             ->addTag('kernel.event_listener', ['event' => KernelEvents::RESPONSE, 'method' => 'onResponse', 'priority' => RememberMeEpoch::REISSUE_PRIORITY])
-            // REQ-RUNTIME-002: the kept sessions never outlive their request, console command or Messenger message.
+            ->addTag('kernel.reset', ['method' => 'reset']));
+        // REQ-RUNTIME-002: the kept sessions never outlive their request, console command or Messenger message.
+        self::addBoundaryTags($container->getDefinition(RememberMeEpoch::class));
+
+        return new Reference(RememberMeEpoch::class);
+    }
+
+    /**
+     * REQ-RUNTIME-002 (worker mode, kernel reset false): `onRequest()` on the main `kernel.request`, `reset()` on
+     * `kernel.terminate`, `console.terminate` and the Messenger worker events (plain names: both stay optional).
+     */
+    private static function addBoundaryTags(Definition $definition): void
+    {
+        $definition
             ->addTag('kernel.event_listener', ['event' => KernelEvents::REQUEST, 'method' => 'onRequest', 'priority' => 4096])
             ->addTag('kernel.event_listener', ['event' => KernelEvents::TERMINATE, 'method' => 'reset', 'priority' => -4096])
             ->addTag('kernel.event_listener', ['event' => 'console.terminate', 'method' => 'reset', 'priority' => -4096])
             ->addTag('kernel.event_listener', ['event' => WorkerMessageReceivedEvent::class, 'method' => 'reset', 'priority' => 4096])
             ->addTag('kernel.event_listener', ['event' => WorkerMessageHandledEvent::class, 'method' => 'reset', 'priority' => -4096])
-            ->addTag('kernel.event_listener', ['event' => WorkerMessageFailedEvent::class, 'method' => 'reset', 'priority' => -4096])
-            ->addTag('kernel.reset', ['method' => 'reset']));
-
-        return new Reference(RememberMeEpoch::class);
+            ->addTag('kernel.event_listener', ['event' => WorkerMessageFailedEvent::class, 'method' => 'reset', 'priority' => -4096]);
     }
 
     /**
@@ -423,6 +433,7 @@ final class SessionsLoader
             ->addTag('doctrine.event_listener', ['event' => 'postFlush'])
             ->addTag('doctrine.event_listener', ['event' => 'onClear'])
             ->addTag('kernel.reset', ['method' => 'reset']);
+        self::addBoundaryTags($definition);
         foreach ($profiles as $profile) {
             $definition->addTag('doctrine.orm.entity_listener', [
                 'event'  => 'preRemove',
@@ -445,8 +456,11 @@ final class SessionsLoader
             new Reference('security.token_storage', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             new Reference('request_stack', ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]))
+            ->addTag('doctrine.event_listener', ['event' => 'onFlush'])
             ->addTag('doctrine.event_listener', ['event' => 'postFlush'])
+            ->addTag('doctrine.event_listener', ['event' => 'onClear'])
             ->addTag('kernel.reset', ['method' => 'reset']);
+        self::addBoundaryTags($definition);
         foreach ($profiles as $profile) {
             $definition->addTag('doctrine.orm.entity_listener', [
                 'event'  => 'preUpdate',
