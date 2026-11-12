@@ -52,6 +52,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target **1.16.1** (patch; security fix, see UPGRADING for the optional column migration).
+
+### Security
+
+- Session registry and remember-me epoch: look-alike owners (house rule LQ). Every owner lookup was SQL only, on the
+  host's default collation, which on MySQL / MariaDB folds case and accents (`Alice` = `alice` = `álice`) and, on the
+  PAD SPACE collations (MariaDB defaults, `utf8mb4_unicode_ci`, `utf8mb4_general_ci`, `utf8mb4_bin`), ignores trailing
+  spaces (`alice ` = `alice`). With string owner ids (a user without a Doctrine id, whose owner id is
+  `getUserIdentifier()`, or a Doctrine string id) the session list, the count and the session limit, the eviction,
+  revoke-all / revoke-others, the personal-data export and erasure, and the remember-me epoch (read, bump, forget) of
+  one owner also reached its look-alikes: revoke-all or an epoch bump for `Alice` signed `alice` out, and the "My
+  sessions" page and the export of `Alice` listed `alice`'s sessions (browser, OS, truncated IP, times). Affects
+  1.9.0–1.16.0 on MySQL / MariaDB; PostgreSQL and SQLite compare exactly. Fixed in three layers:
+  - every statement keyed by the owner adds a byte comparison on MySQL / MariaDB
+    (`CAST(user_id AS BINARY) = CAST(:id AS BINARY)`, next to the indexed equality), and every row read back is
+    re-checked with `===` (`UserSessionStore::isOwner()`); the session list loads its ids through DBAL, then the
+    entities by id;
+  - `SessionUser` refuses a type or id with leading or trailing whitespace (Unicode included) or a control, format or
+    line / paragraph separator character, or invalid UTF-8 (`SessionUser::isUsable()`); such ids are never trimmed.
+    The default `SessionUserResolver` returns null for them (the user is not registered); a custom resolver that builds
+    such a `SessionUser` now gets an `InvalidArgumentException`;
+  - the new `OwnerCollationListener` gives `user_type` / `user_id` of both tables a binary NO PAD collation in the
+    generated schema: `utf8mb4_0900_bin` (MySQL 8.0+), `utf8mb4_nopad_bin` (MariaDB), `utf8mb4_bin` (MySQL 5.7, where
+    the byte predicate and the re-check cover PAD SPACE). Existing tables need the `ALTER` in UPGRADING.
+  - Until the epoch table is migrated, its unique key still folds look-alikes: the first bump of a look-alike owner
+    now throws a `LogicException` instead of moving the other owner's epoch.
+
+### Tests
+
+- `SessionLookalikeOwnerTest` (registry and epoch against look-alike owners, with the columns forced back to the
+  host collations `0900_ai_ci` / `uca1400_ai_ci`, `unicode_ci`, `general_ci` and `utf8mb4_bin`), run on MySQL 8.4 and
+  MariaDB 11.4 in CI; unit tests for the id rule, the byte predicate, the re-check and the collation listener.
+
 ## [1.16.0] - 2026-11-12
 
 Target **1.16.0** (minor; opt-in, no behaviour change for existing hosts).

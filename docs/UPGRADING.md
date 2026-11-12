@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.16.1: owner columns of the session registry (look-alike owners)](#to-1161-owner-columns-of-the-session-registry-look-alike-owners)
 - [To 1.16.0](#to-1160)
   - [Request attributes for the device id provider (opt-in)](#request-attributes-for-the-device-id-provider-opt-in)
 - [To 1.15.0](#to-1150)
@@ -49,6 +50,64 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+### To 1.16.1: owner columns of the session registry (look-alike owners)
+
+Target **1.16.1**, from **1.9.0–1.16.0** (only with `sessions.enabled`):
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+The fix works without a migration: on MySQL / MariaDB every owner statement adds a byte comparison and every row read
+back is re-checked with `===`, so `Alice`, `álice` or `alice ` no longer reach the sessions or the epoch of `alice`.
+Migrate the columns anyway, so the database and its unique keys are exact too. PostgreSQL and SQLite need nothing.
+
+**Schema change (MySQL / MariaDB).** New tables get a binary NO PAD collation on `user_type` and `user_id`
+(`OwnerCollationListener`). For existing tables, `doctrine:migrations:diff` produces the change, or run it by hand
+(add your `sessions.doctrine.table_prefix`; skip the epoch table when `remember_me_epoch` is off):
+
+```sql
+-- MySQL 8.0+ (utf8mb4_0900_bin); MariaDB: utf8mb4_nopad_bin; MySQL 5.7: utf8mb4_bin
+ALTER TABLE user_kit_session
+    MODIFY user_type VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
+    MODIFY user_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE user_kit_session_epoch
+    MODIFY user_type VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
+    MODIFY user_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+```
+
+Impact on existing data:
+
+- **Integer or UUID owner ids** (Doctrine users with such ids, the common case): nothing changes; the `ALTER` cannot
+  fail, since a binary collation only splits values a folding one merged.
+- **Matching becomes case-, accent- and trailing-space-sensitive.** Rows are owned by exactly the id they were written
+  with. A host whose resolver returns differently cased ids for the same person (for example `getUserIdentifier()` as
+  typed at sign-in) must normalise them in a custom `sessions.owner.resolver`; otherwise each spelling is its own owner
+  (its own sessions, limit and epoch).
+- **Rows with a padded or invisible-character id** (`alice `, a zero-width space…) written by an earlier release are
+  no longer reachable: such ids are refused now, so their users are not registered (the default resolver returns
+  null; revocations for them follow `sessions.owner.on_unresolved`). Their rows age out with
+  `nowo:user-kit:sessions:purge`; to delete the space-padded ones at once (a byte comparison, since PAD SPACE would
+  call `alice ` and `alice` equal):
+  `DELETE FROM user_kit_session WHERE CAST(user_id AS BINARY) <> CAST(TRIM(user_id) AS BINARY)`.
+- **Look-alike owners that already exist** can be listed before the `ALTER` (the epoch table holds one row per folded
+  group under the old collation, so check the registry):
+
+  ```sql
+  SELECT user_type, LOWER(TRIM(user_id)) AS folded, COUNT(DISTINCT CAST(user_id AS BINARY)) AS spellings
+  FROM user_kit_session GROUP BY user_type, LOWER(TRIM(user_id)) HAVING spellings > 1;
+  ```
+
+  Each spelling keeps its own rows after the `ALTER`. An epoch row created by one look-alike was shared by the whole
+  group; after the `ALTER` it belongs to the exact spelling stored in it, and the others start without an epoch (their
+  older remember-me cookies are accepted again until they next sign out everywhere). Bump them if in doubt
+  (`UserSessionManager::revokeAll()` for each affected user).
+- **Until the epoch table is migrated**, its unique key still merges look-alikes: the first epoch bump of an owner
+  whose look-alike already has a row now throws a `LogicException` (no sign-out everywhere for that owner) instead of
+  moving the other owner's epoch. Run the `ALTER` to remove it.
+- **Custom owner resolvers** that build a `SessionUser` with such an id now get an `InvalidArgumentException`; return
+  null instead (`SessionUser::isUsable()` tells).
 
 ## To 1.16.0
 
