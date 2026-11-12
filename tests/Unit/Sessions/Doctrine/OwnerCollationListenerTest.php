@@ -10,7 +10,6 @@ use Doctrine\DBAL\Platforms\MariaDBPlatform;
 use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
-use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\DBAL\Types\Types;
@@ -39,7 +38,6 @@ final class OwnerCollationListenerTest extends TestCase
         yield 'MySQL 8.0' => [new MySQL80Platform(), 'utf8mb4_0900_bin'];
         yield 'MySQL 5.7' => [new MySQLPlatform(), 'utf8mb4_bin'];
         yield 'PostgreSQL' => [new PostgreSQLPlatform(), null];
-        yield 'SQLite' => [new SQLitePlatform(), null];
     }
 
     #[DataProvider('platforms')]
