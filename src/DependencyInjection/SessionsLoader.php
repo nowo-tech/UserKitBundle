@@ -133,7 +133,6 @@ final class SessionsLoader
                 'type'      => 'attribute',
                 'dir'       => __DIR__ . '/../Sessions/Entity',
                 'prefix'    => 'Nowo\UserKitBundle\Sessions\Entity',
-                'alias'     => 'NowoUserKitSessions',
                 'is_bundle' => false,
             ]]];
             $epoch = $sessions['remember_me_epoch'] ?? [];
@@ -142,7 +141,6 @@ final class SessionsLoader
                     'type'      => 'attribute',
                     'dir'       => __DIR__ . '/../Sessions/Epoch/Entity',
                     'prefix'    => 'Nowo\UserKitBundle\Sessions\Epoch\Entity',
-                    'alias'     => 'NowoUserKitSessionEpoch',
                     'is_bundle' => false,
                 ];
             }

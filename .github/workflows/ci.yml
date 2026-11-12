@@ -75,7 +75,7 @@ jobs:
           echo "📦 Installing dependencies for Symfony ${{ matrix.symfony }}..."
           # doctrine/doctrine-bundle 3.x requires PHP ^8.4; use 2.x on PHP 8.2/8.3
           if [[ "${{ matrix.php }}" == "8.4" || "${{ matrix.php }}" == "8.5" ]]; then
-            DOCTRINE_BUNDLE="^3.0"
+            DOCTRINE_BUNDLE="^3.4" # 3.4+ deprecates the mapping alias option: the 8.1 cells must run it
           else
             DOCTRINE_BUNDLE="^2.10"
           fi
