@@ -565,9 +565,41 @@ final class DeviceCookieId implements DeviceIdProviderInterface
 ```
 
 `DeviceContext` is a framework-free view of the request (client IP with trusted proxies applied, user agent, first
-value of each header, cookies; dumps show names only). It never holds the session cookie nor the `Authorization`,
-`Cookie` and `Proxy-Authorization` headers: a provider that needs a credential is not a device id provider. The `Request`-typed `DeviceIdResolverInterface` still works and
+value of each header, cookies). It never holds the session cookie, the remember-me cookies (every firewall's and
+`sessions.remember_me_cookies`, since 1.16) nor the `Authorization`, `Cookie` and `Proxy-Authorization` headers: a
+provider that needs a credential is not a device id provider. Since 1.16 the header and cookie **values** are kept
+outside the object's properties, so VarDumper / `dump()`, `var_export()`, `print_r()`, `(array)` and `json_encode()`
+show the header and cookie names at most, never their values (1.15 showed the values through VarDumper,
+`var_export()` and `(array)`). A `clone` of a context has no headers, cookies or attributes. The `Request`-typed `DeviceIdResolverInterface` still works and
 is **deprecated since 1.15** (removed in 2.0); a service implementing both is called through `DeviceIdProviderInterface`.
+
+**Request attributes (opt-in, 1.16).** `DeviceContext` carries no request attribute unless you name it in
+`sessions.client.context_attributes` (default: none; exact names). A named attribute reaches the provider with its
+**raw** value, objects included, through `$context->attribute('name')` (and `hasAttribute()`), for example the
+`_device` attribute DeviceIntelligence sets:
+
+```yaml
+nowo_user_kit:
+    sessions:
+        client:
+            device_id_resolver: App\Session\DeviceIdProvider
+            context_attributes: ['_device']
+```
+
+```php
+public function deviceIdFor(DeviceContext $context): ?string
+{
+    $device = $context->attribute('_device');
+
+    // DeviceIntelligence 1.9: Request\DeviceContext::device() is a Device, its public `id` a DeviceId, `value` the string.
+    return $device instanceof \Nowo\DeviceIntelligenceBundle\Request\DeviceContext ? $device->device()->id->value : null;
+}
+```
+
+Name only what your provider needs (your responsibility). Entries must be strings (anything else fails the container
+build). The values are kept outside the context's properties, so dumps, `var_export()`, `(array)` and `json_encode()`
+never show them; a clone has none and the context still cannot be serialized. The attribute must already be on the request when the session is registered or touched (DeviceIntelligence
+sets `_device` on `kernel.request`).
 
 ### Automatic sign-outs
 

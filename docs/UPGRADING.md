@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [Request attributes for the device id provider (opt-in)](#request-attributes-for-the-device-id-provider-opt-in)
 - [To 1.15.0](#to-1150)
 - [To 1.14.2](#to-1142)
 - [To 1.14.1](#to-1141)
@@ -47,6 +48,44 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+Target **1.16.0**, from **1.15.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+Nothing to change: the new `sessions.client.context_attributes` allowlist defaults to `[]`. Two hardening changes
+to the `DeviceContext` a `DeviceIdProviderInterface` receives:
+
+- the remember-me cookies (every firewall's and `sessions.remember_me_cookies`) are no longer in it: a provider that
+  read one must use a dedicated device cookie instead;
+- header and cookie values are kept outside the object's properties, so dumps no longer show them; a `clone` of a
+  context has no headers, cookies or attributes (build a new context instead of cloning one).
+
+### Request attributes for the device id provider (opt-in)
+
+A resolver migrating from the deprecated `DeviceIdResolverInterface` that read a request attribute (for example
+DeviceIntelligence's `_device`) names it and reads it with `DeviceContext::attribute()`:
+
+```yaml
+nowo_user_kit:
+    sessions:
+        client:
+            device_id_resolver: App\Session\DeviceIdProvider
+            context_attributes: ['_device']
+```
+
+```php
+public function deviceIdFor(DeviceContext $context): ?string
+{
+    $device = $context->attribute('_device'); // raw value, objects included; null when absent
+    // ...
+}
+```
+
+Name only what your provider needs: an attribute you name is given as is (your responsibility). The values never
+appear in a dump, `var_export()`, `(array)` cast or `json_encode()` of the context, and a clone has none.
 
 ## To 1.15.0
 

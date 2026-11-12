@@ -173,6 +173,7 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.client.ipv4_prefix` | `8` \| `16` \| `24` | `24` | Network kept for IPv4. |
 | `sessions.client.ipv6_prefix` | `8` … `64` (multiple of 8) | `48` | Network kept for IPv6. |
 | `sessions.client.device_id_resolver` | service id \| null | `null` | Service implementing `Sessions\Client\DeviceIdProviderInterface` (1.15; or the deprecated `DeviceIdResolverInterface`): device id stored per session; enables `UserSessionManager::revokeDevice()`. |
+| `sessions.client.context_attributes` | list of strings | `[]` | Since 1.16. Request attribute names (exact) a `DeviceIdProviderInterface` receives with their raw value, objects included, through `DeviceContext::attribute()` (e.g. `_device` from DeviceIntelligence). Nothing is copied unless named. Entries must be strings. The values never show in a dump of the context. |
 | `sessions.limit.max_sessions` | int ≥ 1 \| null | `null` | Live sessions a user may hold at once (`null` = unlimited). |
 | `sessions.limit.policy` | `evict_oldest` \| `reject_new` | `evict_oldest` | Over the limit: sign the least recently active sessions out, or refuse the sign-in (authentication failure on the login form). |
 | `sessions.limit.max_trusted_devices` | int ≥ 0 \| null | `null` | Since 1.10. Trusted devices a user may keep; **not enforced** by the bundle (no trusted-device store): carried in `SessionLimit` for the host. |

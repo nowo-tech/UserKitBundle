@@ -12,6 +12,7 @@ use Nowo\UserKitBundle\DependencyInjection\NowoUserKitExtension;
 use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
@@ -47,6 +48,13 @@ final class SessionsWiringTest extends TestCase
         $container = $this->load([]);
         self::assertFalse($container->hasDefinition(UserSessionManager::class));
         self::assertFalse($container->getParameter('nowo_user_kit.sessions.enabled'));
+    }
+
+    public function testTheContextAttributesReachTheClientFactory(): void
+    {
+        self::assertSame([], $this->load(['enabled' => true])->getDefinition(SessionClientFactory::class)->getArgument(6), 'None by default.');
+        $listed = $this->load(['enabled' => true, 'client' => ['context_attributes' => ['_device', 'tenant', '_device']]]);
+        self::assertSame(['_device', 'tenant'], $listed->getDefinition(SessionClientFactory::class)->getArgument(6));
     }
 
     public function testTheCommitQueueWatchesEveryConnectionAndReleasesAtEveryBoundary(): void
@@ -272,6 +280,24 @@ final class SessionsWiringTest extends TestCase
         $cookies = $container->getDefinition(SessionRegistryListener::class)->getArgument(10);
         self::assertSame(['LEGACY', 'REMEMBERME', 'APP_REMEMBER'], array_column($cookies, 'name'));
         self::assertSame(['name' => 'APP_REMEMBER', 'path' => '/app', 'domain' => '.example.com', 'secure' => true, 'httponly' => true, 'samesite' => 'strict'], $cookies[2]);
+    }
+
+    public function testPassLeavesTheRememberMeCookiesOutOfTheDeviceContext(): void
+    {
+        // MU-U-L2: the loader passes sessions.remember_me_cookies, the pass adds every firewall's.
+        self::assertSame(['LEGACY'], $this->load(['enabled' => true, 'remember_me_cookies' => ['LEGACY', 'LEGACY']])->getDefinition(SessionClientFactory::class)->getArgument(7));
+
+        $container = $this->passContainer(false);
+        $container->setDefinition(SessionRegistryListener::class, new Definition(SessionRegistryListener::class, array_fill(0, 13, [])))
+            ->replaceArgument(10, SessionsLoader::extraCookies(['LEGACY']));
+        $container->setDefinition(SessionClientFactory::class, new Definition(SessionClientFactory::class, array_fill(0, 8, [])));
+        $handler = new Definition('stdClass', [null, null, null, ['name' => 'APP_REMEMBER', 'path' => '/']]);
+        $container->setDefinition('security.authenticator.remember_me_handler.main', $handler->addTag('security.remember_me_handler', ['firewall' => 'main']));
+        $other = new Definition('stdClass', [null, null, null, ['name' => 'APP_REMEMBER', 'path' => '/admin']]);
+        $container->setDefinition('security.authenticator.remember_me_handler.admin', $other->addTag('security.remember_me_handler', ['firewall' => 'admin']));
+        (new SessionsPass())->process($container);
+
+        self::assertSame(['LEGACY', 'APP_REMEMBER'], $container->getDefinition(SessionClientFactory::class)->getArgument(7));
     }
 
     public function testTwigPathsPass(): void

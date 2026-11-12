@@ -51,6 +51,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target **1.16.0** (minor; opt-in, no behaviour change for existing hosts).
+
+### Added
+
+- `sessions.client.context_attributes` (default `[]`): an explicit allowlist of request attribute names (exact,
+  case-sensitive) whose **raw** value, objects included, a `DeviceIdProviderInterface` reads through the new
+  `DeviceContext::attribute(string): mixed` / `hasAttribute(string): bool` (for example DeviceIntelligence's `_device`
+  attribute). Nothing is copied unless the host names it. The values are kept outside the context's properties (an
+  internal `WeakMap` keyed by the context), so VarDumper, `var_export()`, `(array)` and `json_encode()` never show
+  them; a clone has none, and `DeviceContext` still refuses serialization. The context is built per call
+  (REQ-RUNTIME-002). `SessionClientFactory::deviceContext()` takes the names as a new optional second argument. Entries
+  must be strings: anything else fails the container build (an int name used to cause a `TypeError`, a 500 on sign-in;
+  audit MU-U-I1). With the default empty list the context carries no attribute, as in 1.15.0.
+
+### Security
+
+- `DeviceContext` no longer keeps header and cookie values in private properties: VarDumper / `dump()`,
+  `var_export()` and `(array)` showed them in 1.15 (including headers such as `X-Api-Key`), although `__debugInfo()`
+  and the docs said names only. The values now live in the same internal `WeakMap` holder as the allowlisted
+  attributes, and `__debugInfo()` builds the names from it (audit MU-U-L1). Behaviour change: a `clone` of a
+  `DeviceContext` has no headers, cookies or attributes.
+- The remember-me cookies (the cookie of every firewall's remember-me handler, read by `SessionsPass`, plus
+  `sessions.remember_me_cookies`) are no longer copied into the `DeviceContext` given to a `DeviceIdProviderInterface`:
+  they are credentials, never device data (audit MU-U-L2). `SessionClientFactory::deviceContext()` takes the names to
+  leave out as a new optional third argument.
+
 ## [1.15.0] - 2026-11-11
 
 ### Added

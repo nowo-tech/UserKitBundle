@@ -26,6 +26,7 @@ final class SessionsConfigurationTest extends TestCase
         self::assertSame([], $sessions['remember_me_cookies']);
         self::assertSame('truncate', $sessions['client']['ip']);
         self::assertSame('label', $sessions['client']['user_agent']);
+        self::assertSame([], $sessions['client']['context_attributes'], 'Opt-in: no request attribute by default.');
         self::assertNull($sessions['limit']['max_sessions']);
         self::assertSame('evict_oldest', $sessions['limit']['policy']);
         self::assertTrue($sessions['password_change']['revoke_sessions']);
@@ -57,6 +58,8 @@ final class SessionsConfigurationTest extends TestCase
         yield 'same paths' => [['web_ui' => ['path_prefix' => '/s', 'admin_path_prefix' => '/s/']], 'must differ'];
         yield 'policy' => [['limit' => ['policy' => 'kick']], 'policy'];
         yield 'ip mode' => [['client' => ['ip' => 'full']], 'ip'];
+        yield 'int context attribute (MU-U-I1)' => [['client' => ['context_attributes' => ['_device', 42]]], 'context_attributes entries must be attribute names'];
+        yield 'bool context attribute (MU-U-I1)' => [['client' => ['context_attributes' => [true]]], 'context_attributes entries must be attribute names'];
         yield 'cache store without pool (L3)' => [['revocation' => ['store' => 'cache']], 'cache_pool is required'];
     }
 

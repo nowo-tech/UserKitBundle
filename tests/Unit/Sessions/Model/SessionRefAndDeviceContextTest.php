@@ -8,12 +8,15 @@ use InvalidArgumentException;
 use Nowo\UserKitBundle\Sessions\Model\DeviceContext;
 use Nowo\UserKitBundle\Sessions\Model\SessionRef;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
 
 use function json_encode;
 use function print_r;
 use function serialize;
 use function strlen;
 use function unserialize;
+use function var_export;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -100,8 +103,20 @@ final class SessionRefAndDeviceContextTest extends TestCase
         $context = new DeviceContext(null, '', ['Authorization' => 'REDACTED-TEST-auth'], ['PHPSESSID' => self::SESSION_ID]);
 
         self::assertSame(['clientIp' => null, 'userAgent' => '', 'headers' => ['authorization'], 'cookies' => ['PHPSESSID']], $context->__debugInfo());
-        $dump = print_r($context, true);
-        self::assertStringNotContainsString(self::SESSION_ID, $dump);
-        self::assertStringNotContainsString('REDACTED-TEST-auth', $dump);
+        $dumper = new CliDumper();
+        $dumper->setColors(false);
+        // MU-U-L1: __debugInfo() does not stop VarDumper, var_export() or (array); the values are not properties
+        foreach ([
+            'print_r'    => print_r($context, true),
+            'var_dumper' => (string) $dumper->dump((new VarCloner())->cloneVar($context), true),
+            'var_export' => var_export($context, true),
+            'array'      => print_r((array) $context, true),
+            'json'       => (string) json_encode($context),
+        ] as $kind => $dump) {
+            self::assertStringNotContainsString(self::SESSION_ID, $dump, $kind);
+            self::assertStringNotContainsString('REDACTED-TEST-auth', $dump, $kind);
+        }
+        self::assertSame('REDACTED-TEST-auth', $context->header('authorization'));
+        self::assertSame(self::SESSION_ID, $context->cookie('PHPSESSID'));
     }
 }
