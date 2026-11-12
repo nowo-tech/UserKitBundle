@@ -9,6 +9,7 @@ use Nowo\FormKitBundle\Form\CsrfOnlyFormFactory;
 use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Epoch\EpochRememberMeHandler;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
@@ -38,9 +39,11 @@ use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Security\Http\RememberMe\PersistentRememberMeHandler;
 use Symfony\Component\Security\Http\RememberMe\SignatureRememberMeHandler;
 
+use function array_column;
 use function array_key_exists;
 use function array_map;
 use function array_unique;
+use function array_values;
 use function implode;
 use function in_array;
 use function is_a;
@@ -193,6 +196,11 @@ final class SessionsPass implements CompilerPassInterface
         }
         $listener->replaceArgument(10, $cookies);
         $listener->setArgument(12, $handlers);
+
+        // MU-U-L2: the remember-me cookies are credentials, never device data: left out of every DeviceContext.
+        if ($container->hasDefinition(SessionClientFactory::class)) {
+            $container->getDefinition(SessionClientFactory::class)->replaceArgument(7, array_values(array_unique(array_column($cookies, 'name'))));
+        }
     }
 
     /**

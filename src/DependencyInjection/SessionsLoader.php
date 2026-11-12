@@ -236,6 +236,7 @@ final class SessionsLoader
             $sessions['hash_secret'],
             is_string($client['device_id_resolver']) && $client['device_id_resolver'] !== '' ? new Reference($client['device_id_resolver']) : null,
             array_values(array_unique($client['context_attributes'])),
+            array_values(array_unique($sessions['remember_me_cookies'])), // SessionsPass adds every firewall's (MU-U-L2)
         ]));
 
         $limit = $sessions['limit'];

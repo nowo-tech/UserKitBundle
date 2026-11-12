@@ -55,8 +55,13 @@ Target **1.16.0**, from **1.15.0**:
 composer update nowo-tech/user-kit-bundle
 ```
 
-Nothing to change: the new `sessions.client.context_attributes` allowlist defaults to `[]`, and the `DeviceContext`
-given to a `DeviceIdProviderInterface` is then exactly the 1.15 one.
+Nothing to change: the new `sessions.client.context_attributes` allowlist defaults to `[]`. Two hardening changes
+to the `DeviceContext` a `DeviceIdProviderInterface` receives:
+
+- the remember-me cookies (every firewall's and `sessions.remember_me_cookies`) are no longer in it: a provider that
+  read one must use a dedicated device cookie instead;
+- header and cookie values are kept outside the object's properties, so dumps no longer show them; a `clone` of a
+  context has no headers, cookies or attributes (build a new context instead of cloning one).
 
 ### Request attributes for the device id provider (opt-in)
 

@@ -34,7 +34,7 @@ final class DeviceContextAttributesTest extends TestCase
         $device->id   = 'dev-1';
         $device->hint = 'REDACTED-TEST-x';
 
-        $request = Request::create('/', cookies: ['device' => 'd-1'], server: ['REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_DEVICE' => 'tablet-1']);
+        $request = Request::create('/', cookies: ['device' => 'd-1', 'APP_REMEMBER' => 'REDACTED-TEST-rm'], server: ['REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_DEVICE' => 'tablet-1']);
         $request->attributes->add(['_device' => $device, 'tenant' => 'org-a', 'nullable' => null]);
 
         return $request;
@@ -46,12 +46,12 @@ final class DeviceContextAttributesTest extends TestCase
         $context = SessionClientFactory::deviceContext($request);
 
         self::assertEquals(SessionClientFactory::deviceContext($request, []), $context);
-        self::assertEquals(new DeviceContext('203.0.113.9', 'Symfony', $this->headersOf($context), ['device' => 'd-1']), $context);
+        self::assertEquals(new DeviceContext('203.0.113.9', 'Symfony', $this->headersOf($context), ['device' => 'd-1', 'APP_REMEMBER' => 'REDACTED-TEST-rm']), $context);
         foreach (['_device', 'tenant', 'nullable'] as $name) {
             self::assertNull($context->attribute($name), $name);
             self::assertFalse($context->hasAttribute($name), $name);
         }
-        self::assertSame(['clientIp' => '203.0.113.9', 'userAgent' => 'Symfony', 'headers' => $context->__debugInfo()['headers'], 'cookies' => ['device']], $context->__debugInfo());
+        self::assertSame(['clientIp' => '203.0.113.9', 'userAgent' => 'Symfony', 'headers' => $context->__debugInfo()['headers'], 'cookies' => ['device', 'APP_REMEMBER']], $context->__debugInfo());
     }
 
     public function testAnAllowlistedAttributeIsGivenRaw(): void
@@ -86,9 +86,31 @@ final class DeviceContextAttributesTest extends TestCase
         self::assertSame('dev-1', $factory->fromRequest($this->request())->deviceId);
     }
 
+    /** MU-U-L2: the remember-me cookies are credentials, never device data. */
+    public function testTheRememberMeCookiesAreLeftOut(): void
+    {
+        self::assertSame('REDACTED-TEST-rm', SessionClientFactory::deviceContext($this->request())->cookie('APP_REMEMBER'), 'Only the names given are left out.');
+        $context = SessionClientFactory::deviceContext($this->request(), [], ['APP_REMEMBER', 'REMEMBERME']);
+        self::assertNull($context->cookie('APP_REMEMBER'));
+        self::assertSame('d-1', $context->cookie('device'));
+
+        $provider = new class implements DeviceIdProviderInterface {
+            public function deviceIdFor(DeviceContext $context): ?string
+            {
+                return $context->cookie('APP_REMEMBER');
+            }
+        };
+        self::assertNull((new SessionClientFactory(deviceIds: $provider, rememberMeCookies: ['APP_REMEMBER']))->deviceId($this->request()));
+    }
+
     public function testAllowlistedValuesNeverShowInADump(): void
     {
-        $context = SessionClientFactory::deviceContext($this->request(), ['_device', 'tenant']);
+        $request = $this->request();
+        $request->headers->set('X-Api-Key', 'REDACTED-TEST-key');
+        $request->cookies->set('theme', 'REDACTED-TEST-cookie');
+        $context = SessionClientFactory::deviceContext($request, ['_device', 'tenant']);
+        self::assertSame('REDACTED-TEST-key', $context->header('X-Api-Key'));
+        self::assertSame('REDACTED-TEST-cookie', $context->cookie('theme'));
 
         $dumper = new CliDumper();
         $dumper->setColors(false);
@@ -104,8 +126,16 @@ final class DeviceContextAttributesTest extends TestCase
             self::assertStringNotContainsString('org-a', $dump, $kind);
         }
 
+        // MU-U-L1: header and cookie values are absent from every dump; __debugInfo() still lists their names
+        self::assertContains('x-api-key', $context->__debugInfo()['headers']);
+        self::assertContains('theme', $context->__debugInfo()['cookies']);
+        self::assertStringContainsString('x-api-key', $dumps['var_dumper'], 'names only');
+
         $clone = clone $context;
         self::assertNull($clone->attribute('_device'));
+        self::assertNull($clone->header('X-Api-Key'), 'a clone has no headers');
+        self::assertNull($clone->cookie('theme'), 'a clone has no cookies');
+        self::assertSame(['clientIp' => '203.0.113.9', 'userAgent' => 'Symfony', 'headers' => [], 'cookies' => []], $clone->__debugInfo());
         self::assertSame('org-a', $context->attribute('tenant'));
 
         $this->expectException(InvalidArgumentException::class);

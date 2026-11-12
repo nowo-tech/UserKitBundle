@@ -71,6 +71,8 @@ final readonly class SessionClientFactory
      * @param string $secret HMAC key of the `hash` mode
      * @param list<string> $contextAttributes `sessions.client.context_attributes`: request attributes a
      *                                        {@see DeviceIdProviderInterface} receives with their raw value (exact names)
+     * @param list<string> $rememberMeCookies remember-me cookie names (every firewall's plus `sessions.remember_me_cookies`)
+     *                                        never copied into a {@see DeviceContext}
      */
     public function __construct(
         private string $ipMode = 'truncate',
@@ -80,6 +82,7 @@ final readonly class SessionClientFactory
         private string $secret = '',
         private DeviceIdProviderInterface|DeviceIdResolverInterface|null $deviceIds = null,
         private array $contextAttributes = [],
+        private array $rememberMeCookies = [],
     ) {
         if ($deviceIds instanceof DeviceIdResolverInterface && !$deviceIds instanceof DeviceIdProviderInterface) {
             @trigger_error('Since nowo-tech/user-kit-bundle 1.15: implementing "DeviceIdResolverInterface" for "sessions.client.device_id_resolver" is deprecated, implement "DeviceIdProviderInterface" instead.', E_USER_DEPRECATED);
@@ -113,7 +116,7 @@ final readonly class SessionClientFactory
     public function deviceId(Request $request): ?string
     {
         $id = match (true) {
-            $this->deviceIds instanceof DeviceIdProviderInterface => $this->deviceIds->deviceIdFor(self::deviceContext($request, $this->contextAttributes)),
+            $this->deviceIds instanceof DeviceIdProviderInterface => $this->deviceIds->deviceIdFor(self::deviceContext($request, $this->contextAttributes, $this->rememberMeCookies)),
             $this->deviceIds instanceof DeviceIdResolverInterface => $this->deviceIds->deviceId($request),
             default                                               => null,
         };
@@ -126,15 +129,17 @@ final readonly class SessionClientFactory
 
     /**
      * HTTP-edge adapter: the framework-free {@see DeviceContext} of a request (client IP with trusted proxies applied,
-     * user agent, first value of each header, cookies). The session cookie and the `Authorization`, `Cookie` and
-     * `Proxy-Authorization` headers are left out: they are credentials, never device data.
+     * user agent, first value of each header, cookies). The session cookie, the remember-me cookies named in
+     * `$rememberMeCookies` (1.16) and the `Authorization`, `Cookie` and `Proxy-Authorization` headers are left out: they
+     * are credentials, never device data.
      *
      * Request attributes are copied only when named in `$attributes` (`sessions.client.context_attributes`, default
      * none): exact names, raw values (objects included), readable through {@see DeviceContext::attribute()}.
      *
      * @param list<string> $attributes request attribute names to copy with their raw value
+     * @param list<string> $rememberMeCookies remember-me cookie names to leave out (1.16)
      */
-    public static function deviceContext(Request $request, array $attributes = []): DeviceContext
+    public static function deviceContext(Request $request, array $attributes = [], array $rememberMeCookies = []): DeviceContext
     {
         $headers = [];
         foreach ($request->headers->keys() as $name) {
@@ -151,7 +156,7 @@ final readonly class SessionClientFactory
         $cookies       = [];
         foreach ($request->cookies->all() as $name => $value) {
             $name = (string) $name;
-            if (is_string($value) && $name !== $sessionCookie) {
+            if (is_string($value) && $name !== $sessionCookie && !in_array($name, $rememberMeCookies, true)) {
                 $cookies[$name] = $value;
             }
         }

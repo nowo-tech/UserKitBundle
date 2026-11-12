@@ -282,6 +282,24 @@ final class SessionsWiringTest extends TestCase
         self::assertSame(['name' => 'APP_REMEMBER', 'path' => '/app', 'domain' => '.example.com', 'secure' => true, 'httponly' => true, 'samesite' => 'strict'], $cookies[2]);
     }
 
+    public function testPassLeavesTheRememberMeCookiesOutOfTheDeviceContext(): void
+    {
+        // MU-U-L2: the loader passes sessions.remember_me_cookies, the pass adds every firewall's.
+        self::assertSame(['LEGACY'], $this->load(['enabled' => true, 'remember_me_cookies' => ['LEGACY', 'LEGACY']])->getDefinition(SessionClientFactory::class)->getArgument(7));
+
+        $container = $this->passContainer(false);
+        $container->setDefinition(SessionRegistryListener::class, new Definition(SessionRegistryListener::class, array_fill(0, 13, [])))
+            ->replaceArgument(10, SessionsLoader::extraCookies(['LEGACY']));
+        $container->setDefinition(SessionClientFactory::class, new Definition(SessionClientFactory::class, array_fill(0, 8, [])));
+        $handler = new Definition('stdClass', [null, null, null, ['name' => 'APP_REMEMBER', 'path' => '/']]);
+        $container->setDefinition('security.authenticator.remember_me_handler.main', $handler->addTag('security.remember_me_handler', ['firewall' => 'main']));
+        $other = new Definition('stdClass', [null, null, null, ['name' => 'APP_REMEMBER', 'path' => '/admin']]);
+        $container->setDefinition('security.authenticator.remember_me_handler.admin', $other->addTag('security.remember_me_handler', ['firewall' => 'admin']));
+        (new SessionsPass())->process($container);
+
+        self::assertSame(['LEGACY', 'APP_REMEMBER'], $container->getDefinition(SessionClientFactory::class)->getArgument(7));
+    }
+
     public function testTwigPathsPass(): void
     {
         $project = sys_get_temp_dir() . '/nowo-user-kit-twig-paths';
