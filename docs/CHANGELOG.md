@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.16.0] - 2026-11-12](#1160---2026-11-12)
 - [[1.15.0] - 2026-11-11](#1150---2026-11-11)
 - [[1.14.2] - 2026-11-11](#1142---2026-11-11)
 - [[1.14.1] - 2026-11-10](#1141---2026-11-10)
@@ -51,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-11-12
+
 Target **1.16.0** (minor; opt-in, no behaviour change for existing hosts).
 
 ### Added
@@ -76,6 +79,8 @@ Target **1.16.0** (minor; opt-in, no behaviour change for existing hosts).
   `sessions.remember_me_cookies`) are no longer copied into the `DeviceContext` given to a `DeviceIdProviderInterface`:
   they are credentials, never device data (audit MU-U-L2). `SessionClientFactory::deviceContext()` takes the names to
   leave out as a new optional third argument.
+
+[1.16.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.16.0
 
 ## [1.15.0] - 2026-11-11
 

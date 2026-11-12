@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.16.0](#to-1160)
   - [Request attributes for the device id provider (opt-in)](#request-attributes-for-the-device-id-provider-opt-in)
 - [To 1.15.0](#to-1150)
 - [To 1.14.2](#to-1142)
@@ -48,6 +49,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.16.0
+
+From **1.15.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 Target **1.16.0**, from **1.15.0**:
 
