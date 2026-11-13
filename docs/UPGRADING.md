@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.16.3](#to-1163)
 - [To 1.16.2](#to-1162)
 - [To 1.16.1](#to-1161)
   - [To 1.16.1: owner columns of the session registry (look-alike owners)](#to-1161-owner-columns-of-the-session-registry-look-alike-owners)
@@ -52,6 +53,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.16.3
+
+From **1.16.2**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.16.2**, nothing to do beyond `composer update nowo-tech/user-kit-bundle`. Hosts on MySQL / MariaDB with Doctrine session
 storage and DBAL 4.3 or 4.4 (or ORM 3.0-3.6 with DBAL 4.3+) get working `schema:update`, `doctrine:migrations:diff` and

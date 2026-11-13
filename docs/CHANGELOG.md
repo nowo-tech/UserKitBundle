@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.16.3] - 2026-11-13](#1163---2026-11-13)
 - [[1.16.2] - 2026-11-13](#1162---2026-11-13)
 - [[1.16.1] - 2026-11-13](#1161---2026-11-13)
 - [[1.16.0] - 2026-11-12](#1160---2026-11-12)
@@ -54,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.3] - 2026-11-13
+
 ### Fixed
 
 - `schema:update`, `doctrine:migrations:diff` and `schema:validate` no longer fail on MySQL / MariaDB with the Doctrine session
@@ -62,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GenerateSchemaTableEventArgs::setClassTable()` exists only from ORM 3.7 and throws `BadMethodCallException` unless
   `Schema::edit()` (DBAL 4.5+) exists too. The editor path is now used only when all three exist; otherwise the columns are
   changed in place. Runtime was never affected. CI gains a job on DBAL 4.3 with ORM 3.6.
+
+[1.16.3]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.16.3
 
 ## [1.16.2] - 2026-11-13
 
