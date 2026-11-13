@@ -701,7 +701,7 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         if (!$held || !$passwordChange) {
             $this->tellRevoked($owner, $user, $actor, $reason, $ids, $audit, $customReason, $context, $bumped !== null);
         }
-        if ($bumpFailure !== null) {
+        if ($bumpFailure instanceof Throwable) {
             $this->logger?->error('NowoUserKitBundle: {count} session(s) of the owner were revoked, but its remember-me epoch could not be bumped, so its remember-me cookies still sign in: {message}', ['count' => count($ids), 'message' => $bumpFailure->getMessage(), 'exception' => $bumpFailure]);
 
             throw $bumpFailure;
