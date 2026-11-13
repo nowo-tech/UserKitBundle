@@ -80,6 +80,34 @@ final class OwnerCollationListenerTest extends TestCase
         self::assertFalse($result->getColumn('session_hash')->hasPlatformOption('collation'));
     }
 
+    /**
+     * @return iterable<string, array{bool, bool, bool, bool}>
+     */
+    public static function apiCombinations(): iterable
+    {
+        yield 'DBAL 4.5, ORM 3.7' => [true, true, true, true];
+        yield 'DBAL 4.3/4.4 (no Schema::edit), ORM 3.7' => [true, false, true, false];
+        yield 'DBAL 4.5, ORM 3.0-3.6 (no setClassTable)' => [true, true, false, false];
+        yield 'DBAL 4.3/4.4, ORM 3.0-3.6' => [true, false, false, false];
+        yield 'DBAL 3.x / 4.0-4.2, ORM 3.7' => [false, false, true, false];
+        yield 'DBAL 3.x / 4.0-4.2, ORM 2.x' => [false, false, false, false];
+        yield 'Schema::edit only (impossible, but never the editor)' => [false, true, true, false];
+    }
+
+    #[DataProvider('apiCombinations')]
+    public function testTheEditorPathNeedsEveryApi(bool $tableEdit, bool $schemaEdit, bool $setClassTable, bool $expected): void
+    {
+        self::assertSame($expected, OwnerCollationListener::editorSupported($tableEdit, $schemaEdit, $setClassTable));
+    }
+
+    public function testTheInPlacePathKeepsTheSameTable(): void
+    {
+        $table = $this->table();
+        self::assertNull(OwnerCollationListener::collate($table, 'user_type', 'utf8mb4_bin', false));
+        self::assertSame('utf8mb4', $table->getColumn('user_type')->getPlatformOption('charset'));
+        self::assertSame('utf8mb4_bin', $table->getColumn('user_type')->getPlatformOption('collation'));
+    }
+
     public function testOtherEntitiesAndExactPlatformsAreUntouched(): void
     {
         foreach ([[stdClass::class, new MySQL80Platform()], [UserSession::class, new PostgreSQLPlatform()]] as [$class, $platform]) {

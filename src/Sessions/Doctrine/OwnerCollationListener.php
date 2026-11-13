@@ -9,6 +9,7 @@ use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\MariaDBPlatform;
 use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\DBAL\Schema\ColumnEditor;
+use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
@@ -79,8 +80,8 @@ final readonly class OwnerCollationListener
 
         $table = $args->getClassTable();
         foreach (self::COLUMNS as $column) {
-            // @phpstan-ignore function.alreadyNarrowedType (Table::edit() exists only from DBAL 4.5)
-            $edited = self::collate($table, $column, $collation, method_exists(Table::class, 'edit'));
+            // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType, function.alreadyNarrowedType, function.impossibleType (API availability depends on the installed DBAL / ORM)
+            $edited = self::collate($table, $column, $collation, self::editorSupported(method_exists(Table::class, 'edit'), method_exists(Schema::class, 'edit'), method_exists(GenerateSchemaTableEventArgs::class, 'setClassTable')));
             if ($edited instanceof Table) {
                 $table = $edited;
             }
@@ -91,7 +92,17 @@ final readonly class OwnerCollationListener
     }
 
     /**
-     * Gives `$column` the utf8mb4 charset and `$collation`: through a table editor (DBAL 4.5+; returns the new table) or
+     * Whether the table-editor path is usable: it replaces the table, which needs `Table::edit()` (DBAL 4.3+), and
+     * `GenerateSchemaTableEventArgs::setClassTable()` (ORM 3.7+) to accept it, and that method throws unless
+     * `Schema::edit()` (DBAL 4.5+) exists. Anything less uses the in-place path.
+     */
+    public static function editorSupported(bool $tableEdit, bool $schemaEdit, bool $setClassTable): bool
+    {
+        return $tableEdit && $schemaEdit && $setClassTable;
+    }
+
+    /**
+     * Gives `$column` the utf8mb4 charset and `$collation`: through a table editor (returns the new table; see editorSupported()) or
      * in place (older DBAL; returns null).
      *
      * @param non-empty-string $column
