@@ -5,6 +5,7 @@
 - [Scope](#scope)
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
+- [Look-alike session owners (fixed in 1.16.1)](#look-alike-session-owners-fixed-in-1161)
 - [Logging](#logging)
 - [CSRF (REQ-SEC-005)](#csrf-req-sec-005)
 - [Dependencies](#dependencies)
@@ -79,7 +80,45 @@ stay in the host (or AuthKit).
 | Effects of a revocation that is rolled back (HP-L2, HU-M1) | `CommitQueue`, `TransactionBoundaryMiddleware` | Inside a transaction, the `cache` mark (every reason) and `UserSessionsRevokedEvent` for `password_changed` wait for the outermost commit and are dropped on rollback or a failed commit. Once committed they also wait while any later transaction is open, so a listener's writes cannot be undone by that transaction; the end of the request, command or message runs them whatever is open. DBAL has no commit hook on the connection (the events of DBAL 3 are deprecated and gone in 4), so a driver middleware watches the outermost transaction, which is the only one DBAL sends to the driver. They run at the next boundary, not inside the driver call, where DBAL still counts the transaction as open. A savepoint is invisible to the driver: when one rolls back and the outer transaction commits, revocations it undid are found by their live rows and dropped |
 | Effects of a revocation that is rolled back (residual, Low) | `UserSessionManager` | `UserSessionsRevokedEvent` for reasons other than `password_changed` fires inside the transaction and stays fired on rollback: those listeners must take part in it (erasure: AuthKit's vault and device cleanup, while the user still has its id). Likewise a `password_changed` audit event for **zero** sessions inside a savepoint that is rolled back, with no row to show it was undone; `UserSessionsDeletedEvent`; `SessionLimitReachedEvent`. After a commit whose process dies before the boundary (a fatal, an `exit`), marks and events are lost: rows are revoked, so the touch still ends those sessions within `touch_interval`, except with the registry on another connection, where the rows wait too and nothing is revoked (HU-L2). A host `SessionEpochStoreInterface` that is not on the registry's connection does not follow a rollback |
 | Random sign-outs of parallel requests on MySQL (availability, fixed in 1.13.1, immediate audit Appendix IY Pass-Low) | `UserSessionStore::touch()` | Up to 1.13.0 the touch took 0 affected rows for a gone session; MySQL reports 0 for a same-second no-op UPDATE (no `CLIENT_FOUND_ROWS`), so parallel requests of one session signed the user out. On 0 affected rows the live row is now read again with a `SELECT` on the owner, hash and `revoked_at IS NULL`: only a missing or revoked row ends the session, so the fix does not fail open (`SessionTouchFoundRowsTest`, run on MySQL and PostgreSQL in CI). No confidentiality or integrity impact. IY-L1 (Low, fixed in the release after 1.13.1): in 1.13.1, inside a host transaction that already read under MySQL `REPEATABLE READ`, the fallback `SELECT` read the old snapshot and could see a just-revoked session as live until the next request (at most `touch_interval`); the bundle's own request path runs in autocommit. The fallback is now a locking read on MySQL (`FOR SHARE`) and MariaDB / MySQL 5.7 (`LOCK IN SHARE MODE`), which reads the latest committed version as the `UPDATE` does; PostgreSQL and SQLite keep the plain `SELECT` (`SessionTouchSnapshotTest`, run on MySQL and PostgreSQL in CI). |
+| Look-alike owners (house rule LQ, fixed in 1.16.1) | `UserSessionStore`, `DoctrineSessionEpochStore`, `SessionUser` | Owner statements add a byte comparison on MySQL / MariaDB and every row read back is re-checked with `===`; ids with leading / trailing whitespace or control / format characters are refused; new tables get a binary NO PAD collation on `user_type` / `user_id` (`OwnerCollationListener`). See [Look-alike session owners](#look-alike-session-owners-fixed-in-1161) |
 | Cross-request state in workers | Listeners | Services hold no request state; `PasswordChangeListener` and `UserRemovalListener` pending changes, `CommitQueue` and the `RememberMeEpoch` kept-session map are cleared on `kernel.reset` |
+
+## Look-alike session owners (fixed in 1.16.1)
+
+**Affected:** 1.9.0 to 1.16.0, with `sessions.enabled`, on **MySQL or MariaDB**. PostgreSQL and SQLite compare exactly
+and are not affected. **Fixed:** 1.16.1.
+
+**Host conditions** (all of them):
+
+1. String owner ids: a security user without a Doctrine id (in-memory, LDAP, OAuth/OIDC or API users, whose owner id
+   is `getUserIdentifier()`), a Doctrine user whose id is a string, or a custom `sessions.owner.resolver` returning
+   such ids. Integer and UUID ids cannot be look-alikes.
+2. An identity source that lets two **different** principals hold ids that differ only by case or accents, or by
+   trailing spaces (for example a case-sensitive directory or provider, or identifiers that are not normalised).
+3. The registry columns on a collation that folds them. Every stock MySQL / MariaDB setup does: tables are created with
+   the charset default (`utf8mb4_0900_ai_ci` on MySQL 8, case- and accent-insensitive; `utf8mb4_uca1400_ai_ci` on
+   MariaDB 11, also PAD SPACE). `utf8mb4_unicode_ci` / `utf8mb4_general_ci` fold all three; `utf8mb4_bin` folds
+   trailing spaces only.
+
+**Impact:** the owner of `Alice` sees and can sign out `alice`'s sessions on "My sessions" (browser, OS, truncated IP,
+times), gets them in the personal-data export, has them counted in the session limit (and evicted under
+`evict_oldest`), and erasure or revoke-all for one signs out and deletes the other; an epoch bump (sign out everywhere
+with `remember_me_epoch`) for one voids the other's remember-me cookies, and on PAD SPACE collations an epoch row of one
+is read as the other's. Single-session paths also need the secret session hash. No session takeover, no access to the
+other account.
+
+Probe (v1.16.0, MySQL 8.4.13 and MariaDB 11.8.9, sessions of `alice`, `Alice`, `álice`, `alice `, `ALICE  `):
+
+| Column collation | revoke-all of `Alice` revoked | export of `alice` rows |
+| --- | --- | --- |
+| MySQL default `utf8mb4_0900_ai_ci` (also what the schema tool created) | `alice`, `Alice`, `álice` | 3 |
+| MariaDB default `utf8mb4_uca1400_ai_ci`, `utf8mb4_unicode_ci`, `utf8mb4_general_ci` | all five | 5 |
+| `utf8mb4_bin` | `Alice` only (case kept) | 2 (`alice`, `alice `) |
+| `utf8mb4_0900_bin` / `utf8mb4_nopad_bin` (1.16.1 schema) | `Alice` only | 1 |
+
+**Fix:** byte-exact owner predicate plus `===` re-check, refusal of padded and invisible-character ids, binary NO PAD
+collation for new tables. Existing tables: run the `ALTER` in [UPGRADING](UPGRADING.md) (the fix holds without it,
+except that the epoch table's unique key still merges look-alikes and makes their first epoch bump fail loudly).
 
 ## Logging
 

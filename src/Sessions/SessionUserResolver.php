@@ -14,13 +14,13 @@ use Symfony\Component\Security\Core\User\UserInterface;
 use function count;
 use function is_int;
 use function is_string;
-use function mb_strlen;
 use function reset;
 
 /**
  * Owner reference of a session: Doctrine-mapped users by their root entity class and single identifier (stable when
  * the e-mail / username changes); other security users by their class and user identifier. Users without a usable
- * reference (composite or empty id, not persisted yet, too long) are not registered.
+ * reference (composite or empty id, not persisted yet, too long, or with leading / trailing whitespace or control /
+ * format characters, see {@see SessionUser::isUsable()}) are not registered.
  *
  * Default {@see SessionOwnerResolverInterface} (`sessions.owner.resolver` unset).
  */
@@ -53,7 +53,7 @@ final readonly class SessionUserResolver implements SessionOwnerResolverInterfac
 
     private function reference(string $type, string $id): ?SessionUser
     {
-        if ($id === '' || mb_strlen($id) > SessionUser::MAX_LENGTH || mb_strlen($type) > SessionUser::MAX_LENGTH) {
+        if (!SessionUser::isUsable($type) || !SessionUser::isUsable($id)) {
             return null;
         }
 
