@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.16.2] - 2026-11-13](#1162---2026-11-13)
 - [[1.16.1] - 2026-11-13](#1161---2026-11-13)
 - [[1.16.0] - 2026-11-12](#1160---2026-11-12)
 - [[1.15.0] - 2026-11-11](#1150---2026-11-11)
@@ -53,12 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.2] - 2026-11-13
+
 ### Fixed
 
 - The Doctrine ORM mappings `NowoUserKitSessions` and `NowoUserKitSessionEpoch` that the sessions feature prepends no longer set
   the `alias` option, which DoctrineBundle 3.4 deprecates. Nothing in the bundle used the aliases; a host that fails on
   deprecations (for example `failOnDeprecation="true"` on Symfony 8.1) no longer goes red. Fully-qualified entity class
   names are unaffected.
+
+[1.16.2]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.16.2
 
 ## [1.16.1] - 2026-11-13
 
