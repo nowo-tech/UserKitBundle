@@ -17,7 +17,8 @@ final class DoctrineMappingAliasDeprecationTest extends SessionsKernelTestCase
     public function testBootTriggersNoMappingAliasDeprecation(): void
     {
         $deprecations = [];
-        $previous     = set_error_handler(static function (int $level, string $message) use (&$deprecations): bool {
+        // Test-only, restored in finally: collects the deprecation notices raised while the container compiles.
+        set_error_handler(static function (int $level, string $message) use (&$deprecations): bool { // @phpstan-ignore frankenphp.worker.noSetErrorExceptionHandler
             if (preg_match('/\balias\b/i', $message) === 1) {
                 $deprecations[] = $message;
             }
@@ -30,9 +31,8 @@ final class DoctrineMappingAliasDeprecationTest extends SessionsKernelTestCase
         } finally {
             restore_error_handler();
         }
-        unset($previous);
 
         self::assertSame([], $deprecations);
-        self::assertNotNull($this->em()->getClassMetadata(UserSession::class));
+        self::assertSame(UserSession::class, $this->em()->getClassMetadata(UserSession::class)->getName());
     }
 }
