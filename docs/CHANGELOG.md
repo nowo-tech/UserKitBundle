@@ -77,13 +77,17 @@ Target **1.16.1** (patch; security fix, see UPGRADING for the optional column mi
     generated schema: `utf8mb4_0900_bin` (MySQL 8.0+), `utf8mb4_nopad_bin` (MariaDB), `utf8mb4_bin` (MySQL 5.7, where
     the byte predicate and the re-check cover PAD SPACE). Existing tables need the `ALTER` in UPGRADING.
   - Until the epoch table is migrated, its unique key still folds look-alikes: the first bump of a look-alike owner
-    now throws a `LogicException` instead of moving the other owner's epoch.
+    now throws a `LogicException` instead of moving the other owner's epoch. The session rows are revoked before the
+    exception is rethrown (and logged as an error), so a password change or "sign out everywhere" still ends every
+    other session; only the remember-me cookies stay valid. **With `remember_me_epoch` enabled on MySQL / MariaDB the
+    `ALTER` of the epoch table in UPGRADING is therefore required, not optional.**
 
 ### Tests
 
 - `SessionLookalikeOwnerTest` (registry and epoch against look-alike owners, with the columns forced back to the
-  host collations `0900_ai_ci` / `uca1400_ai_ci`, `unicode_ci`, `general_ci` and `utf8mb4_bin`), run on MySQL 8.4 and
-  MariaDB 11.4 in CI; unit tests for the id rule, the byte predicate, the re-check and the collation listener.
+  host collations `0900_ai_ci` / `uca1400_ai_ci`, `unicode_ci`, `general_ci` and `utf8mb4_bin`; `revokeAll()` with an
+  unmigrated epoch table and a look-alike epoch row still revokes every session of the exact owner), run on MySQL 8.4
+  and MariaDB 11.4 in CI; unit tests for the id rule, the byte predicate, the re-check and the collation listener.
 
 ## [1.16.0] - 2026-11-12
 

@@ -36,6 +36,7 @@ use SensitiveParameter;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
+use Throwable;
 
 use function array_column;
 use function array_filter;
@@ -650,7 +651,10 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
      * @param list<string>|null $publicIds
      * @param array<string, mixed> $context
      * @param bool $epoch bump the remember-me epoch (also when no row matched: a browser whose row is gone must not sign
-     *                    back in); bumped **before** the rows, so a failing epoch store revokes nothing
+     *                    back in). A failing bump (for instance the look-alike `LogicException` of an epoch table still on
+     *                    a folding collation) never keeps the sessions alive: the rows are revoked anyway and the
+     *                    failure is rethrown afterwards (audit OE), so the caller still learns that the remember-me
+     *                    cookies were not invalidated
      * @param bool $keepCurrent the caller's current session (unless revoked here) gets a fresh cookie, besides `$except`
      *
      * @return list<string> revoked public ids
@@ -660,7 +664,16 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         if ($customReason !== null && !RevocationReason::isValidCustom($customReason)) {
             throw new InvalidArgumentException(sprintf('A custom revocation reason must match %s and not be a built-in reason, got "%s".', RevocationReason::CUSTOM_PATTERN, $customReason));
         }
-        $bumped = $epoch && $this->epoch instanceof RememberMeEpoch ? $this->epoch->bump($owner) : null;
+        $bumped      = null;
+        $bumpFailure = null;
+        if ($epoch && $this->epoch instanceof RememberMeEpoch) {
+            try {
+                $bumped = $this->epoch->bump($owner);
+            } catch (Throwable $e) {
+                // Fail safe: the sessions end even when the cookies could not be invalidated; rethrown below.
+                $bumpFailure = $e;
+            }
+        }
         $code   = $customReason ?? $reason->value;
         $rows   = $this->store->revoke($owner, $code, $this->now(), $publicIds, $deviceId, $except);
         $ids    = array_column($rows, 'public_id');
@@ -687,6 +700,11 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         }
         if (!$held || !$passwordChange) {
             $this->tellRevoked($owner, $user, $actor, $reason, $ids, $audit, $customReason, $context, $bumped !== null);
+        }
+        if ($bumpFailure !== null) {
+            $this->logger?->error('NowoUserKitBundle: {count} session(s) of the owner were revoked, but its remember-me epoch could not be bumped, so its remember-me cookies still sign in: {message}', ['count' => count($ids), 'message' => $bumpFailure->getMessage(), 'exception' => $bumpFailure]);
+
+            throw $bumpFailure;
         }
 
         return $ids;

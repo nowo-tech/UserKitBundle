@@ -59,9 +59,15 @@ Target **1.16.1**, from **1.9.0–1.16.0** (only with `sessions.enabled`):
 composer update nowo-tech/user-kit-bundle
 ```
 
-The fix works without a migration: on MySQL / MariaDB every owner statement adds a byte comparison and every row read
-back is re-checked with `===`, so `Alice`, `álice` or `alice ` no longer reach the sessions or the epoch of `alice`.
-Migrate the columns anyway, so the database and its unique keys are exact too. PostgreSQL and SQLite need nothing.
+The registry fix works without a migration: on MySQL / MariaDB every owner statement adds a byte comparison and every
+row read back is re-checked with `===`, so `Alice`, `álice` or `alice ` no longer reach the sessions or the epoch of
+`alice`. Migrate the columns anyway, so the database and its unique keys are exact too. PostgreSQL and SQLite need
+nothing.
+
+> **With `sessions.remember_me_epoch` enabled on MySQL / MariaDB, the `ALTER` of the epoch table is REQUIRED.** Until
+> it runs, its folding unique key makes the epoch bump of an owner whose look-alike already has an epoch row fail: the
+> sessions are still revoked, but the remember-me cookies of that owner stay valid and the call (a password change,
+> "sign out everywhere", an erasure) ends with a `LogicException` (HTTP 500 in a request).
 
 **Schema change (MySQL / MariaDB).** New tables get a binary NO PAD collation on `user_type` and `user_id`
 (`OwnerCollationListener`). For existing tables, `doctrine:migrations:diff` produces the change, or run it by hand
@@ -104,8 +110,10 @@ Impact on existing data:
   older remember-me cookies are accepted again until they next sign out everywhere). Bump them if in doubt
   (`UserSessionManager::revokeAll()` for each affected user).
 - **Until the epoch table is migrated**, its unique key still merges look-alikes: the first epoch bump of an owner
-  whose look-alike already has a row now throws a `LogicException` (no sign-out everywhere for that owner) instead of
-  moving the other owner's epoch. Run the `ALTER` to remove it.
+  whose look-alike already has a row throws a `LogicException` instead of moving the other owner's epoch. The
+  owner's session rows are revoked first anyway (a password change still signs every other session out), but its
+  remember-me cookies are not invalidated and the exception reaches the caller, logged as an error. This is why the
+  `ALTER` is required with `remember_me_epoch`.
 - **Custom owner resolvers** that build a `SessionUser` with such an id now get an `InvalidArgumentException`; return
   null instead (`SessionUser::isUsable()` tells).
 

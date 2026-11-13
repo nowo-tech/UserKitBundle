@@ -16,6 +16,7 @@ use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 
 use function array_column;
 use function array_keys;
@@ -123,6 +124,47 @@ final class SessionLookalikeOwnerTest extends TransactionalSessionsTestCase
             self::assertStringContainsString('UPGRADING', $e->getMessage());
         }
         self::assertSame((new DateTimeImmutable('2026-11-12 10:00:00 UTC'))->getTimestamp(), $epochs->epoch($alice), 'A look-alike\'s bump never moves alice\'s epoch');
+    }
+
+    /**
+     * Audit OE: on an epoch table still on a folding collation, the bump of `alice` collides with the epoch row of her
+     * look-alike `Alice` and throws. The sessions of `alice` must end anyway (before, the bump ran first and its
+     * exception left every row alive after a committed password change); the failure is still rethrown.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function foldingCollations(): iterable
+    {
+        yield 'utf8mb4_0900_ai_ci / uca1400 (host default)' => ['default'];
+        yield 'utf8mb4_unicode_ci' => ['utf8mb4_unicode_ci'];
+        yield 'utf8mb4_general_ci' => ['utf8mb4_general_ci'];
+    }
+
+    #[DataProvider('foldingCollations')]
+    public function testRevokeAllEndsTheSessionsEvenWhenTheEpochBumpCollidesWithALookalike(string $collation): void
+    {
+        $this->setUpRegistry($collation, true);
+        $user  = new InMemoryUser('alice', null);
+        $alice = $this->manager()->owner($user);
+        self::assertInstanceOf(SessionUser::class, $alice);
+        $twin  = new SessionUser($alice->type, 'Alice');
+        $store = $this->store();
+        $now   = new DateTimeImmutable();
+        foreach (['h-alice-1' => $alice, 'h-alice-2' => $alice, 'h-twin' => $twin] as $hash => $owner) {
+            self::assertTrue($store->insert($owner, $hash, $this->client(), $now));
+        }
+        $epochTable = $this->em()->getClassMetadata(UserSessionEpoch::class)->getTableName();
+        $this->connection()->insert($epochTable, ['user_type' => $twin->type, 'user_id' => $twin->id, 'epoch_at' => $now], ['epoch_at' => Types::DATETIME_IMMUTABLE]);
+
+        try {
+            $this->manager()->revokeAll($user, null, RevocationReason::PasswordChanged);
+            self::fail('The colliding epoch bump is reported.');
+        } catch (LogicException $e) {
+            self::assertStringContainsString('look-alike', $e->getMessage());
+        }
+
+        self::assertSame(['h-twin'], $this->liveHashes(), 'Every session of the exact owner was revoked, the look-alike\'s stays');
+        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM ' . $epochTable), 'No epoch row was written for alice');
     }
 
     public function testTheGeneratedSchemaUsesABinaryNoPadCollationOnMysql(): void
