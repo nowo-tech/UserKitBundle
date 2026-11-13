@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.16.1] - 2026-11-13](#1161---2026-11-13)
 - [[1.16.0] - 2026-11-12](#1160---2026-11-12)
 - [[1.15.0] - 2026-11-11](#1150---2026-11-11)
 - [[1.14.2] - 2026-11-11](#1142---2026-11-11)
@@ -52,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-11-13
+
 Target **1.16.1** (patch; security fix, see UPGRADING for the optional column migration).
 
 ### Security
@@ -88,6 +91,8 @@ Target **1.16.1** (patch; security fix, see UPGRADING for the optional column mi
   host collations `0900_ai_ci` / `uca1400_ai_ci`, `unicode_ci`, `general_ci` and `utf8mb4_bin`; `revokeAll()` with an
   unmigrated epoch table and a look-alike epoch row still revokes every session of the exact owner), run on MySQL 8.4
   and MariaDB 11.4 in CI; unit tests for the id rule, the byte predicate, the re-check and the collation listener.
+
+[1.16.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.16.1
 
 ## [1.16.0] - 2026-11-12
 

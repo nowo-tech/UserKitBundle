@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.16.1](#to-1161)
   - [To 1.16.1: owner columns of the session registry (look-alike owners)](#to-1161-owner-columns-of-the-session-registry-look-alike-owners)
 - [To 1.16.0](#to-1160)
   - [Request attributes for the device id provider (opt-in)](#request-attributes-for-the-device-id-provider-opt-in)
@@ -50,6 +51,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.16.1
+
+From **1.16.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 ### To 1.16.1: owner columns of the session registry (look-alike owners)
 
