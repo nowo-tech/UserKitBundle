@@ -42,6 +42,16 @@ use function random_bytes;
  * table still on a folding or PAD SPACE host collation (`Alice` = `alice` = `alice `) never reaches a look-alike
  * owner's rows, and every row read back is re-checked with `===` ({@see self::isOwner()}). New tables get a binary NO
  * PAD collation ({@see OwnerCollationListener}).
+ *
+ * Select-then-filter (REQ-SEC-006): the statements read candidate rows with their owner columns and the PHP `===`
+ * decides. Only one of them costs an extra round trip, {@see self::findActive()}, which reads candidate ids through
+ * DBAL and then loads the entities: with `sessions.doctrine.exact_owner_collation` (opt-in, default false) the host
+ * states that the owner columns already carry the binary NO PAD collation, the candidate scan is skipped and the ORM
+ * query filters the owner itself — one query instead of two. The `===` re-check runs in both paths, so the option is
+ * fail-closed: on a column that still folds, SQL hands back a look-alike, the re-check drops it and the session is
+ * simply not found. The other owner statements are single round trips already (`state`, `statesOf`, `touch`, `allFor`,
+ * `countActive`, `oldestActive`, `revoke`), or must read the rows they then write by hash or id (`revoke`,
+ * `deleteFor`), so none of them is changed by the option.
  */
 final readonly class UserSessionStore
 {
@@ -50,11 +60,25 @@ final readonly class UserSessionStore
 
     /**
      * @param string|null $entityManagerName `sessions.doctrine.entity_manager` (null = the manager of the entity)
+     * @param bool $exactOwnerCollation `sessions.doctrine.exact_owner_collation`: the owner columns are declared with
+     *                                  a binary NO PAD collation, so the SQL owner match is already byte-exact and the
+     *                                  candidate scan of {@see self::findActive()} is skipped. Opt-in, default false;
+     *                                  the `===` re-check runs in both paths, so a host that turns it on without the
+     *                                  `ALTER` finds no session (signed out) instead of a look-alike's.
      */
     public function __construct(
         private ManagerRegistry $doctrine,
         private ?string $entityManagerName = null,
+        private bool $exactOwnerCollation = false,
     ) {
+    }
+
+    /**
+     * Whether `sessions.doctrine.exact_owner_collation` is on (the owner columns are binary NO PAD).
+     */
+    public function hasExactOwnerCollation(): bool
+    {
+        return $this->exactOwnerCollation;
     }
 
     /**
@@ -278,6 +302,31 @@ final readonly class UserSessionStore
      */
     public function findActive(SessionUser $user, DateTimeImmutable $since, int $limit = self::MAX_LIST): array
     {
+        if ($this->exactOwnerCollation) {
+            // `sessions.doctrine.exact_owner_collation`: the owner columns carry a binary NO PAD collation, so
+            // `user_type = :type AND user_id = :id` is already byte-exact and the DBAL candidate scan is redundant
+            // (one query per listing instead of two). The `===` re-check below still runs: on a column that folds
+            // after all, the look-alike rows SQL returns are dropped and the caller sees no session (fail closed).
+            /** @var list<UserSession> $exact */
+            $exact = $this->entityManager()->createQueryBuilder()
+                ->select('s')
+                ->from(UserSession::class, 's')
+                ->andWhere('s.userType = :type')
+                ->andWhere('s.userId = :id')
+                ->andWhere('s.revokedAt IS NULL')
+                ->andWhere('s.lastSeenAt >= :since')
+                ->setParameter('type', $user->type)
+                ->setParameter('id', $user->id)
+                ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
+                ->orderBy('s.lastSeenAt', $this->descending())
+                ->addOrderBy('s.id', $this->descending())
+                ->setMaxResults($limit)
+                ->getQuery()
+                ->getResult();
+
+            return $this->ownEntities($user, $exact);
+        }
+
         // The ids come from DBAL, where the owner predicate is exact (DQL has no byte comparison); the entities are then
         // loaded by id and re-checked.
         $ids = array_map(intval(...), array_column($this->ownRows($user, $this->connection()->createQueryBuilder()
@@ -308,6 +357,19 @@ final readonly class UserSessionStore
             ->getQuery()
             ->getResult();
 
+        return $this->ownEntities($user, $rows);
+    }
+
+    /**
+     * The entities of `$user` among `$rows` (`===` re-check of the SQL owner filter, house rule LQ). Runs in both
+     * paths of {@see self::findActive()}.
+     *
+     * @param list<UserSession> $rows
+     *
+     * @return list<UserSession>
+     */
+    private function ownEntities(SessionUser $user, array $rows): array
+    {
         return array_values(array_filter($rows, static fn (UserSession $row): bool => $row->getUserType() === $user->type && $row->getUserId() === $user->id));
     }
 

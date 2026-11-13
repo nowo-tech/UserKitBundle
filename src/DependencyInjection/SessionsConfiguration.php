@@ -294,6 +294,10 @@ final class SessionsConfiguration
                     ->defaultNull()
                     ->info('Entity manager that maps the registry entity (null = the default one).')
                 ->end()
+                ->booleanNode('exact_owner_collation')
+                    ->defaultFalse()
+                    ->info('The owner columns (user_type, user_id) already carry a binary NO PAD collation: the session list skips its candidate scan and costs one query instead of two. Turn it on only after the ALTER of UPGRADING; the PHP re-check still runs, so a folding column signs the user out instead of matching a look-alike.')
+                ->end()
             ->end();
 
         return $node;

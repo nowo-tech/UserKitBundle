@@ -3,6 +3,8 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.17.0](#to-1170)
+  - [To 1.17.0: `sessions.doctrine.exact_owner_collation` (optional, one query less per session list)](#to-1170-sessionsdoctrineexact_owner_collation-optional-one-query-less-per-session-list)
 - [To 1.16.3](#to-1163)
 - [To 1.16.2](#to-1162)
 - [To 1.16.1](#to-1161)
@@ -53,6 +55,63 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.17.0
+
+From **1.16.3**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+Nothing to do. One new option, off by default; behaviour is unchanged until it is turned on.
+
+### To 1.17.0: `sessions.doctrine.exact_owner_collation` (optional, one query less per session list)
+
+The session list reads candidate rows and decides the owner in PHP (`===`), because a MySQL / MariaDB table still on a
+folding or PAD SPACE collation matches `Alice`, `álice` and `alice ` as `alice`. Where the owner columns have already
+been migrated to the binary NO PAD collation — the `ALTER` of
+[To 1.16.1](#to-1161-owner-columns-of-the-session-registry-look-alike-owners) — the SQL match is byte-exact and that
+candidate scan is redundant:
+
+```yaml
+# config/packages/nowo_user_kit.yaml
+nowo_user_kit:
+    sessions:
+        doctrine:
+            exact_owner_collation: true
+```
+
+A signed-in request that renders the session list then runs **two** registry queries instead of three (the revocation
+state and the rows; the candidate `SELECT id, user_type, user_id … LIMIT 200` is gone). Nothing else changes: the other
+owner statements are single round trips already.
+
+**Precondition: the columns must actually be binary NO PAD.** Check before turning it on (add your
+`sessions.doctrine.table_prefix`):
+
+```sql
+SELECT column_name, collation_name
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'user_kit_session' AND column_name IN ('user_type', 'user_id');
+```
+
+Both rows must read `utf8mb4_0900_bin` (MySQL 8.0+), `utf8mb4_nopad_bin` (MariaDB) or `utf8mb4_bin` (MySQL 5.7). If
+they do not, run the `ALTER` of [To 1.16.1](#to-1161-owner-columns-of-the-session-registry-look-alike-owners) first.
+PostgreSQL and SQLite compare exactly, so the option is safe there as soon as the column carries no explicit folding
+collation (`COLLATE NOCASE` on SQLite, a `CITEXT` column or a non-deterministic `CREATE COLLATION` on PostgreSQL).
+
+**Turning it on without the `ALTER` signs users out; it never matches them to someone else.** The `===` re-check runs
+in both paths. On a column that still folds, SQL hands back a look-alike's row, the re-check drops it and the lookup
+finds nothing: the user sees an empty session list and, where a missing row ends the session, is signed out. That is
+the fail-closed outcome, and it is why the option is safe to leave off — and safe to turn off again at any time, with
+no schema change and no data migration. **Leave it `false`** unless the check above passes; the default costs one
+indexed `SELECT` and is correct everywhere.
+
+There is **no auto-detection**, by design. Reading the collation from `information_schema` costs one round trip per
+database connection. On a host that opens a connection per request (PHP-FPM, mod_php) that is exactly the query the
+option saves, so detection would be a wash at best and a loss in practice (`information_schema` is dearer than the
+indexed candidate scan). The explicit option gives the whole saving at no cost, and the `===` re-check already makes a
+wrong answer harmless.
 
 ## To 1.16.3
 

@@ -55,7 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.16.3] - 2026-11-13
+### Added
+
+- **Sessions: `sessions.doctrine.exact_owner_collation`** (default `false`). On a host whose `user_kit_session` owner
+  columns already carry the binary NO PAD collation of [UPGRADING](UPGRADING.md#to-1161-owner-columns-of-the-session-registry-look-alike-owners),
+  the SQL owner match is byte-exact, so the session list stops reading candidate ids through DBAL and filtering them in
+  PHP: it reads the rows in one query. Measured on a signed-in "My sessions" request, the registry goes from three
+  queries to two (revocation state, candidate scan, entities → revocation state, entities). The PHP `===` re-check
+  runs in **both** paths, so the option is fail-closed: turned on while the column still folds, the look-alike rows SQL
+  returns are dropped and the user is signed out instead of matched to someone else's session. No auto-detection: the
+  `information_schema` lookup that would replace the option costs one round trip per connection, which on a
+  request-per-connection host (PHP-FPM) is exactly the query it saves.
 
 ### Fixed
 
