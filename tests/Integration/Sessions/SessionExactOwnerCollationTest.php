@@ -144,7 +144,9 @@ final class SessionExactOwnerCollationTest extends TransactionalSessionsTestCase
 
             return;
         }
-        self::assertInstanceOf(SQLitePlatform::class, $platform, 'Only SQLite and MySQL / MariaDB are exercised.');
+        if (!$platform instanceof SQLitePlatform) {
+            self::markTestSkipped('A folding owner column is built on SQLite (COLLATE NOCASE) and MySQL / MariaDB only; PostgreSQL compares exactly.');
+        }
         // SQLite cannot change a column collation in place: the (empty) table is recreated from its own DDL with
         // `COLLATE NOCASE` on the owner columns, and its indexes are put back.
         $ddl = $connection->fetchOne('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?', ['table', $table]);

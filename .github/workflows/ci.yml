@@ -225,13 +225,13 @@ jobs:
           USER_KIT_TEST_DB_PLATFORM: mysql
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php
-          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
       - name: MariaDB
         env:
           USER_KIT_TEST_DB_URL: mysql://root:ci-placeholder@127.0.0.1:3307/user_kit?serverVersion=11.4.0-MariaDB&charset=utf8mb4
           USER_KIT_TEST_DB_PLATFORM: mysql
         # Look-alike owners only (house rule LQ): MariaDB's PAD SPACE default collation and utf8mb4_nopad_bin.
-        run: vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php
+        run: vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
 
   dbal-floor:
     name: Sessions on the DBAL 3 floor (SQLite)
