@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `information_schema` lookup that would replace the option costs one round trip per connection, which on a
   request-per-connection host (PHP-FPM) is exactly the query it saves.
 
+## [1.16.3] - 2026-11-13
+
 ### Fixed
 
 - `schema:update`, `doctrine:migrations:diff` and `schema:validate` no longer fail on MySQL / MariaDB with the Doctrine session
