@@ -54,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `schema:update`, `doctrine:migrations:diff` and `schema:validate` no longer fail on MySQL / MariaDB with the Doctrine session
+  storage when the installed DBAL and ORM differ in version. The owner-column collation listener
+  (`OwnerCollationListener`) used the table-editor path whenever `Table::edit()` existed (DBAL 4.3+), but
+  `GenerateSchemaTableEventArgs::setClassTable()` exists only from ORM 3.7 and throws `BadMethodCallException` unless
+  `Schema::edit()` (DBAL 4.5+) exists too. The editor path is now used only when all three exist; otherwise the columns are
+  changed in place. Runtime was never affected. CI gains a job on DBAL 4.3 with ORM 3.6.
+
 ## [1.16.2] - 2026-11-13
 
 ### Fixed

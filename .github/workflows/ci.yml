@@ -158,6 +158,24 @@ jobs:
           echo \"✅ 100% coverage confirmed\n\";
           "
 
+  doctrine-lowest:
+    name: Doctrine DBAL 4.3 + ORM 3.6 (schema listener without Schema::edit / setClassTable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json
+          tools: composer:v2
+      - name: Install DBAL 4.3 and ORM 3.6
+        run: |
+          composer require doctrine/dbal:4.3.* doctrine/orm:3.6.* doctrine/doctrine-bundle:^2.10 --no-interaction --no-update --with-all-dependencies
+          composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
+          composer show | grep -E '^doctrine/(dbal|orm) '
+      - name: Owner collation listener
+        run: vendor/bin/phpunit tests/Unit/Sessions/Doctrine/OwnerCollationListenerTest.php
+
   real-databases:
     name: Session transactions on PostgreSQL, MySQL and MariaDB
     runs-on: ubuntu-latest

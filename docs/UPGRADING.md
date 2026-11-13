@@ -53,6 +53,10 @@
 
 ## Unreleased
 
+From **1.16.2**, nothing to do beyond `composer update nowo-tech/user-kit-bundle`. Hosts on MySQL / MariaDB with Doctrine session
+storage and DBAL 4.3 or 4.4 (or ORM 3.0-3.6 with DBAL 4.3+) get working `schema:update`, `doctrine:migrations:diff` and
+`schema:validate` again: they crashed with `BadMethodCallException` or an undefined-method error. No schema change.
+
 ## To 1.16.2
 
 From **1.16.1**:
