@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.17.0] - 2026-11-13](#1170---2026-11-13)
 - [[1.16.3] - 2026-11-13](#1163---2026-11-13)
 - [[1.16.2] - 2026-11-13](#1162---2026-11-13)
 - [[1.16.1] - 2026-11-13](#1161---2026-11-13)
@@ -55,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-13
+
 ### Added
 
 - **Sessions: `sessions.doctrine.exact_owner_collation`** (default `false`). On a host whose `user_kit_session` owner
@@ -66,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns are dropped and the user is signed out instead of matched to someone else's session. No auto-detection: the
   `information_schema` lookup that would replace the option costs one round trip per connection, which on a
   request-per-connection host (PHP-FPM) is exactly the query it saves.
+
+[1.17.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.17.0
 
 ## [1.16.3] - 2026-11-13
 
