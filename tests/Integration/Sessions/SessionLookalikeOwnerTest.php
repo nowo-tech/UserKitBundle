@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Tools\SchemaTool;
 use LogicException;
@@ -144,6 +145,47 @@ final class SessionLookalikeOwnerTest extends TransactionalSessionsTestCase
     public function testRevokeAllEndsTheSessionsEvenWhenTheEpochBumpCollidesWithALookalike(string $collation): void
     {
         $this->setUpRegistry($collation, true);
+        $this->assertRevokeAllEndsTheSessionsDespiteACollidingBump();
+    }
+
+    /**
+     * The same on SQLite (and so in the coverage job): a NOCASE unique key on the epoch table folds `Alice` into
+     * `alice` the way a MySQL / MariaDB `_ci` collation does.
+     */
+    public function testRevokeAllEndsTheSessionsEvenWhenTheEpochBumpCollidesOnAFoldingSqliteKey(): void
+    {
+        $this->setUpRegistry(null, true);
+        if (!$this->connection()->getDatabasePlatform() instanceof SQLitePlatform) {
+            self::markTestSkipped('SQLite only; MySQL / MariaDB run the collation variant.');
+        }
+        $this->connection()->executeStatement(sprintf(
+            'CREATE UNIQUE INDEX oe_epoch_nocase ON %s (user_type, user_id COLLATE NOCASE)',
+            $this->em()->getClassMetadata(UserSessionEpoch::class)->getTableName(),
+        ));
+        $this->assertRevokeAllEndsTheSessionsDespiteACollidingBump();
+    }
+
+    public function testTheGeneratedSchemaUsesABinaryNoPadCollationOnMysql(): void
+    {
+        $this->setUpRegistry(null, true);
+        $platform = $this->connection()->getDatabasePlatform();
+        if (!$platform instanceof AbstractMySQLPlatform) {
+            self::markTestSkipped('MySQL / MariaDB only: the other platforms compare exactly.');
+        }
+        foreach ([$this->store()->table(), $this->em()->getClassMetadata(UserSessionEpoch::class)->getTableName()] as $table) {
+            $rows = $this->connection()->fetchAllKeyValue(
+                'SELECT column_name, collation_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name IN (\'user_type\', \'user_id\')',
+                [$table],
+            );
+            self::assertCount(2, $rows);
+            foreach ($rows as $column => $name) {
+                self::assertContains($name, ['utf8mb4_0900_bin', 'utf8mb4_nopad_bin'], sprintf('%s.%s', $table, $column));
+            }
+        }
+    }
+
+    private function assertRevokeAllEndsTheSessionsDespiteACollidingBump(): void
+    {
         $user  = new InMemoryUser('alice', null);
         $alice = $this->manager()->owner($user);
         self::assertInstanceOf(SessionUser::class, $alice);
@@ -165,25 +207,6 @@ final class SessionLookalikeOwnerTest extends TransactionalSessionsTestCase
 
         self::assertSame(['h-twin'], $this->liveHashes(), 'Every session of the exact owner was revoked, the look-alike\'s stays');
         self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM ' . $epochTable), 'No epoch row was written for alice');
-    }
-
-    public function testTheGeneratedSchemaUsesABinaryNoPadCollationOnMysql(): void
-    {
-        $this->setUpRegistry(null, true);
-        $platform = $this->connection()->getDatabasePlatform();
-        if (!$platform instanceof AbstractMySQLPlatform) {
-            self::markTestSkipped('MySQL / MariaDB only: the other platforms compare exactly.');
-        }
-        foreach ([$this->store()->table(), $this->em()->getClassMetadata(UserSessionEpoch::class)->getTableName()] as $table) {
-            $rows = $this->connection()->fetchAllKeyValue(
-                'SELECT column_name, collation_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name IN (\'user_type\', \'user_id\')',
-                [$table],
-            );
-            self::assertCount(2, $rows);
-            foreach ($rows as $column => $name) {
-                self::assertContains($name, ['utf8mb4_0900_bin', 'utf8mb4_nopad_bin'], sprintf('%s.%s', $table, $column));
-            }
-        }
     }
 
     private function setUpRegistry(?string $collation, bool $epoch = false): void
