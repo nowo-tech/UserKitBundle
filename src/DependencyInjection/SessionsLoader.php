@@ -170,7 +170,7 @@ final class SessionsLoader
     public static function load(ContainerBuilder $container, array $sessions, array $profiles, bool $personalData): void
     {
         self::assertLiteralBooleans($sessions);
-        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, owner: array{resolver: string|null, on_unresolved: string}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null, context_attributes: list<string>}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
+        /** @var array{enabled: bool, hash_secret: string, idle_lifetime: int, touch_interval: int, remember_me_cookies: list<string>, flash: bool, remember_me_epoch: array{enabled: bool, store: string|null}, early_check: array{json_response: bool}, purge: array{revoked_retention: int|null}, owner: array{resolver: string|null, on_unresolved: string}, user_removal: array{delete_sessions: bool}, revocation: array{store: string, cache_pool: string|null}, client: array{user_agent: string, ip: string, ipv4_prefix: int, ipv6_prefix: int, device_id_resolver: string|null, context_attributes: list<string>}, limit: array{max_sessions: int|null, policy: string, max_trusted_devices: int|null, resolver: string|null}, password_change: array{revoke_sessions: bool, field: string}, doctrine: array{table_prefix: string, entity_manager: string|null, exact_owner_collation: bool}, web_ui: array{enabled: bool, path_prefix: string, admin: bool, admin_path_prefix: string, layout_template: string|null, templates: array<string, string|null>}, security: array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool}} $sessions */
         $webUi   = $sessions['web_ui'];
         $enabled = $sessions['enabled'];
         $container->setParameter('nowo_user_kit.sessions.enabled', $enabled);
@@ -193,7 +193,7 @@ final class SessionsLoader
         // House rule LQ: binary NO PAD collation of the owner columns on MySQL / MariaDB (look-alike owners).
         $container->setDefinition(OwnerCollationListener::class, (new Definition(OwnerCollationListener::class, [$doctrine, $sessions['doctrine']['entity_manager']]))
             ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
-        $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager']]))->setPublic(true));
+        $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager'], $sessions['doctrine']['exact_owner_collation']]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
         $ownerResolver = $sessions['owner']['resolver'];
         $container->setAlias(SessionOwnerResolverInterface::class, is_string($ownerResolver) && $ownerResolver !== '' ? $ownerResolver : SessionUserResolver::class);
@@ -388,7 +388,7 @@ final class SessionsLoader
      * Remember-me epoch services; {@see SessionsPass} wraps the remember-me handler of every firewall and hands the
      * handlers and cookie names to {@see RememberMeEpoch}.
      *
-     * @param array{hash_secret: string, remember_me_epoch: array{enabled: bool, store: string|null}, doctrine: array{table_prefix: string, entity_manager: string|null}} $sessions
+     * @param array{hash_secret: string, remember_me_epoch: array{enabled: bool, store: string|null}, doctrine: array{table_prefix: string, entity_manager: string|null, exact_owner_collation: bool}} $sessions
      */
     private static function registerEpoch(ContainerBuilder $container, array $sessions): Reference
     {

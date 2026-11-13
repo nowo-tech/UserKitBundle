@@ -182,6 +182,7 @@ route or page). See [USAGE](USAGE.md#session-registry-and-limits) and [UPGRADING
 | `sessions.password_change.field` | string | `password` | Mapped password field of the profile user classes. |
 | `sessions.doctrine.table_prefix` | string `[A-Za-z0-9_]{0,32}` | `''` | Prefix of the bundle table **and** index names (REQ-ORM-002). |
 | `sessions.doctrine.entity_manager` | string \| null | `null` | Entity manager that maps the registry (`null` = the default one). |
+| `sessions.doctrine.exact_owner_collation` | bool | `false` | Since 1.17. The owner columns (`user_type`, `user_id`) already carry a **binary NO PAD** collation (the `ALTER` of [UPGRADING](UPGRADING.md#to-1161-owner-columns-of-the-session-registry-look-alike-owners)), so the SQL owner match is byte-exact: the session list skips its candidate scan and costs **one query instead of two** (a signed-in "My sessions" request: two registry queries instead of three). The PHP `===` re-check still runs, so a host that turns it on while the column folds finds no session (the user is signed out) instead of a look-alike's — fail closed. Safe to leave off; check the collation first, see [UPGRADING](UPGRADING.md#to-1170-sessionsdoctrineexact_owner_collation-optional-one-query-less-per-session-list). |
 | `sessions.web_ui.enabled` | bool (literal) | `false` | Register the "My sessions" and administration pages (needs Twig, UiKit, FormKit and form CSRF; the container refuses to compile otherwise). |
 | `sessions.web_ui.path_prefix` | path | `/account/sessions` | "My sessions" (`nowo_user_kit_sessions*` routes). |
 | `sessions.web_ui.admin` | bool (literal) | `true` | Register the administration page of a user's sessions. |
@@ -212,6 +213,7 @@ nowo_user_kit:
             ip: truncate              # truncate | hash | none
         doctrine:
             table_prefix: 'app_'      # → app_user_kit_session
+            exact_owner_collation: false  # true only after the binary NO PAD ALTER (UPGRADING)
         web_ui:
             enabled: true
             path_prefix: /account/sessions
