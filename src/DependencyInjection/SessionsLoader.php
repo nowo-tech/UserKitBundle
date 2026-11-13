@@ -11,6 +11,7 @@ use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Command\PurgeSessionsCommand;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
+use Nowo\UserKitBundle\Sessions\Doctrine\OwnerCollationListener;
 use Nowo\UserKitBundle\Sessions\Doctrine\TablePrefixListener;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Epoch\DoctrineSessionEpochStore;
@@ -189,6 +190,9 @@ final class SessionsLoader
         $doctrine = new Reference('doctrine');
         $container->setDefinition(TablePrefixListener::class, (new Definition(TablePrefixListener::class, [$sessions['doctrine']['table_prefix']]))
             ->addTag('doctrine.event_listener', ['event' => 'loadClassMetadata']));
+        // House rule LQ: binary NO PAD collation of the owner columns on MySQL / MariaDB (look-alike owners).
+        $container->setDefinition(OwnerCollationListener::class, (new Definition(OwnerCollationListener::class, [$doctrine, $sessions['doctrine']['entity_manager']]))
+            ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
         $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager']]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
         $ownerResolver = $sessions['owner']['resolver'];

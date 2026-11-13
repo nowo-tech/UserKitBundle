@@ -23,7 +23,9 @@ use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use SortDirection;
 
 use function array_column;
+use function array_filter;
 use function array_map;
+use function array_values;
 use function bin2hex;
 use function constant;
 use function count;
@@ -34,6 +36,12 @@ use function random_bytes;
  * The session registry table. Lists are read through the ORM; every write is one parameterised DBAL statement, so the
  * request listeners never flush the entity manager, and a race between two first requests of the same session is one
  * ignored unique-key violation, not a closed entity manager. The table name comes from the (prefixed) metadata.
+ *
+ * House rule LQ (look-alike owners): every owner lookup matches the owner exactly. On MySQL / MariaDB the statements add
+ * a byte-exact predicate ({@see self::ownerSql()}) next to the indexed `user_type = :type AND user_id = :id`, so a
+ * table still on a folding or PAD SPACE host collation (`Alice` = `alice` = `alice `) never reaches a look-alike
+ * owner's rows, and every row read back is re-checked with `===` ({@see self::isOwner()}). New tables get a binary NO
+ * PAD collation ({@see OwnerCollationListener}).
  */
 final readonly class UserSessionStore
 {
@@ -92,7 +100,7 @@ final readonly class UserSessionStore
     {
         $params   = ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id];
         $affected = $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
             ['now' => $now, 'device' => $deviceId] + $params,
             ['now' => Types::DATETIME_IMMUTABLE],
         );
@@ -100,10 +108,12 @@ final readonly class UserSessionStore
             return true;
         }
 
-        return $this->connection()->fetchOne(
-            'SELECT 1 FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL' . self::sharedLock($this->connection()->getDatabasePlatform()),
+        $rows = $this->connection()->fetchAllAssociative(
+            'SELECT user_type, user_id FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL' . self::sharedLock($this->connection()->getDatabasePlatform()),
             $params,
-        ) !== false;
+        );
+
+        return $this->ownRows($owner, $rows) !== [];
     }
 
     /**
@@ -130,11 +140,12 @@ final readonly class UserSessionStore
      */
     public function state(string $hash, SessionUser $owner): ?array
     {
-        $row = $this->connection()->fetchAssociative(
-            'SELECT revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id',
+        $rows = $this->ownRows($owner, $this->connection()->fetchAllAssociative(
+            'SELECT user_type, user_id, revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql(),
             ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
-        );
-        if ($row === false) {
+        ));
+        $row = $rows[0] ?? null;
+        if ($row === null) {
             return null;
         }
         $revoked = $row['revoked_at'] !== null;
@@ -156,10 +167,11 @@ final readonly class UserSessionStore
             return [];
         }
         $rows = $this->connection()->executeQuery(
-            'SELECT session_hash, revoked_at, revoked_reason, last_seen_at FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id AND session_hash IN (:hashes)',
+            'SELECT user_type, user_id, session_hash, revoked_at, revoked_reason, last_seen_at FROM ' . $this->table() . ' WHERE ' . $this->ownerSql() . ' AND session_hash IN (:hashes)',
             ['type' => $owner->type, 'id' => $owner->id, 'hashes' => $hashes],
             ['hashes' => ArrayParameterType::STRING],
         )->fetchAllAssociative();
+        $rows     = $this->ownRows($owner, $rows);
         $platform = $this->connection()->getDatabasePlatform();
         $states   = [];
         foreach ($rows as $row) {
@@ -193,7 +205,7 @@ final readonly class UserSessionStore
     public function rekey(string $from, string $to, SessionUser $owner): void
     {
         $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from AND user_type = :type AND user_id = :id',
+            'UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from AND ' . $this->ownerSql(),
             ['to' => $to, 'from' => $from, 'type' => $owner->type, 'id' => $owner->id],
         );
     }
@@ -212,7 +224,7 @@ final readonly class UserSessionStore
     public function deleteRow(string $hash, SessionUser $owner): void
     {
         $this->connection()->executeStatement(
-            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id',
+            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql(),
             ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
         );
     }
@@ -226,7 +238,7 @@ final readonly class UserSessionStore
     public function deleteLiveRow(string $hash, SessionUser $owner): bool
     {
         return $this->connection()->executeStatement(
-            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
             ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
         ) > 0;
     }
@@ -237,7 +249,7 @@ final readonly class UserSessionStore
     public function markRevoked(string $hash, SessionUser $owner, string $reason, DateTimeImmutable $now): void
     {
         $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE session_hash = :hash AND user_type = :type AND user_id = :id AND revoked_at IS NULL',
+            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
             ['now' => $now, 'reason' => $reason, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
             ['now' => Types::DATETIME_IMMUTABLE],
         );
@@ -266,24 +278,37 @@ final readonly class UserSessionStore
      */
     public function findActive(SessionUser $user, DateTimeImmutable $since, int $limit = self::MAX_LIST): array
     {
+        // The ids come from DBAL, where the owner predicate is exact (DQL has no byte comparison); the entities are then
+        // loaded by id and re-checked.
+        $ids = array_map(intval(...), array_column($this->ownRows($user, $this->connection()->createQueryBuilder()
+            ->select('id', 'user_type', 'user_id')
+            ->from($this->table())
+            ->where($this->ownerSql())
+            ->andWhere('revoked_at IS NULL')
+            ->andWhere('last_seen_at >= :since')
+            ->setParameter('type', $user->type)
+            ->setParameter('id', $user->id)
+            ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
+            ->orderBy('last_seen_at', 'DESC')
+            ->addOrderBy('id', 'DESC')
+            ->setMaxResults($limit)
+            ->executeQuery()
+            ->fetchAllAssociative()), 'id'));
+        if ($ids === []) {
+            return [];
+        }
         /** @var list<UserSession> $rows */
         $rows = $this->entityManager()->createQueryBuilder()
             ->select('s')
             ->from(UserSession::class, 's')
-            ->andWhere('s.userType = :type')
-            ->andWhere('s.userId = :id')
-            ->andWhere('s.revokedAt IS NULL')
-            ->andWhere('s.lastSeenAt >= :since')
-            ->setParameter('type', $user->type)
-            ->setParameter('id', $user->id)
-            ->setParameter('since', $since, Types::DATETIME_IMMUTABLE)
+            ->andWhere('s.id IN (:ids)')
+            ->setParameter('ids', $ids, ArrayParameterType::INTEGER)
             ->orderBy('s.lastSeenAt', $this->descending())
             ->addOrderBy('s.id', $this->descending())
-            ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
 
-        return $rows;
+        return array_values(array_filter($rows, static fn (UserSession $row): bool => $row->getUserType() === $user->type && $row->getUserId() === $user->id));
     }
 
     /**
@@ -292,10 +317,9 @@ final readonly class UserSessionStore
     public function countActive(SessionUser $user, DateTimeImmutable $since, ?string $except = null): int
     {
         $qb = $this->connection()->createQueryBuilder()
-            ->select('COUNT(*)')
+            ->select('user_type', 'user_id')
             ->from($this->table())
-            ->where('user_type = :type')
-            ->andWhere('user_id = :id')
+            ->where($this->ownerSql())
             ->andWhere('revoked_at IS NULL')
             ->andWhere('last_seen_at >= :since')
             ->setParameter('type', $user->type)
@@ -305,7 +329,7 @@ final readonly class UserSessionStore
             $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
         }
 
-        return (int) $qb->executeQuery()->fetchOne();
+        return count($this->ownRows($user, $qb->executeQuery()->fetchAllAssociative()));
     }
 
     /**
@@ -320,10 +344,9 @@ final readonly class UserSessionStore
             return [];
         }
         $qb = $this->connection()->createQueryBuilder()
-            ->select('public_id')
+            ->select('public_id', 'user_type', 'user_id')
             ->from($this->table())
-            ->where('user_type = :type')
-            ->andWhere('user_id = :id')
+            ->where($this->ownerSql())
             ->andWhere('revoked_at IS NULL')
             ->andWhere('last_seen_at >= :since')
             ->setParameter('type', $user->type)
@@ -336,7 +359,7 @@ final readonly class UserSessionStore
             $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
         }
 
-        return array_map(strval(...), $qb->executeQuery()->fetchFirstColumn());
+        return array_map(strval(...), array_column($this->ownRows($user, $qb->executeQuery()->fetchAllAssociative()), 'public_id'));
     }
 
     /**
@@ -354,10 +377,9 @@ final readonly class UserSessionStore
             return [];
         }
         $qb = $this->connection()->createQueryBuilder()
-            ->select('public_id', 'session_hash')
+            ->select('public_id', 'session_hash', 'user_type', 'user_id')
             ->from($this->table())
-            ->where('user_type = :type')
-            ->andWhere('user_id = :id')
+            ->where($this->ownerSql())
             ->andWhere('revoked_at IS NULL')
             ->setParameter('type', $user->type)
             ->setParameter('id', $user->id);
@@ -372,7 +394,7 @@ final readonly class UserSessionStore
         }
         $rows = array_map(
             static fn (array $row): array => ['public_id' => (string) $row['public_id'], 'hash' => (string) $row['session_hash']],
-            $qb->executeQuery()->fetchAllAssociative(),
+            $this->ownRows($user, $qb->executeQuery()->fetchAllAssociative()),
         );
         if ($rows === []) {
             return [];
@@ -393,10 +415,16 @@ final readonly class UserSessionStore
      */
     public function allFor(SessionUser $user): array
     {
-        return $this->connection()->fetchAllAssociative(
-            'SELECT browser, os, ip, device_id, created_at, last_seen_at, revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id ORDER BY created_at ASC, id ASC',
+        $rows = $this->ownRows($user, $this->connection()->fetchAllAssociative(
+            'SELECT user_type, user_id, browser, os, ip, device_id, created_at, last_seen_at, revoked_at, revoked_reason FROM ' . $this->table() . ' WHERE ' . $this->ownerSql() . ' ORDER BY created_at ASC, id ASC',
             ['type' => $user->type, 'id' => $user->id],
-        );
+        ));
+
+        return array_map(static function (array $row): array {
+            unset($row['user_type'], $row['user_id']);
+
+            return $row;
+        }, $rows);
     }
 
     /**
@@ -404,9 +432,18 @@ final readonly class UserSessionStore
      */
     public function deleteFor(SessionUser $user): int
     {
-        return (int) $this->connection()->executeStatement(
-            'DELETE FROM ' . $this->table() . ' WHERE user_type = :type AND user_id = :id',
+        $ids = array_map(intval(...), array_column($this->ownRows($user, $this->connection()->fetchAllAssociative(
+            'SELECT id, user_type, user_id FROM ' . $this->table() . ' WHERE ' . $this->ownerSql(),
             ['type' => $user->type, 'id' => $user->id],
+        )), 'id'));
+        if ($ids === []) {
+            return 0;
+        }
+
+        return (int) $this->connection()->executeStatement(
+            'DELETE FROM ' . $this->table() . ' WHERE id IN (:ids)',
+            ['ids' => $ids],
+            ['ids' => ArrayParameterType::INTEGER],
         );
     }
 
@@ -447,6 +484,54 @@ final readonly class UserSessionStore
         } while (count($ids) === $batchSize);
 
         return $deleted;
+    }
+
+    /**
+     * Owner predicate on `:type` / `:id` (house rule LQ). The plain equality uses the owner index; on MySQL / MariaDB a
+     * byte comparison is added, because their host collations fold case and accents and PAD SPACE ignores trailing
+     * spaces: a table not yet migrated to the binary NO PAD collation stays exact. PostgreSQL and SQLite compare exactly.
+     *
+     * @internal
+     */
+    public function ownerSql(): string
+    {
+        return self::exactOwnerSql($this->connection()->getDatabasePlatform());
+    }
+
+    /**
+     * @internal shared with the epoch store
+     */
+    public static function exactOwnerSql(AbstractPlatform $platform): string
+    {
+        $sql = 'user_type = :type AND user_id = :id';
+
+        return $platform instanceof AbstractMySQLPlatform
+            ? $sql . ' AND CAST(user_type AS BINARY) = CAST(:type AS BINARY) AND CAST(user_id AS BINARY) = CAST(:id AS BINARY)'
+            : $sql;
+    }
+
+    /**
+     * Whether a row read back belongs to `$owner` exactly (`===`, house rule LQ).
+     *
+     * @param array<string, mixed> $row with `user_type` and `user_id`
+     */
+    public static function isOwner(SessionUser $owner, array $row): bool
+    {
+        return ($row['user_type'] ?? null) === $owner->type && ($row['user_id'] ?? null) === $owner->id;
+    }
+
+    /**
+     * The rows of `$owner` among `$rows` (`===` re-check of the SQL owner filter).
+     *
+     * @template T of array<string, mixed>
+     *
+     * @param list<T> $rows
+     *
+     * @return list<T>
+     */
+    private function ownRows(SessionUser $owner, array $rows): array
+    {
+        return array_values(array_filter($rows, static fn (array $row): bool => self::isOwner($owner, $row)));
     }
 
     /**

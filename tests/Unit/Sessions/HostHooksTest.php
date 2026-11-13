@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\AbstractException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\Persistence\ManagerRegistry;
@@ -283,7 +284,14 @@ final class HostHooksTest extends TestCase
     public function testEpochStoreRaceAndUnmappedEntity(): void
     {
         $connection = $this->createMock(Connection::class);
-        $connection->method('fetchOne')->willReturn(false);
+        // No row before the insert; the parallel bump's row (the exact owner) after the violation; then a look-alike's
+        // row only (not this owner's epoch, house rule LQ).
+        $connection->method('fetchAllAssociative')->willReturnOnConsecutiveCalls(
+            [],
+            [['user_type' => 't', 'user_id' => '1', 'epoch_at' => '2026-11-12 10:00:00']],
+            [['user_type' => 't', 'user_id' => '1 ', 'epoch_at' => '2026-11-12 10:00:00']],
+        );
+        $connection->method('getDatabasePlatform')->willReturn(new PostgreSQLPlatform());
         $connection->method('insert')->willThrowException(new UniqueConstraintViolationException(new class('race') extends AbstractException {}, null));
         $connection->expects(self::once())->method('executeStatement');
         $metadata = new ClassMetadata(UserSessionEpoch::class);
@@ -307,6 +315,26 @@ final class HostHooksTest extends TestCase
         $none = $this->createStub(ManagerRegistry::class);
         $this->expectException(LogicException::class);
         (new DoctrineSessionEpochStore($none, 'other'))->epoch(new SessionUser('t', '1'));
+    }
+
+    public function testAnEpochBumpFoldedIntoALookalikeRowFailsLoudly(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('fetchAllAssociative')->willReturn([]);
+        $connection->method('getDatabasePlatform')->willReturn(new PostgreSQLPlatform());
+        $connection->method('insert')->willThrowException(new UniqueConstraintViolationException(new class('folded') extends AbstractException {}, null));
+        $connection->expects(self::never())->method('executeStatement');
+        $metadata = new ClassMetadata(UserSessionEpoch::class);
+        $metadata->setPrimaryTable(['name' => UserSessionEpoch::TABLE]);
+        $em = $this->createStub(EntityManagerInterface::class);
+        $em->method('getConnection')->willReturn($connection);
+        $em->method('getClassMetadata')->willReturn($metadata);
+        $doctrine = $this->createStub(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($em);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('collides with a look-alike owner');
+        (new DoctrineSessionEpochStore($doctrine))->bump(new SessionUser('t', 'Alice'), new DateTimeImmutable());
     }
 
     public function testWiring(): void
