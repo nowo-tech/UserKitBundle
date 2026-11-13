@@ -80,7 +80,7 @@ final readonly class OwnerCollationListener
 
         $table = $args->getClassTable();
         foreach (self::COLUMNS as $column) {
-            // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType, function.alreadyNarrowedType, function.impossibleType (API availability depends on the installed DBAL / ORM)
+            // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType, function.alreadyNarrowedType (API availability depends on the installed DBAL / ORM)
             $edited = self::collate($table, $column, $collation, self::editorSupported(method_exists(Table::class, 'edit'), method_exists(Schema::class, 'edit'), method_exists(GenerateSchemaTableEventArgs::class, 'setClassTable')));
             if ($edited instanceof Table) {
                 $table = $edited;
