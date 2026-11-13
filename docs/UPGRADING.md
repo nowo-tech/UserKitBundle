@@ -4,7 +4,6 @@
 
 - [Unreleased](#unreleased)
 - [To 1.17.0](#to-1170)
-- [To 1.17.0](#to-1170-1)
   - [To 1.17.0: `sessions.doctrine.exact_owner_collation` (optional, one query less per session list)](#to-1170-sessionsdoctrineexact_owner_collation-optional-one-query-less-per-session-list)
 - [To 1.16.3](#to-1163)
 - [To 1.16.2](#to-1162)
@@ -56,14 +55,6 @@
   - [1.0.0](#100)
 
 ## Unreleased
-
-## To 1.17.0
-
-From **1.16.3**:
-
-```bash
-composer update nowo-tech/user-kit-bundle
-```
 
 ## To 1.17.0
 
