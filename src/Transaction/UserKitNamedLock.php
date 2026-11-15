@@ -19,7 +19,7 @@ use function unpack;
 use function usleep;
 
 /**
- * 1.18.0 (Beacon spec 239): a named lock that serialises one owner's sign-ins against the concurrent-session limit
+ * 1.19.0 (Beacon spec 239): a named lock that serialises one owner's sign-ins against the concurrent-session limit
  * (count, evict, register). Modelled on AuthKit 1.50's lock, with the fixes of its audits QG-M2 and QGD-L2.
  *
  * - MySQL / MariaDB: `GET_LOCK()`; PostgreSQL: `pg_try_advisory_lock()` polled; SQLite and other platforms: no lock

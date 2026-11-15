@@ -13,9 +13,9 @@ use function bin2hex;
 use function random_bytes;
 
 /**
- * 1.18.0 (Beacon spec 239): an INSERT that may lose a unique key race, safe inside a transaction. Inside one (a host
+ * 1.19.0 (Beacon spec 239): an INSERT that may lose a unique key race, safe inside a transaction. Inside one (a host
  * transaction, the eraser's) the INSERT runs in its own savepoint: a lost race rolls back to it, so PostgreSQL does not
- * abort the whole transaction (up to 1.17 the next statement failed with 25P02 "current transaction is aborted") and
+ * abort the whole transaction (up to 1.18 the next statement failed with 25P02 "current transaction is aborted") and
  * the caller reads the winner's row. Outside a transaction it is a plain INSERT. Stateless.
  *
  * @internal
@@ -24,7 +24,7 @@ final class UserKitRows
 {
     /**
      * The id column of a new row when the entity's ids come from a sequence (ORM's `AUTO` on PostgreSQL with DBAL 3, or an
-     * explicit `SEQUENCE` strategy): the row is written through DBAL, so the next value is fetched here (up to 1.17 the
+     * explicit `SEQUENCE` strategy): the row is written through DBAL, so the next value is fetched here (up to 1.18 the
      * column was left out and PostgreSQL with DBAL 3 refused every registration with a NOT NULL violation). Empty for an
      * identity column, which the database fills.
      *

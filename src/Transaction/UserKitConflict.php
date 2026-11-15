@@ -9,7 +9,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * 1.18.0 (Beacon spec 239): a UserKit unit of work lost a unique key race that it cannot resolve by reading the winner's
+ * 1.19.0 (Beacon spec 239): a UserKit unit of work lost a unique key race that it cannot resolve by reading the winner's
  * row (for example an erasure whose anonymised value another request stored first). Nothing of the unit is pending;
  * the caller reloads and tries again. {@see StorageFailureSubscriber} answers 409.
  * The message is generic; the storage error stays in the previous exception.

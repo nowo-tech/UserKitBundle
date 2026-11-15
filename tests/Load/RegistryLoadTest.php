@@ -12,8 +12,8 @@ use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Tests\Load\Support\LoadTestCase;
 
 /**
- * 1.18.0 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: the session registry's autocommit writes are
- * retried after a lock wait (up to 1.17 a raw lock wait timeout, a 500 on whatever page the user opened), and its
+ * 1.19.0 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: the session registry's autocommit writes are
+ * retried after a lock wait (up to 1.18 a raw lock wait timeout, a 500 on whatever page the user opened), and its
  * insert inside a transaction runs in a savepoint, so a lost race no longer aborts a PostgreSQL transaction.
  */
 final class RegistryLoadTest extends LoadTestCase
@@ -54,7 +54,7 @@ final class RegistryLoadTest extends LoadTestCase
         $connection = $this->connection();
         $connection->beginTransaction();
         $inserted = $this->get(UserSessionStore::class)->insert($owner, 'hash-ada', new SessionClient(), new DateTimeImmutable());
-        // Up to 1.17 PostgreSQL had aborted the transaction: 25P02 here.
+        // Up to 1.18 PostgreSQL had aborted the transaction: 25P02 here.
         $count = (int) $connection->fetchOne("SELECT COUNT(*) FROM user_kit_session WHERE session_hash = 'hash-ada'");
         $connection->commit();
         self::assertFalse($inserted, 'the peer won');

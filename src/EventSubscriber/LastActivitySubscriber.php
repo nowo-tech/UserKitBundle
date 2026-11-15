@@ -161,7 +161,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
      * changed by the setter are written. A user without identifier (not persisted yet) or whose setter changed no
      * mapped field is not written.
      *
-     * 1.18.0 (Beacon spec 239): a mapped column only moves forward (`WHERE field IS NULL OR field < :value`): two
+     * 1.19.0 (Beacon spec 239): a mapped column only moves forward (`WHERE field IS NULL OR field < :value`): two
      * workers keep separate throttle maps, so two requests of one user can both write, and the later write of an
      * earlier request no longer moves the last activity back. The UPDATE is retried when it deadlocks or waits too long
      * for a lock ({@see UserKitTransactionRunner::statement()}); a failure is still only logged.

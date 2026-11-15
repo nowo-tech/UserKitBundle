@@ -23,9 +23,9 @@ use function stream_set_timeout;
 use const PHP_BINARY;
 
 /**
- * 1.18.0 (Beacon spec 239), two real processes on MySQL 8.4 / PostgreSQL 16: two browsers of one user sign in at the
+ * 1.19.0 (Beacon spec 239), two real processes on MySQL 8.4 / PostgreSQL 16: two browsers of one user sign in at the
  * same moment under a limit of one session. Each registration first asks the device id provider (one second here), so
- * both sign-ins have counted the user's sessions before either registers. Up to 1.17 both counted none and both
+ * both sign-ins have counted the user's sessions before either registers. Up to 1.18 both counted none and both
  * registered (two live sessions). Under the owner's named lock the second one counts the first: `evict_oldest` signs
  * the first out, `reject_new` refuses the second.
  */

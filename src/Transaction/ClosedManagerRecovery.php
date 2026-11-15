@@ -11,11 +11,11 @@ use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Service\ResetInterface;
 
 /**
- * 1.18.0 (Beacon spec 239): remembers the entity managers a failed UserKit unit of work left closed (the ORM closes a
+ * 1.19.0 (Beacon spec 239): remembers the entity managers a failed UserKit unit of work left closed (the ORM closes a
  * manager whose flush failed) and replaces them at the next request, command or Messenger message boundary
  * ({@see UnitOfWorkBoundarySubscriber}), never in the middle of a request: the
  * application's next flush in the failing request fails loudly ("The EntityManager is closed") instead of silently
- * writing nothing, and the worker's next request starts with an open manager. Up to 1.17 the manager was replaced only
+ * writing nothing, and the worker's next request starts with an open manager. Up to 1.18 the manager was replaced only
  * incidentally (by the last-activity listener of a later request).
  *
  * Holds the names of the managers closed in the current request only; emptied at every boundary and by `kernel.reset`.

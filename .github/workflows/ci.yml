@@ -240,7 +240,7 @@ jobs:
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
 
   load-readiness:
-    # 1.18.0 (Beacon spec 239): the races of tests/Load on real servers, each test fails against 1.17.0.
+    # 1.19.0 (Beacon spec 239): the races of tests/Load on real servers, each test fails against 1.18.0.
     name: Load readiness (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:

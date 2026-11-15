@@ -16,10 +16,10 @@ services:
             # Opt-in owner images (1.18): wired by DependencyInjection\OwnerImagesLoader only when owner_images.enabled is true.
             - '../../OwnerImage/'
             - '../../NowoUserKitBundle.php'
-            # 1.18.0: exceptions and static helpers of the transaction layer are not services.
+            # 1.19.0: exceptions and static helpers of the transaction layer are not services.
             - '../../Transaction/{UserKitStorageFailure,UserKitConflict,UserKitRows,UserKitNamedLock,FlushObserver}.php'
 
-    # 1.18.0 (Beacon spec 239): UserKit's own transaction runner, injected by class into UserKit's services (never the
+    # 1.19.0 (Beacon spec 239): UserKit's own transaction runner, injected by class into UserKit's services (never the
     # application's TransactionRunnerInterface alias). See docs/USAGE.md "High load".
     Nowo\UserKitBundle\Transaction\UserKitTransactionRunner: ~
     nowo_user_kit.transaction_runner:

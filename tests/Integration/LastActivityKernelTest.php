@@ -93,8 +93,8 @@ final class LastActivityKernelTest extends TestCase
     }
 
     /**
-     * 1.18.0 (Beacon spec 239): two workers keep separate throttle maps, so two requests of one user can both write; the
-     * later write of the earlier request no longer moves the last activity back (up to 1.17 it stored 10:00).
+     * 1.19.0 (Beacon spec 239): two workers keep separate throttle maps, so two requests of one user can both write; the
+     * later write of the earlier request no longer moves the last activity back (up to 1.18 it stored 10:00).
      */
     public function testTheLastActivityOnlyMovesForward(): void
     {

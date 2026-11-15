@@ -27,7 +27,7 @@ use function str_starts_with;
 use const PHP_URL_PATH;
 
 /**
- * 1.18.0 (Beacon spec 239): the real-database load tests, on the server of `USER_KIT_LOAD_DATABASE_URL` (MySQL 8.4 or
+ * 1.19.0 (Beacon spec 239): the real-database load tests, on the server of `USER_KIT_LOAD_DATABASE_URL` (MySQL 8.4 or
  * PostgreSQL 16 in CI, DBAL 4 and DBAL 3). The test's own connection is UserKit's (a booted session registry test
  * kernel); a second session in another process holds locks against it. Use a throwaway database: the setup drops
  * everything in it and refuses a name with no `test`, `race`, `load` or `throwaway` part. Without the variable the

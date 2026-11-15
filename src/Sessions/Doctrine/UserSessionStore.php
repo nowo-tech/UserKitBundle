@@ -69,7 +69,7 @@ final readonly class UserSessionStore
      *                                  candidate scan of {@see self::findActive()} is skipped. Opt-in, default false;
      *                                  the `===` re-check runs in both paths, so a host that turns it on without the
      *                                  `ALTER` finds no session (signed out) instead of a look-alike's.
-     * @param UserKitTransactionRunner|null $runner 1.18.0: retries an autocommit write that deadlocked or waited too long
+     * @param UserKitTransactionRunner|null $runner 1.19.0: retries an autocommit write that deadlocked or waited too long
      *                                              for a lock ({@see UserKitTransactionRunner::statement()})
      */
     public function __construct(
@@ -100,7 +100,7 @@ final readonly class UserSessionStore
         $table      = $this->table();
         $metadata   = $this->entityManager()->getClassMetadata(UserSession::class);
 
-        // 1.18.0: in its own savepoint inside a transaction (a lost race no longer aborts a PostgreSQL transaction), and
+        // 1.19.0: in its own savepoint inside a transaction (a lost race no longer aborts a PostgreSQL transaction), and
         // retried when it deadlocks in autocommit.
         return $this->runner->statement($connection, static fn (): bool => UserKitRows::insert($connection, $table, UserKitRows::sequenceId($connection, $metadata) + [
             'public_id'    => bin2hex(random_bytes(16)),
@@ -571,7 +571,7 @@ final readonly class UserSessionStore
     }
 
     /**
-     * 1.18.0 (Beacon spec 239): a write of the registry (one statement, or an idempotent group of them) through
+     * 1.19.0 (Beacon spec 239): a write of the registry (one statement, or an idempotent group of them) through
      * {@see UserKitTransactionRunner::statement()}: retried in autocommit when it deadlocks or waits too long for a
      * lock, a {@see UserKitStorageFailure} (503) when that keeps failing or happens
      * inside the caller's transaction.

@@ -24,7 +24,7 @@ use function spl_object_id;
 use function usleep;
 
 /**
- * 1.18.0 (Beacon spec 239): the runner of UserKit's writes, registered as `nowo_user_kit.transaction_runner` and
+ * 1.19.0 (Beacon spec 239): the runner of UserKit's writes, registered as `nowo_user_kit.transaction_runner` and
  * injected into UserKit's services by its class. UserKit never runs its writes through a runner the application binds
  * to {@see TransactionRunnerInterface}: such a runner drives the application's entity manager (it would reset or clear
  * it after a UserKit failure). Modelled on ChatKit 1.30.0 and AuthKit 1.50.0 (audits QD and QG).
@@ -35,7 +35,7 @@ use function usleep;
  * not flushed before the unit, so UserKit never commits the application's pending work on its own). After any failure
  * no transaction level of the runner stays open: the levels are rolled back to the entry level, and the connection is
  * closed only when that rollback fails (a MySQL deadlock inside the nested flush, where the server already dropped the
- * savepoints: up to 1.17 a raw 1305 and a connection left nested for the worker's next request).
+ * savepoints: up to 1.18 a raw 1305 and a connection left nested for the worker's next request).
  *
  * After a failure the manager is never reset nor cleared:
  * - only the rows the unit added, flushed or changed are detached (their database state was rolled back), with the

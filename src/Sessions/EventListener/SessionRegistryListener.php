@@ -180,7 +180,7 @@ final readonly class SessionRegistryListener
         if ($this->takePending($session, $context)) {
             // The pending sign-in of this context became final: register it as a sign-in (limit included). Parallel
             // pending sign-ins registered nothing at the first factor, so `reject_new` is checked again here (DC-M1).
-            // 1.18.0: the check runs again under the owner's lock, together with the registration.
+            // 1.19.0: the check runs again under the owner's lock, together with the registration.
             $rejection = $this->rejection($user, $owner, null) ?? $this->signIn($request, $session, $context, $user, $owner);
             if ($rejection !== null) {
                 $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
@@ -287,7 +287,7 @@ final readonly class SessionRegistryListener
         }
         $rejection = $this->signIn($request, $session, $context, $user, $owner);
         if ($rejection !== null) {
-            // A parallel sign-in took the last session first (1.18.0): this one ends at once, as a `reject_new` refusal.
+            // A parallel sign-in took the last session first (1.19.0): this one ends at once, as a `reject_new` refusal.
             $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
             $event->setResponse($this->afterRefusedSignIn($request));
         }
@@ -296,9 +296,9 @@ final readonly class SessionRegistryListener
     /**
      * A sign-in: `evict_oldest` signs the oldest sessions out first, then the session is registered.
      *
-     * 1.18.0 (Beacon spec 239): with a concurrent-session limit, counting, evicting and registering run under a named
+     * 1.19.0 (Beacon spec 239): with a concurrent-session limit, counting, evicting and registering run under a named
      * lock of the owner ({@see UserKitNamedLock}): two parallel sign-ins of one user no longer both count the same
-     * sessions and both register (one session over the limit up to 1.17). Under the lock `reject_new` is checked again
+     * sessions and both register (one session over the limit up to 1.18). Under the lock `reject_new` is checked again
      * (the check of the credentials step ran without it): the sign-in that comes second is refused and its session
      * signed out. Without a limit no lock is taken.
      *
@@ -551,7 +551,7 @@ final readonly class SessionRegistryListener
     }
 
     /**
-     * A sign-in refused after the credentials step (1.18.0, a parallel sign-in took the last session): JSON clients get
+     * A sign-in refused after the credentials step (1.19.0, a parallel sign-in took the last session): JSON clients get
      * the signed-out 401, a browser goes back to the path it posted to as a GET (with form login's default, where
      * `check_path` is `login_path`, the login form, which shows the refusal).
      */

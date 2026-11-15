@@ -12,7 +12,7 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 
 /**
- * 1.18.0 (Beacon spec 239): the unit-of-work boundaries of a long-running worker (FrankenPHP with kernel reset off,
+ * 1.19.0 (Beacon spec 239): the unit-of-work boundaries of a long-running worker (FrankenPHP with kernel reset off,
  * Messenger consumers, console commands): an entity manager a failed UserKit write closed is replaced here, before the
  * next main request and after a request, command or message ({@see ClosedManagerRecovery}). Never in the middle of a
  * request. Stateless.

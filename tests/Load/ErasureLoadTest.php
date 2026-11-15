@@ -19,8 +19,8 @@ use function preg_match;
 use function str_starts_with;
 
 /**
- * 1.18.0 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: the personal data erasure is one unit of work of
- * UserKit's runner (up to 1.17 `wrapInTransaction()` with the flush nested in it). A deadlock inside the nested flush
+ * 1.19.0 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: the personal data erasure is one unit of work of
+ * UserKit's runner (up to 1.18 `wrapInTransaction()` with the flush nested in it). A deadlock inside the nested flush
  * (MySQL already dropped the savepoint: 1305) and a lock wait both answer UserKitStorageFailure (503), leave the
  * worker's connection at level 0 and erase nothing; the next erasure works. A parallel first bump of the remember-me
  * epoch no longer fails the erasure.
@@ -109,7 +109,7 @@ final class ErasureLoadTest extends LoadTestCase
         $peer->send($this->sleepStatement(1.0));
         $peer->send('COMMIT');
 
-        // Up to 1.17: PostgreSQL aborted the erasure's transaction (25P02 on the next statement); MySQL re-read the row
+        // Up to 1.18: PostgreSQL aborted the erasure's transaction (25P02 on the next statement); MySQL re-read the row
         // in the transaction's snapshot, missed it and refused the bump as a look-alike collision.
         self::assertSame(['member', 'sessions'], $this->eraser()->erase($member));
 

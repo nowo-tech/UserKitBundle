@@ -157,7 +157,7 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   replace an entity manager a failed UserKit write closed before the next main request, at `kernel.terminate`,
   `console.terminate`, after each Messenger message and on `kernel.reset`.
 - **Real-database load tests** (`tests/Load`, testsuite `load`, `USER_KIT_LOAD_DATABASE_URL`) and the CI job
-  **Load readiness** on MySQL 8.4 and PostgreSQL 16, each with DBAL 4 and DBAL 3. Each test fails against 1.17.0.
+  **Load readiness** on MySQL 8.4 and PostgreSQL 16, each with DBAL 4 and DBAL 3. Each test fails against 1.18.0.
 - PHPStan: the four load rules of nowo-tech/phpstan-frankenphp 1.4 are on (`flagRollbackAfterNestedBegin`,
   `flagFlushInHandWrittenTransaction`, `flagUnboundedRecursion`, `flagFlushWithoutClosedManagerRecovery`).
 
@@ -195,7 +195,7 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   `doctrine/dbal` ^3.8.2 || ^4.0 (was ^3.8), `doctrine/orm` ^2.16 || ^3.0 (was ^2.15). Dev: `nowo-tech/phpstan-frankenphp` ^1.4.
 - `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore` and `LastActivitySubscriber` take an optional
   trailing `UserKitTransactionRunner` argument.
-- The erasure nested in an open application transaction runs in a savepoint (1.17 joined it directly); on failure it
+- The erasure nested in an open application transaction runs in a savepoint (1.18 joined it directly); on failure it
   still marks that transaction rollback-only.
 
 ## [1.18.0] - 2026-11-15

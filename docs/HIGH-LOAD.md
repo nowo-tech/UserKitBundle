@@ -1,6 +1,6 @@
 # High load
 
-How UserKit behaves when many requests write at once (Beacon spec 239), since **1.18.0**. Read this when you run
+How UserKit behaves when many requests write at once (Beacon spec 239), since **1.19.0**. Read this when you run
 UserKit behind a busy site, in FrankenPHP worker mode with the kernel kept alive (`FRANKENPHP_RESET_KERNEL=false`), or
 with Messenger consumers.
 
@@ -18,7 +18,7 @@ with Messenger consumers.
 
 ## What UserKit writes
 
-| Path | Writes | Since 1.18.0 |
+| Path | Writes | Since 1.19.0 |
 | --- | --- | --- |
 | Personal data erasure (`PersonalDataErasureInterface::erase()`) | Your erasers, then one flush of the user's manager, in one transaction | One unit of work of UserKit's runner (was `wrapInTransaction()`) |
 | Session registry (request listeners, `UserSessionManager`, the sessions pages, the purge command) | One DBAL statement at a time (`INSERT`, `UPDATE`, `DELETE`), never a flush | Retried in autocommit; inserts in a savepoint inside a transaction |
@@ -64,7 +64,7 @@ error stays in the previous exception, for your logs. Your error pages and JSON 
 
 In code that calls UserKit directly (a console command, a Messenger handler, an API controller with its own error
 mapping), catch `TransientStorageFailure` (or `UserKitStorageFailure`) and retry later; catch `UserKitConflict` and
-reload. Up to 1.17 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTimeoutException`, a 1305
+reload. Up to 1.18 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTimeoutException`, a 1305
 `DriverException`, `UniqueConstraintViolationException`) escaped instead; they are now the previous exception.
 
 ## Retries
@@ -82,7 +82,7 @@ reload. Up to 1.17 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTi
 
 - **Concurrent-session limit.** With `sessions.limit` configured, counting the user's sessions, evicting the oldest and
   registering the new one run under a named lock of the user (`GET_LOCK()` on MySQL / MariaDB,
-  `pg_try_advisory_lock()` polled on PostgreSQL; no lock on SQLite, which has one writer). Up to 1.17 two parallel
+  `pg_try_advisory_lock()` polled on PostgreSQL; no lock on SQLite, which has one writer). Up to 1.18 two parallel
   sign-ins of one user both counted the same sessions and both registered: one session over the limit.
   - `evict_oldest`: the second sign-in counts the first and evicts it.
   - `reject_new`: the limit is checked again under the lock. The sign-in that comes second is refused after its
@@ -91,10 +91,10 @@ reload. Up to 1.17 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTi
     client gets `401 {"error":"session_signed_out"}`.
   - A sign-in waits 5 s at most for the lock, then answers 503. Without a limit no lock is taken.
 - **First row of a session or of an epoch.** A lost unique key race is resolved by reading the winner's row. Inside a
-  transaction the `INSERT` runs in its own savepoint, so PostgreSQL no longer aborts the whole transaction (up to 1.17:
+  transaction the `INSERT` runs in its own savepoint, so PostgreSQL no longer aborts the whole transaction (up to 1.18:
   `25P02 current transaction is aborted` on the next statement, which failed an erasure that raced a "sign out
   everywhere"). After a lost first epoch insert the row is re-read with a locking read, so MySQL's REPEATABLE READ
-  snapshot no longer hides the winner (up to 1.17 that read as a look-alike collision and failed the erasure).
+  snapshot no longer hides the winner (up to 1.18 that read as a look-alike collision and failed the erasure).
 - **Last activity.** Two workers keep separate throttle maps, so two requests of one user can both write. The column
   only moves forward (`WHERE column IS NULL OR column < :value`), so the later write of an earlier request no longer
   moves the last activity back. A custom setter on an unmapped field writes the mapped fields it changed, as before,
@@ -116,7 +116,7 @@ After a failed erasure UserKit never resets nor clears your entity manager:
 - a manager the ORM closed in a failed flush **stays closed** for the rest of the request, so your next flush fails
   loudly ("The EntityManager is closed") instead of silently writing nothing. It is replaced at the next boundary.
 
-Inside a transaction your application opened, a failed erasure also marks that transaction rollback-only (as in 1.17):
+Inside a transaction your application opened, a failed erasure also marks that transaction rollback-only (as in 1.18):
 roll it back.
 
 ## Database topology
@@ -134,7 +134,7 @@ registration:
 
 **DBAL 3:** set `doctrine.dbal.use_savepoints: true` (DBAL 4 always uses savepoints). The erasure nested in your
 transaction, and the inserts above, rely on them. On PostgreSQL with DBAL 3 the ORM gives the registry and epoch ids
-a sequence (`AUTO`); since 1.18.0 UserKit's DBAL inserts take the next value from it (up to 1.17 they left the id out
+a sequence (`AUTO`); since 1.19.0 UserKit's DBAL inserts take the next value from it (up to 1.18 they left the id out
 and every registration failed with a NOT NULL violation).
 
 ## Workers and boundaries
@@ -158,7 +158,7 @@ USER_KIT_LOAD_DATABASE_URL='mysql://root@127.0.0.1:3306/user_kit_load?serverVers
   vendor/bin/phpunit --testsuite load
 ```
 
-| Test | Up to 1.17 (same test against `main`) |
+| Test | Up to 1.18 (same test against `main`) |
 | --- | --- |
 | `ErasureLoadTest::testADeadlockInTheErasuresNestedFlushIsTransientAndTheNextErasureWorks` | MySQL: raw `1305 SAVEPOINT DOCTRINE_2 does not exist` |
 | `ErasureLoadTest::testALockWaitOnTheMemberRowIsTransientAndErasesNothing` | Raw `1205` (MySQL) / `55P03` (PostgreSQL) |

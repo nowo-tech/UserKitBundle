@@ -31,7 +31,7 @@ use function strtotime;
  * collation has a folding unique key: the first bump of a look-alike owner then fails loudly instead of moving another
  * owner's epoch (migrate the columns, see UPGRADING and {@see OwnerCollationListener}).
  *
- * 1.18.0 (Beacon spec 239): the first insert runs in its own savepoint inside a transaction (an erasure, a host
+ * 1.19.0 (Beacon spec 239): the first insert runs in its own savepoint inside a transaction (an erasure, a host
  * transaction), so a parallel first bump that wins no longer aborts a PostgreSQL transaction; the writes are retried in
  * autocommit when they deadlock or wait too long for a lock ({@see UserKitTransactionRunner::statement()}).
  */
@@ -82,7 +82,7 @@ final readonly class DoctrineSessionEpochStore implements SessionEpochStoreInter
                 return;
             }
             // A current read: under MySQL's REPEATABLE READ a plain SELECT inside a transaction would reuse its snapshot
-            // and miss the row that just won (1.18.0).
+            // and miss the row that just won (1.19.0).
             if ($this->row($owner, true) === null) {
                 // The unique key folds this owner into a look-alike's row (table not migrated to the binary collation):
                 // never move that other owner's epoch, and never report a bump that did not happen.

@@ -18,7 +18,7 @@ use function sprintf;
 
 /**
  * Runs the erasure guards, then every supporting eraser in one Doctrine transaction (flushed once), through UserKit's
- * own transaction runner ({@see UserKitTransactionRunner}, 1.18.0): its own transaction, or a savepoint of the host's
+ * own transaction runner ({@see UserKitTransactionRunner}, 1.19.0): its own transaction, or a savepoint of the host's
  * when one is already open on the user's entity manager.
  */
 final readonly class PersonalDataEraser implements PersonalDataErasureInterface
@@ -80,7 +80,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
             throw new LogicException(sprintf('No Doctrine ORM entity manager manages "%s".', $user::class));
         }
 
-        // 1.18.0 (Beacon spec 239): one unit of work of UserKit's own runner, flushed once inside its transaction. Inside
+        // 1.19.0 (Beacon spec 239): one unit of work of UserKit's own runner, flushed once inside its transaction. Inside
         // an open host transaction it nests (a savepoint): the host commits or rolls back the rest. After a failure no
         // level of the runner stays open, the manager is neither reset nor cleared (only the rows the erasure touched
         // are detached; a manager a failed flush closed is replaced at the next boundary), a deadlock or lock wait is a
@@ -91,7 +91,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
             $ran = $this->runner->runFor($entityManager, fn (): array => $this->runErasers($request));
         } catch (Throwable $exception) {
             if ($connection->isTransactionActive()) {
-                // The host's transaction is still open: it must not commit without the erasure (1.17 behaviour). The
+                // The host's transaction is still open: it must not commit without the erasure (1.18 behaviour). The
                 // rollback-only flag is cleared only by the outermost rollBack(), not by Connection::close(): the host
                 // must roll back (not just close) after a failed erasure, or its next commit on this connection throws
                 // CommitFailedRollbackOnly.

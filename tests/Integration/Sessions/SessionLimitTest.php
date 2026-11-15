@@ -69,7 +69,7 @@ final class SessionLimitTest extends SessionsKernelTestCase
     }
 
     /**
-     * 1.18.0 (Beacon spec 239): `reject_new` is checked again under the owner's lock when the session is registered. A
+     * 1.19.0 (Beacon spec 239): `reject_new` is checked again under the owner's lock when the session is registered. A
      * parallel sign-in that registered after this one's credentials check (simulated here between the two events) wins:
      * this sign-in is refused and its session ends.
      */

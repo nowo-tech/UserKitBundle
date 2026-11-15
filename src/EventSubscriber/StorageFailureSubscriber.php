@@ -13,7 +13,7 @@ use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * 1.18.0 (Beacon spec 239): a transient UserKit storage failure answers **503** with `Retry-After`, a UserKit conflict
+ * 1.19.0 (Beacon spec 239): a transient UserKit storage failure answers **503** with `Retry-After`, a UserKit conflict
  * **409**, instead of a 500, on every route (a session listener or the erasure may run on any of them). Only the
  * exceptions UserKit raises ({@see UserKitStorageFailure}, {@see UserKitConflict}) are mapped; the application's own
  * failures are left alone. The exception is replaced by the matching HTTP exception (generic message, the storage error

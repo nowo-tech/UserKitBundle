@@ -58,7 +58,7 @@
 
 ## Unreleased
 
-From **1.18.0** (target 1.19.0):
+From **1.18.x** (target 1.19.0):
 
 ```bash
 composer update nowo-tech/user-kit-bundle

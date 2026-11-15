@@ -11,7 +11,7 @@ parameters:
     # REQ-CS-006: no silenced findings. ProfileRegistry and LastActivitySubscriber implement ResetInterface
     # (frankenphp.worker.noMissingResetInterface) instead of being ignored.
     ignoreErrors: []
-    # 1.18.0 (Beacon spec 239): PhpStanFrankenPhp 1.4 worker load-readiness rules. Every UserKit write unit goes
+    # 1.19.0 (Beacon spec 239): PhpStanFrankenPhp 1.4 worker load-readiness rules. Every UserKit write unit goes
     # through UserKit's own transaction runner.
     frankenphp:
         flagRollbackAfterNestedBegin: true
