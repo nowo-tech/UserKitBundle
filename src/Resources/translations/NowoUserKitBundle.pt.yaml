@@ -51,3 +51,14 @@ sessions:
         no_others: 'Não havia outras sessões para terminar.'
         revoked_others: '%count% outra(s) sessão(ões) terminada(s).'
         revoked_all: '%count% sessão(ões) terminada(s).'
+owner_image:
+    error:
+        type: 'Use uma imagem PNG, JPEG ou WebP.'
+        size: 'A imagem é demasiado grande.'
+        pixels: 'A imagem tem demasiados píxeis.'
+        empty: 'Escolha uma imagem.'
+        kind: 'Esta imagem não pode ser alterada aqui.'
+        forbidden: 'Não pode alterar esta imagem.'
+        off: 'O envio de imagens não está disponível neste momento.'
+        limit: 'O limite de armazenamento foi atingido.'
+        storage: 'Não foi possível guardar a imagem. Tente mais tarde.'

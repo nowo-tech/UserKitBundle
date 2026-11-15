@@ -51,3 +51,14 @@ sessions:
         no_others: 'Non c’erano altre sessioni da disconnettere.'
         revoked_others: '%count% altre sessioni disconnesse.'
         revoked_all: '%count% sessioni disconnesse.'
+owner_image:
+    error:
+        type: 'Usa un''immagine PNG, JPEG o WebP.'
+        size: 'L''immagine è troppo grande.'
+        pixels: 'L''immagine ha troppi pixel.'
+        empty: 'Scegli un''immagine.'
+        kind: 'Questa immagine non può essere modificata qui.'
+        forbidden: 'Non puoi modificare questa immagine.'
+        off: 'Il caricamento delle immagini non è disponibile al momento.'
+        limit: 'È stato raggiunto il limite di archiviazione.'
+        storage: 'Impossibile salvare l''immagine. Riprova più tardi.'

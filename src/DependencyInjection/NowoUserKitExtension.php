@@ -64,6 +64,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         }
 
         SessionsLoader::prepend($container);
+        OwnerImagesLoader::prepend($container);
     }
 
     /**
@@ -117,6 +118,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
 
         $this->loadPersonalData($config['personal_data'], $loader, $container);
         SessionsLoader::load($container, $config['sessions'], $profiles, $config['personal_data']['enabled']);
+        OwnerImagesLoader::load($container, $config['owner_images'], $config['twig'], $config['personal_data']['enabled']);
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);

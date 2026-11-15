@@ -51,3 +51,14 @@ sessions:
         no_others: 'Er waren geen andere sessies om af te melden.'
         revoked_others: '%count% andere sessie(s) afgemeld.'
         revoked_all: '%count% sessie(s) afgemeld.'
+owner_image:
+    error:
+        type: 'Gebruik een PNG-, JPEG- of WebP-afbeelding.'
+        size: 'De afbeelding is te groot.'
+        pixels: 'De afbeelding heeft te veel pixels.'
+        empty: 'Kies een afbeelding.'
+        kind: 'Deze afbeelding kan hier niet worden gewijzigd.'
+        forbidden: 'U mag deze afbeelding niet wijzigen.'
+        off: 'Afbeeldingen uploaden is nu niet beschikbaar.'
+        limit: 'De opslaglimiet is bereikt.'
+        storage: 'De afbeelding kon niet worden opgeslagen. Probeer het later opnieuw.'
