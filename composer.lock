@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "22853ad4cdcc8f4e06ac04c10e66a376",
+    "content-hash": "edea42f86b520dda5b56621945b5cbb8",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -7496,16 +7496,16 @@
         },
         {
             "name": "nowo-tech/storage-kit-bundle",
-            "version": "dev-feat/profile-image",
+            "version": "v1.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/StorageKitBundle.git",
-                "reference": "4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155"
+                "reference": "c84bfbbf07bb32755d135369ed80443d6eb8a621"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155",
-                "reference": "4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155",
+                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/c84bfbbf07bb32755d135369ed80443d6eb8a621",
+                "reference": "c84bfbbf07bb32755d135369ed80443d6eb8a621",
                 "shasum": ""
             },
             "require": {
@@ -7593,60 +7593,7 @@
                     "Nowo\\StorageKitBundle\\": "src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "Nowo\\StorageKitBundle\\Tests\\": "tests/"
-                }
-            },
-            "archive": {
-                "exclude": [
-                    "/demo",
-                    "/.cursor"
-                ]
-            },
-            "scripts": {
-                "test": [
-                    "php -d memory_limit=1024M vendor/bin/phpunit --color=always"
-                ],
-                "test-coverage": [
-                    "php -d memory_limit=1024M vendor/bin/phpunit --color=always --coverage-html coverage --coverage-clover coverage.xml --coverage-text"
-                ],
-                "test-coverage-100": [
-                    "@test-coverage",
-                    "php .scripts/check-coverage.php coverage.xml --min-percent=100"
-                ],
-                "validate-phpdoc": [
-                    "php .scripts/complete-public-phpdoc.php"
-                ],
-                "cs-check": [
-                    "php-cs-fixer fix --dry-run --diff"
-                ],
-                "cs-fix": [
-                    "php-cs-fixer fix"
-                ],
-                "rector": [
-                    "rector process"
-                ],
-                "rector-dry": [
-                    "rector process --dry-run --no-progress-bar"
-                ],
-                "phpstan": [
-                    "phpstan analyse --memory-limit=512M"
-                ],
-                "update": [
-                    "composer update --no-interaction"
-                ],
-                "validate": [
-                    "composer validate --strict"
-                ],
-                "qa": [
-                    "@cs-check",
-                    "@test"
-                ],
-                "igor": [
-                    "igor-php --no-agent ."
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -7665,7 +7612,7 @@
             "description": "S3-compatible object storage for Symfony: per-scope buckets with encrypted credentials, image uploads for Markdown editors, reference-aware purge, verified bucket moves and an SSRF-guarded endpoint test.",
             "homepage": "https://github.com/nowo-tech/StorageKitBundle",
             "keywords": [
-                "flysystem",
+                "Flysystem",
                 "frankenphp",
                 "images",
                 "markdown",
@@ -7679,18 +7626,19 @@
                 "uploads"
             ],
             "support": {
-                "issues": "https://github.com/nowo-tech/StorageKitBundle/issues",
-                "source": "https://github.com/nowo-tech/StorageKitBundle",
+                "changelog": "https://github.com/nowo-tech/StorageKitBundle/blob/main/docs/CHANGELOG.md",
                 "docs": "https://github.com/nowo-tech/StorageKitBundle/tree/main/docs",
-                "changelog": "https://github.com/nowo-tech/StorageKitBundle/blob/main/docs/CHANGELOG.md"
+                "issues": "https://github.com/nowo-tech/StorageKitBundle/issues",
+                "source": "https://github.com/nowo-tech/StorageKitBundle"
             },
             "funding": [
                 {
-                    "type": "github",
-                    "url": "https://github.com/HecFranco"
+                    "url": "https://github.com/HecFranco",
+                    "type": "github"
                 }
             ],
-            "time": "2026-11-15T13:12:11+00:00"
+            "time": "2026-11-15T13:40:06+00:00",
+            "published-time": "2026-11-15T13:45:23+00:00"
         },
         {
             "name": "paragonie/constant_time_encoding",
@@ -11752,18 +11700,9 @@
             "time": "2025-11-17T20:03:58+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "nowo-tech/storage-kit-bundle",
-            "version": "dev-feat/profile-image",
-            "alias": "1.6.0",
-            "alias_normalized": "1.6.0.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "nowo-tech/storage-kit-bundle": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -62,7 +62,9 @@
 No breaking change: `owner_images` is off by default. To move a host's own profile-picture / logo code to it:
 
 1. `composer require nowo-tech/storage-kit-bundle:^1.6` (the default storage), or set `owner_images.storage` to your
-   own `OwnerImageStorageInterface`.
+   own `OwnerImageStorageInterface`. StorageKit 1.6 stops serving expired files (`orphaned_since` before 2000-01-02,
+   e.g. files a personal-data erasure handed to the purge): see its UPGRADING "To 1.6.0" for the query that counts them
+   before you upgrade.
 2. Enable it and declare the kinds:
 
    ```yaml

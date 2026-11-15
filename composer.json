@@ -35,12 +35,6 @@
             "homepage": "https://nowo.tech"
         }
     ],
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/nowo-tech/StorageKitBundle"
-        }
-    ],
     "require": {
         "php": ">=8.2 <8.6",
         "doctrine/dbal": "^3.8 || ^4.0",
@@ -77,7 +71,7 @@
         "igor-php/igor-php": "^0.10.0",
         "league/flysystem-memory": "^3.29",
         "nowo-tech/phpstan-frankenphp": "^1.0",
-        "nowo-tech/storage-kit-bundle": "dev-feat/profile-image as 1.6.0",
+        "nowo-tech/storage-kit-bundle": "^1.6",
         "phpstan/extension-installer": "^1.0",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
