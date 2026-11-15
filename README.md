@@ -36,6 +36,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Product tour progress** — `ProductTourProgress` embeddable / trait (`markPageSeen()`, `hasSeenPage()`, `syncEnabledPages()`)
 - **GDPR self-service SPI** (opt-in) — tagged export providers / erasers / erasure guards, versioned JSON `PersonalDataExporter`, transactional `PersonalDataEraser` with veto hook
 - **Session registry and limits** (opt-in, `sessions.enabled`) — one row per signed-in session (HMAC of the id only, browser / OS names, truncated IP), revoked sessions signed out on their next request with any session handler, "My sessions" and admin pages (UiKit + FormKit CSRF-only actions), sign out one / all others / everywhere, concurrent-session limit (`evict_oldest` / `reject_new`, per-user resolver), automatic sign-out on password change and account disable, audit events, retention purge command, GDPR export / erasure
+- **Owner images** (opt-in, `owner_images`, 1.18) — profile pictures and organization logos as square WebP images on StorageKitBundle 1.6+ (content-typed, size / pixel caps before decoding, re-encoded, no SVG), access, pointer and storage ports for standard and DDD hosts, Twig `user_avatar()` / `owner_image()`, `OwnerImageType` with UiKit's crop step, GDPR export / erasure
 - **Translations** — domain `NowoUserKitBundle` (`de`, `en`, `es`, `fr`, `it`, `nl`, `pt`)
 
 ## Quick start

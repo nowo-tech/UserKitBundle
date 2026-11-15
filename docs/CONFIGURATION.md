@@ -17,6 +17,8 @@ A commented default template ships at `src/Resources/config/packages/nowo_user_k
   - [Tables](#tables)
   - [Routes and access control](#routes-and-access-control)
   - [FormKit profile](#formkit-profile)
+- [Owner images (owner_images)](#owner-images-owner_images)
+  - [Table](#table)
 - [AuthKit integration](#authkit-integration)
 - [Translations](#translations)
 
@@ -273,6 +275,43 @@ security:
 The page actions are FormKit CSRF-only forms themed through the FormKit profile `nowo_form_kit.profiles.user_kit`,
 prepended by the bundle (translation domain `NowoUserKitBundle`). Define that profile in your `nowo_form_kit`
 configuration to override it; the bundle then keeps yours.
+
+## Owner images (owner_images)
+
+Since 1.18. Off by default. See [USAGE](USAGE.md#owner-images-profile-pictures-organization-logos).
+
+```yaml
+nowo_user_kit:
+    owner_images:
+        enabled: false               # true: register the service, Twig helpers, form type and GDPR hooks
+        kinds:                       # name (1-16 chars [a-z0-9_], also the StorageKit context type) => options
+            avatar: { subject: user, read: authenticated, shape: circle }   # the default when kinds is omitted
+            # org_logo: { subject: other, read: public, shape: square }
+        user_class: null             # class whose identifier is the subject id (null: the user_class of the only profile)
+        avatar_kind: avatar          # kind shown by user_avatar() (a "user" kind)
+        access: null                 # service id of your OwnerImageAccessInterface (null: DefaultOwnerImageAccess)
+        pointer_store: null          # service id of your OwnerImagePointerStoreInterface (null: table user_kit_owner_image)
+        storage: null                # service id of your OwnerImageStorageInterface (null: StorageKitBundle 1.6+)
+        doctrine:
+            entity_manager: null     # manager that maps user_kit_owner_image (null: the default one)
+        twig:
+            sizes: { xs: 24, sm: 30, md: 36, lg: 56 }   # named display sizes in CSS px ("md" is the fallback)
+```
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `kinds.*.subject` | `other` | `user`: the subject id is a user's id. The default access lets each user change their own image, and the GDPR hooks cover it. `other`: your access service decides. |
+| `kinds.*.read` | `authenticated` | Who may see the image through the storage's download route: `public` (anonymous too), `authenticated` or `host` (your access service). |
+| `kinds.*.shape` | `square` | Crop frame of the form field (`circle` / `square`). The stored image is always a square. |
+| `user_class` | `null` | The user class (or interface) whose Doctrine identifier, else user identifier, is the subject id of its users. `null`: the `user_class` of the only profile; with several profiles, nobody, so set it. Users of any other class get no subject id unless they implement `OwnerImageSubjectInterface` (ids unique across your user classes, e.g. `admin:42`): two classes sharing an id never share an image. An unknown class fails the container build. |
+| `storage` | `null` | Without it, `nowo-tech/storage-kit-bundle` 1.6+ must be installed, or the container does not compile. Image limits are StorageKit's `upload.square.max_bytes` (2 MiB), `upload.square.max_pixels` (16 MP), `upload.square.size` (256 px) and `upload.max_pixels`. PHP GD must encode WebP, else uploads are refused with `off`. |
+
+### Table
+
+With the default pointer store, the bundle prepends the attribute mapping of `Nowo\UserKitBundle\OwnerImage\Entity\OwnerImagePointer`.
+The table is `user_kit_owner_image`: `id`, `kind`, `subject_id`, `file_id`, `updated_at`, with a unique key on
+(`kind`, `subject_id`). Create it with a migration (`doctrine:migrations:diff`). On MySQL / MariaDB, `kind` and
+`subject_id` get a binary collation (house rule LQ). With your own `pointer_store`, nothing is mapped.
 
 ## AuthKit integration
 

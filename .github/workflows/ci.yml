@@ -47,7 +47,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: json
+          extensions: json, gd, sodium
           coverage: pcov
           tools: composer:v2
 
@@ -166,10 +166,12 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: json
+          extensions: json, gd, sodium
           tools: composer:v2
       - name: Install DBAL 4.3 and ORM 3.6
         run: |
+          # Owner images' StorageKit (dev only) needs ORM 3.7+: this job runs the session listener tests only.
+          composer remove --dev nowo-tech/storage-kit-bundle league/flysystem-memory --no-interaction --no-update
           composer require doctrine/dbal:4.3.* doctrine/orm:3.6.* doctrine/doctrine-bundle:^2.10 --no-interaction --no-update --with-all-dependencies
           composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
           composer show | grep -E '^doctrine/(dbal|orm) '
@@ -209,7 +211,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: json, pdo_pgsql, pdo_mysql
+          extensions: json, gd, sodium, pdo_pgsql, pdo_mysql
           tools: composer:v2
       - run: composer update --prefer-dist --no-interaction --no-progress
       - name: PostgreSQL
@@ -219,6 +221,7 @@ jobs:
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
       - name: MySQL
         env:
           USER_KIT_TEST_DB_URL: mysql://root:ci-placeholder@127.0.0.1:3306/user_kit?serverVersion=8.4.0&charset=utf8mb4
@@ -226,12 +229,15 @@ jobs:
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
       - name: MariaDB
         env:
           USER_KIT_TEST_DB_URL: mysql://root:ci-placeholder@127.0.0.1:3307/user_kit?serverVersion=11.4.0-MariaDB&charset=utf8mb4
           USER_KIT_TEST_DB_PLATFORM: mysql
         # Look-alike owners only (house rule LQ): MariaDB's PAD SPACE default collation and utf8mb4_nopad_bin.
-        run: vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
+        run: |
+          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
 
   dbal-floor:
     name: Sessions on the DBAL 3 floor (SQLite)
@@ -241,7 +247,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: json
+          extensions: json, gd, sodium
           tools: composer:v2
       - name: Resolve the lowest supported DBAL
         run: |
@@ -352,7 +358,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: json
+          extensions: json, gd, sodium
           coverage: pcov
           tools: composer:v2
 

@@ -28,6 +28,7 @@ use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Twig\Extension\AbstractExtension;
 
+use function count;
 use function is_array;
 use function is_string;
 use function sprintf;
@@ -64,6 +65,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         }
 
         SessionsLoader::prepend($container);
+        OwnerImagesLoader::prepend($container);
     }
 
     /**
@@ -117,6 +119,9 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
 
         $this->loadPersonalData($config['personal_data'], $loader, $container);
         SessionsLoader::load($container, $config['sessions'], $profiles, $config['personal_data']['enabled']);
+        // Audit QJ-M1: the bare identifier is a subject id for one user class only; with several profiles, configure it.
+        $profileUserClass = count($profiles) === 1 ? (string) $defaultProfile['user_class'] : null;
+        OwnerImagesLoader::load($container, $config['owner_images'], $config['twig'], $config['personal_data']['enabled'], $profileUserClass);
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);

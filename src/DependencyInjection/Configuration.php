@@ -75,6 +75,7 @@ final class Configuration implements ConfigurationInterface
                 ->end()
                 ->append($this->createPersonalDataNode())
                 ->append((new SessionsConfiguration())->node())
+                ->append((new OwnerImagesConfiguration())->node())
             ->end();
 
         return $treeBuilder;

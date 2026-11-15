@@ -33,6 +33,17 @@
   - [Signed-out JSON clients](#signed-out-json-clients)
   - [Deleting users](#deleting-users)
   - [Host with its own session UI](#host-with-its-own-session-ui)
+- [Owner images (profile pictures, organization logos)](#owner-images-profile-pictures-organization-logos)
+  - [Subject ids of users](#subject-ids-of-users)
+  - [How it works](#how-it-works-1)
+  - [Uploading from a controller](#uploading-from-a-controller)
+  - [Form field](#form-field)
+  - [Twig](#twig)
+  - [Organization logos and other kinds](#organization-logos-and-other-kinds)
+  - [Keeping the pointer on your own rows](#keeping-the-pointer-on-your-own-rows)
+  - [Personal data](#personal-data-1)
+  - [Audit](#audit)
+  - [Worker mode](#worker-mode)
 - [Translation overrides (REQ-I18N-001)](#translation-overrides-req-i18n-001)
   - [Override in the application](#override-in-the-application)
 - [Standard Symfony host](#standard-symfony-host)
@@ -834,6 +845,190 @@ token per action and row, `Cache-Control: no-store` on the pages, never expose `
 `limitFor($user)->maxTrustedDevices` where devices are trusted, listen to `UserSessionsRevokedEvent` for the audit log,
 and enable `remember_me_epoch` so "sign out everywhere" also voids remember-me cookies. Without `invalidateRememberMe`,
 signing out one device does not void its remember-me cookie (see [Remember-me epoch](#remember-me-epoch)).
+
+## Owner images (profile pictures, organization logos)
+
+Since 1.18, opt-in (`owner_images.enabled`). Each subject gets one square image per **kind**: a user's profile picture
+(`avatar`), an organization's logo (`org_logo`), its dark-theme logo (`org_logo_dark`), a project icon, and so on. The
+bundle owns the port, the Twig helpers, the form field and the GDPR hooks. **StorageKitBundle 1.6+** stores the files
+by default, or you plug in your own storage.
+
+```bash
+composer require nowo-tech/storage-kit-bundle   # 1.6+, the default storage
+```
+
+```yaml
+# config/packages/nowo_user_kit.yaml
+nowo_user_kit:
+    owner_images:
+        enabled: true
+        kinds:
+            avatar:        { subject: user,  read: authenticated, shape: circle }
+            org_logo:      { subject: other, read: public }
+            org_logo_dark: { subject: other, read: public }
+        access: App\Organization\OrganizationImageAccess   # needed for "other" kinds (see below)
+        # user_class: App\Entity\User   # default: the user_class of your only profile (required with several)
+```
+
+### Subject ids of users
+
+`OwnerImageSubjects::idOf($user)` gives the subject id of a user:
+
+- a user implementing `OwnerImageSubjectInterface` says it itself (`getOwnerImageSubjectId()`);
+- an instance of `owner_images.user_class` (default: the `user_class` of your only profile) gets its Doctrine
+  identifier, else its user identifier;
+- any other object gets **none**: it has no image of its own, may change none and its export / erasure skip owner
+  images.
+
+The bare identifier says nothing about the class, so it is used for one class only: with two user classes whose ids
+overlap (`Admin#42` and `Customer#42`), a shared subject would let one change, export or erase the other's picture.
+With several user classes (several profiles, a Doctrine plus an LDAP or in-memory provider), set `user_class` to the
+one whose identifier is the subject id, and implement `OwnerImageSubjectInterface` on the others with ids unique
+across all of them (e.g. `admin:42`). Always pass `idOf($user)` (or your interface value) as the subject of a `user`
+kind: the default access compares it with the actor's.
+
+### How it works
+
+| Piece | Default | Replace with |
+|---|---|---|
+| `OwnerImagesInterface` (service `OwnerImages`) | upload / remove / forget / URLs | — (the port your code calls) |
+| `Access\OwnerImageAccessInterface` | `DefaultOwnerImageAccess`: a `user` kind may be changed by that user only. Nobody may change an `other` kind. Reading follows `read` | `owner_images.access` |
+| `Pointer\OwnerImagePointerStoreInterface` | `DbalOwnerImagePointerStore`: the bundle table `user_kit_owner_image` | `owner_images.pointer_store` (e.g. a column on your own rows) |
+| `Storage\OwnerImageStorageInterface` | `StorageKitOwnerImageStorage` (StorageKit 1.6+) | `owner_images.storage` |
+
+On upload, the checks run in an order that leaves nothing behind when the upload is refused:
+
+1. The kind is known and the subject id is valid. Subject ids are 1–64 characters `[A-Za-z0-9_.:-]` (UUIDs, integers, slugs), matched byte for byte.
+2. The actor may change this image: `writableTarget()` returns the bucket scope and the usage owner.
+3. The storage checks and stores the image.
+4. The pointer is written. If that write fails, the new file is removed.
+5. The storage reference is updated, and the previous file is deleted at once.
+6. `OwnerImageChangedEvent` is dispatched, carrying ids only (kind, subject, new and previous file id, actor id).
+
+With StorageKit, each kind is a square-only StorageKit file context of the same name:
+
+- **File checks.** PNG, JPEG or still WebP, decided by content only: SVG, GIF, HTML and animated WebP are refused. `upload.square.max_bytes` (default 2 MiB) is checked before anything is parsed. `upload.max_pixels` and the memory budget are read from the header before decoding.
+- **Stored squares.** The file is re-encoded as WebP squares of 256 / 128 / 64 px, which drops EXIF, GPS and any appended payload. It is stored under a random server-side key.
+- **Serving.** Files are served by StorageKit's `GET /storage/files/{uuid}/{variant}`, which asks your access service who may read. Missing and forbidden both answer 404. StorageKit's generic upload endpoint refuses these contexts.
+
+### Uploading from a controller
+
+Keep your own CSRF check and rate limit (StorageKit's square upload has no limiter of its own). Call `upload()` and
+`remove()` outside your transaction: they delete the previous file from the bucket at once. Then pass the bytes:
+
+```php
+use Nowo\UserKitBundle\OwnerImage\OwnerImageRefused;
+use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
+use Nowo\UserKitBundle\OwnerImage\OwnerImageSubjects;
+
+#[Route('/account/avatar', methods: ['POST'])]
+public function avatar(Request $request, OwnerImagesInterface $images, OwnerImageSubjects $subjects, #[CurrentUser] User $user): Response
+{
+    // The subject of a "user" kind is idOf($user): the Doctrine identifier of a user_class instance, or the value of
+    // OwnerImageSubjectInterface when User implements it (e.g. a UUID column that is not the primary key).
+    $subjectId = $subjects->idOf($user) ?? throw $this->createAccessDeniedException();
+    $form      = $this->createFormBuilder()
+        ->add('image', OwnerImageType::class, ['kind' => 'avatar', 'subject_id' => $subjectId])
+        ->getForm()
+        ->handleRequest($request);
+    if ($form->isSubmitted() && $form->isValid() && ($file = $form->get('image')->getData()) instanceof UploadedFile) {
+        try {
+            $images->upload($user, 'avatar', $subjectId, (string) file_get_contents($file->getPathname()), $file->getClientOriginalName());
+            $this->addFlash('success', 'Saved.');
+        } catch (OwnerImageRefused $e) {
+            $this->addFlash('error', 'owner_image.error.' . $e->reason); // domain NowoUserKitBundle, 7 locales
+        }
+    }
+
+    return $this->redirectToRoute('account_profile');
+}
+```
+
+The other calls:
+
+- `remove($actor, $kind, $subjectId)` removes the image, with the same access check.
+- `forget($kind, $subjectId)` drops it without an access check and without a bucket call: the file is no longer served at once and the next StorageKit purge deletes it. Use it when you delete an organization, inside your transaction.
+- `fileIds($kind, $ids)` loads the pointers of a list in one call.
+- `url()` / `fileUrl()` return the URL of the smallest square at least twice the displayed width.
+- `ready($actor, $kind, $id)` tells whether the actor may upload, a bucket is usable and PHP GD encodes WebP (without it StorageKit refuses every square image with `off`).
+- `maxBytes()` returns the byte limit.
+
+Refusal reasons: `type`, `size`, `pixels`, `empty`, `kind`, `forbidden`, `off`, `limit`, `storage`.
+
+### Form field
+
+`OwnerImageType` (options `kind`, `subject_id`, `crop_max`) is an unmapped `FileType` that accepts PNG, JPEG or WebP.
+With UiKit 2.47+ it renders as the image input box (the stored image, Replace / Undo, drag and drop) with the
+client-side crop step. The crop frame is a circle for `circle` kinds, at most `crop_max` px, and aims 5 % under the
+storage byte limit. The server checks every upload again.
+
+### Twig
+
+```twig
+{{ user_avatar(app.user, 'sm') }}                                  {# the avatar_kind of a user object #}
+{{ owner_image('org_logo', organization.uuid, 'lg', organization.name, organization.initials, class: 'org-logo') }}
+{{ owner_image_preload('avatar', members|map(m => m.uuid)) }}      {# one query for a whole list #}
+{{ owner_image_url('avatar', user.uuid) }}                         {# URL or null #}
+{% if owner_image_ready('org_logo', organization.uuid) %}…{% endif %}
+```
+
+- Sizes are named in `owner_images.twig.sizes`: default `xs` 24, `sm` 30, `md` 36 and `lg` 56 CSS px.
+- When there is no image, the helpers print an initials bubble: `<span class="nowo-user-kit-owner-image nowo-user-kit-owner-image--{size} nowo-user-kit-owner-image--initials">`. Style it with your CSS.
+- An empty `alt` hides the image from assistive technology. Use it when the name is printed next to the image.
+- Subject id and initials come from `OwnerImageSubjectInterface` when your user implements it. Otherwise the subject id is the Doctrine identifier (or the user identifier) of a `user_class` instance (see [Subject ids of users](#subject-ids-of-users)), and the initials are the first letter of the user identifier. `user_avatar()` of any other user shows the initials.
+
+### Organization logos and other kinds
+
+Implement the access port. It works by id, so no entity is needed:
+
+```php
+final readonly class OrganizationImageAccess implements OwnerImageAccessInterface
+{
+    public function __construct(private Memberships $memberships, private OwnerImageSubjects $subjects) {}
+
+    public function writableTarget(object $actor, OwnerImageKind $kind, string $subjectId): ?OwnerImageTarget
+    {
+        $actorId = $this->subjects->idOf($actor);
+        if ($kind->isUserKind()) {
+            return $actorId === $subjectId ? new OwnerImageTarget(null, $subjectId) : null;
+        }
+
+        // The organization's own bucket (StorageKit scope), counted against the organization.
+        return $this->memberships->manages($actorId, $subjectId) ? new OwnerImageTarget('org-' . $subjectId, $subjectId) : null;
+    }
+
+    public function readable(?object $viewer, OwnerImageKind $kind, array $subjectIds): array
+    {
+        return $kind->read === OwnerImageKind::READ_PUBLIC || $viewer !== null ? $subjectIds : [];
+    }
+}
+```
+
+### Keeping the pointer on your own rows
+
+To avoid the bundle table (and an extra query per list), implement `OwnerImagePointerStoreInterface` on your own
+columns. Write the pointer with your own explicit transaction or DBAL statement, never by flushing someone else's unit
+of work. Then set `owner_images.pointer_store`. The bundle then maps no table.
+
+### Personal data
+
+With `personal_data.enabled`, the export gets a section `owner_images` (file id and URL per `user` kind). The erasure
+forgets the person's own images: no bucket call inside the erasure transaction, the files are no longer served at once,
+and the next StorageKit purge deletes them. Logos the person uploaded stay, because they belong to the organization.
+Both only see users that have a subject id (see [Subject ids of users](#subject-ids-of-users)).
+
+### Audit
+
+Outside a transaction StorageKit records `file_uploaded`, `file_removed` and `file_expired` itself. Inside one (the
+GDPR erasure, or a call you wrap in your own transaction) those events wait for the outermost commit on UserKit's
+commit queue, which exists with `sessions.enabled`, and are dropped on rollback. Without it they are not recorded for
+calls made inside a transaction; `OwnerImageChangedEvent` (upload / remove) is dispatched either way.
+
+### Worker mode
+
+The services are stateless. The Twig pointer memo is cleared at every request boundary (`kernel.request`,
+`kernel.terminate`, after each Messenger message) and on `kernel.reset`, so a kept-alive kernel never shows an image
+from an earlier request.
 
 ## Translation overrides (REQ-I18N-001)
 

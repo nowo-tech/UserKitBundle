@@ -69,7 +69,9 @@
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.0",
         "igor-php/igor-php": "^0.10.0",
+        "league/flysystem-memory": "^3.29",
         "nowo-tech/phpstan-frankenphp": "^1.0",
+        "nowo-tech/storage-kit-bundle": "^1.6",
         "phpstan/extension-installer": "^1.0",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
@@ -128,5 +130,8 @@
     },
     "scripts-descriptions": {
         "igor": "Run Igor FrankenPHP worker-state audit (REQ-CS-008)"
+    },
+    "suggest": {
+        "nowo-tech/storage-kit-bundle": "^1.6: default storage of owner_images (profile pictures, organization logos)"
     }
 }

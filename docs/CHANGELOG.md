@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Added](#added)
+  - [Changed](#changed)
 - [[1.17.0] - 2026-11-13](#1170---2026-11-13)
 - [[1.16.3] - 2026-11-13](#1163---2026-11-13)
 - [[1.16.2] - 2026-11-13](#1162---2026-11-13)
@@ -55,6 +57,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
 
 ## [Unreleased]
+
+### Added
+
+- **Owner images** (`owner_images`, opt-in): one square image per subject and kind — profile pictures, organization
+  logos (light / dark), any other subject — extracted from Symfony Beacon (`src/Files/ProfileImage`).
+  - Port `OwnerImage\OwnerImagesInterface`: `upload`, `remove`, `forget`, `fileIds`, `url`, `fileUrl`, `ready`, `maxBytes`.
+    Refusals are `OwnerImageRefused` with a stable reason (`owner_image.error.*` in 7 locales).
+    `OwnerImageChangedEvent` carries ids only and is dispatched after the write.
+  - SPIs: `OwnerImageAccessInterface` (default: users change their own `user`-kind image; reading follows `read`),
+    `OwnerImagePointerStoreInterface` (default: DBAL on the new table `user_kit_owner_image`, binary collation on
+    MySQL / MariaDB, `===` re-check) and `OwnerImageStorageInterface` (default: StorageKitBundle 1.6+).
+  - StorageKit adapter: square-only file contexts, WebP squares (256 / 128 / 64), reference so the purge keeps the
+    image, previous image removed at once, downloads through StorageKit's read check.
+  - Twig: `owner_image()`, `user_avatar()`, `owner_image_url()`, `owner_image_ready()`, `owner_image_preload()`. The
+    per-request memo is cleared at every request boundary.
+  - Form type `OwnerImageType`: UiKit 2.47+ image input with the client-side crop step.
+  - GDPR: export section `owner_images`; the eraser forgets the person's own images without a bucket call (the
+    files are no longer served from then on, StorageKit 1.6 expiry).
+  - `owner_images.user_class` (default: the `user_class` of the only profile): only instances of that class get their
+    identifier as subject id; any other user object gets none unless it implements `OwnerImageSubjectInterface`, so
+    two user classes sharing an id never share an image, its access, export or erasure (audit QJ-M1).
+  - StorageKit's audit events of changes made inside a transaction (the GDPR erasure, a wrapped call) wait for the
+    commit on the commit queue (`sessions.enabled`) and are dropped on rollback. `ready()` is false on a GD build
+    without WebP.
+  - Standard host (attribute entities, bundle table) and DDD host (own pointer store and access by id) are both tested.
+
+### Changed
+
+- `require-dev`: `nowo-tech/storage-kit-bundle` (tests of the default storage) and `league/flysystem-memory`; `suggest`:
+  `nowo-tech/storage-kit-bundle`. The Docker image and CI add the `gd` and `sodium` extensions.
 
 ## [1.17.0] - 2026-11-13
 
