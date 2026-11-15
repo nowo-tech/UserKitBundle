@@ -91,10 +91,13 @@ final readonly class StorageKitOwnerImageStorage implements OwnerImageStorageInt
     }
 
     /**
-     * Removed at once, or expired for the next purge.
+     * Removed at once, or expired for the next purge. 1.19.0: inside a transaction of StorageKit's connection (the
+     * application wrapped the call) the file is expired instead, with no bucket call: a rollback brings the previous
+     * pointer back with a file that still exists (1.18.0 deleted its objects before the commit).
      */
     public function delete(OwnerImageKind $kind, string $subjectId, string $fileId, bool $deferred = false): void
     {
+        $deferred = $deferred || $this->storageManager?->connection()->isTransactionActive() === true;
         // @igor-ignore - Port calls (database and bucket writes); nothing is kept on the service.
         $removed = $deferred ? $this->remover->expire($fileId, $kind->name, $subjectId) : $this->remover->remove($fileId, $kind->name, $subjectId);
         $remover = $this->remover;

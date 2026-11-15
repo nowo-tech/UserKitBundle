@@ -31,6 +31,7 @@ use Nowo\UserKitBundle\OwnerImage\Storage\OwnerImageStorageInterface;
 use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\OwnerImageFileContext;
 use Nowo\UserKitBundle\OwnerImage\Twig\OwnerImageExtension;
 use Nowo\UserKitBundle\PersonalData\ErasureRequest;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\Security\Core\User\InMemoryUser;
@@ -81,6 +82,31 @@ final class OwnerImageEdgesTest extends TestCase
         self::assertNull($context->writableTarget(new InMemoryUser('alice', null), 'alice'));
         self::assertNull($context->writableTarget(new InMemoryUser('alice', null), '../alice'));
         self::assertSame(['a'], $context->readable(null, ['a', 'b']));
+    }
+
+    /**
+     * 1.19.0: a transient failure of the pointer write removes the new file and answers 503, not a `storage` refusal.
+     */
+    public function testATransientPointerFailureIsRethrown(): void
+    {
+        $pointers = $this->createMock(OwnerImagePointerStoreInterface::class);
+        $pointers->method('find')->willReturn([]);
+        $pointers->method('set')->willThrowException(new UserKitStorageFailure(1));
+        $storage = $this->createMock(OwnerImageStorageInterface::class);
+        $storage->method('store')->willReturn('new-file');
+        $storage->expects(self::once())->method('delete')->with(self::anything(), 'alice', 'new-file');
+        $access = $this->createStub(OwnerImageAccessInterface::class);
+        $access->method('writableTarget')->willReturn(new OwnerImageTarget());
+        $images = new OwnerImages(
+            new OwnerImageKinds([new OwnerImageKind('avatar', OwnerImageKind::SUBJECT_USER)]),
+            $access,
+            $pointers,
+            $storage,
+            new OwnerImageSubjects(),
+        );
+
+        $this->expectException(UserKitStorageFailure::class);
+        $images->upload(new stdClass(), 'avatar', 'alice', 'bytes', 'a.png');
     }
 
     public function testAnErasureOfAUserWithoutASubjectIdDoesNothing(): void

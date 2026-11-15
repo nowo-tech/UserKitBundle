@@ -46,13 +46,14 @@ final class OwnerImageAuditAfterCommitTest extends OwnerImagesKernelTestCase
         $images->upload($alice, 'avatar', 'alice', self::png(), 'a.png');
         self::assertSame([StorageAuditEvent::FILE_UPLOADED], $this->actions());
 
-        // Inside one: held until the commit (replace = upload + removal of the previous picture).
+        // Inside one: held until the commit (replace = upload + the previous picture expired: 1.19.0 makes no bucket
+        // call inside the application's transaction).
         $connection->beginTransaction();
         $images->upload($alice, 'avatar', 'alice', self::png(), 'b.png');
         self::assertSame([StorageAuditEvent::FILE_UPLOADED], $this->actions());
         $connection->commit();
         $commits->release();
-        self::assertSame([StorageAuditEvent::FILE_UPLOADED, StorageAuditEvent::FILE_UPLOADED, StorageAuditEvent::FILE_REMOVED], $this->actions());
+        self::assertSame([StorageAuditEvent::FILE_UPLOADED, StorageAuditEvent::FILE_UPLOADED, StorageAuditEvent::FILE_EXPIRED], $this->actions());
 
         // Rolled back: nothing is recorded.
         $connection->beginTransaction();
