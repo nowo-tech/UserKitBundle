@@ -51,3 +51,14 @@ sessions:
         no_others: 'No había otras sesiones que cerrar.'
         revoked_others: 'Se han cerrado %count% sesiones más.'
         revoked_all: 'Se han cerrado %count% sesiones.'
+owner_image:
+    error:
+        type: 'Usa una imagen PNG, JPEG o WebP.'
+        size: 'La imagen es demasiado grande.'
+        pixels: 'La imagen tiene demasiados píxeles.'
+        empty: 'Elige una imagen.'
+        kind: 'Esta imagen no se puede cambiar aquí.'
+        forbidden: 'No puedes cambiar esta imagen.'
+        off: 'La subida de imágenes no está disponible ahora mismo.'
+        limit: 'Se ha alcanzado el límite de almacenamiento.'
+        storage: 'No se pudo guardar la imagen. Inténtalo más tarde.'

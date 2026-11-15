@@ -13,6 +13,8 @@ services:
             - '../../PersonalData/'
             # Opt-in session registry: wired by DependencyInjection\SessionsLoader only when sessions.enabled is true.
             - '../../Sessions/'
+            # Opt-in owner images (1.18): wired by DependencyInjection\OwnerImagesLoader only when owner_images.enabled is true.
+            - '../../OwnerImage/'
             - '../../NowoUserKitBundle.php'
             # 1.18.0: exceptions and static helpers of the transaction layer are not services.
             - '../../Transaction/{UserKitStorageFailure,UserKitConflict,UserKitRows,UserKitNamedLock,FlushObserver}.php'

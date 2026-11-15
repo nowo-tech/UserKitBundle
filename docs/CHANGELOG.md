@@ -8,51 +8,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.18.0] - 2026-11-15](#1180---2026-11-15)
+  - [Added](#added)
+  - [Changed](#changed)
 - [[1.17.0] - 2026-11-13](#1170---2026-11-13)
+  - [Added](#added-1)
 - [[1.16.3] - 2026-11-13](#1163---2026-11-13)
+  - [Fixed](#fixed)
 - [[1.16.2] - 2026-11-13](#1162---2026-11-13)
+  - [Fixed](#fixed-1)
 - [[1.16.1] - 2026-11-13](#1161---2026-11-13)
+  - [Security](#security)
+  - [Tests](#tests)
 - [[1.16.0] - 2026-11-12](#1160---2026-11-12)
+  - [Added](#added-2)
+  - [Security](#security-1)
 - [[1.15.0] - 2026-11-11](#1150---2026-11-11)
+  - [Added](#added-3)
+  - [Changed](#changed-1)
+  - [Deprecated](#deprecated)
 - [[1.14.2] - 2026-11-11](#1142---2026-11-11)
+  - [Security](#security-2)
 - [[1.14.1] - 2026-11-10](#1141---2026-11-10)
+  - [Security](#security-3)
+  - [Fixed](#fixed-2)
 - [[1.14.0] - 2026-11-09](#1140---2026-11-09)
+  - [Added](#added-4)
+  - [Changed](#changed-2)
+  - [Documentation](#documentation)
 - [[1.13.2] - 2026-11-09](#1132---2026-11-09)
+  - [Security](#security-4)
 - [[1.13.1] - 2026-11-09](#1131---2026-11-09)
+  - [Fixed](#fixed-3)
 - [[1.13.0] - 2026-11-07](#1130---2026-11-07)
+  - [Added](#added-5)
+  - [Changed](#changed-3)
+  - [Security](#security-5)
 - [[1.12.0] - 2026-11-05](#1120---2026-11-05)
+  - [Added](#added-6)
 - [[1.11.1] - 2026-11-03](#1111---2026-11-03)
+  - [Fixed](#fixed-4)
 - [[1.11.0] - 2026-11-03](#1110---2026-11-03)
+  - [Added](#added-7)
+  - [Fixed](#fixed-5)
 - [[1.10.1] - 2026-11-02](#1101---2026-11-02)
+  - [Security](#security-6)
 - [[1.10.0] - 2026-11-02](#1100---2026-11-02)
+  - [Added](#added-8)
+  - [Security](#security-7)
 - [[1.9.1] - 2026-11-01](#191---2026-11-01)
+  - [Changed](#changed-4)
+  - [Added](#added-9)
+  - [Fixed](#fixed-6)
+  - [Documentation](#documentation-1)
 - [[1.9.0] - 2026-11-01](#190---2026-11-01)
+  - [Added](#added-10)
+  - [Security](#security-8)
+  - [Changed](#changed-5)
 - [[1.8.1] - 2026-10-30](#181---2026-10-30)
+  - [Changed](#changed-6)
+  - [Documentation](#documentation-2)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
+  - [Added](#added-11)
+  - [Changed](#changed-7)
 - [[1.7.0] - 2026-10-28](#170---2026-10-28)
+  - [Added](#added-12)
 - [[1.6.0] - 2026-10-28](#160---2026-10-28)
+  - [Fixed](#fixed-7)
+  - [Added](#added-13)
+  - [Changed](#changed-8)
 - [[1.5.0] - 2026-10-13](#150---2026-10-13)
+  - [Added](#added-14)
 - [[1.4.0] - 2026-10-13](#140---2026-10-13)
+  - [Added](#added-15)
+  - [Changed](#changed-9)
 - [[1.3.0] - 2026-10-13](#130---2026-10-13)
+  - [Fixed](#fixed-8)
+  - [Changed](#changed-10)
 - [[1.2.0] - 2026-10-13](#120---2026-10-13)
+  - [Security](#security-9)
+  - [Fixed](#fixed-9)
+  - [Changed](#changed-11)
 - [[1.1.13] - 2026-10-13](#1113---2026-10-13)
+  - [Changed](#changed-12)
+  - [Dependencies](#dependencies)
 - [[1.1.12] - 2026-10-09](#1112---2026-10-09)
+  - [Changed](#changed-13)
 - [[1.1.11] - 2026-09-27](#1111---2026-09-27)
+  - [Added](#added-16)
+  - [Changed](#changed-14)
 - [[1.1.10] - 2026-09-25](#1110---2026-09-25)
+  - [Fixed](#fixed-10)
+  - [Changed](#changed-15)
 - [[1.1.9] - 2026-08-24](#119---2026-08-24)
+  - [Changed](#changed-16)
+  - [Notes](#notes)
 - [[1.1.8] - 2026-08-19](#118---2026-08-19)
+  - [Security](#security-10)
 - [[1.1.7] - 2026-08-18](#117---2026-08-18)
+  - [Changed](#changed-17)
 - [[1.1.6] - 2026-08-12](#116---2026-08-12)
+  - [Fixed](#fixed-11)
+  - [Changed](#changed-18)
 - [[1.1.5] - 2026-07-29](#115---2026-07-29)
+  - [Added](#added-17)
+  - [Security](#security-11)
+  - [Changed](#changed-19)
 - [[1.1.4] - 2026-07-22](#114---2026-07-22)
+  - [Added](#added-18)
+  - [Changed](#changed-20)
 - [[1.1.3] - 2026-07-16](#113---2026-07-16)
+  - [Added](#added-19)
+  - [Changed](#changed-21)
 - [[1.1.2] - 2026-07-15](#112---2026-07-15)
+  - [Changed](#changed-22)
 - [[1.1.1] - 2026-07-14](#111---2026-07-14)
+  - [Fixed](#fixed-12)
 - [[1.1.0] - 2026-07-14](#110---2026-07-14)
+  - [Added](#added-20)
+  - [Changed](#changed-23)
 - [[1.0.3] - 2026-07-14](#103---2026-07-14)
+  - [Changed](#changed-24)
 - [[1.0.2] - 2026-07-14](#102---2026-07-14)
+  - [Added](#added-21)
+  - [Changed](#changed-25)
+  - [Fixed](#fixed-13)
 - [[1.0.1] - 2026-07-14](#101---2026-07-14)
+  - [Changed](#changed-26)
+  - [Fixed](#fixed-14)
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
+  - [Added](#added-22)
 
 ## [Unreleased]
 
@@ -112,6 +197,40 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   trailing `UserKitTransactionRunner` argument.
 - The erasure nested in an open application transaction runs in a savepoint (1.17 joined it directly); on failure it
   still marks that transaction rollback-only.
+
+## [1.18.0] - 2026-11-15
+
+### Added
+
+- **Owner images** (`owner_images`, opt-in): one square image per subject and kind — profile pictures, organization
+  logos (light / dark), any other subject — extracted from Symfony Beacon (`src/Files/ProfileImage`).
+  - Port `OwnerImage\OwnerImagesInterface`: `upload`, `remove`, `forget`, `fileIds`, `url`, `fileUrl`, `ready`, `maxBytes`.
+    Refusals are `OwnerImageRefused` with a stable reason (`owner_image.error.*` in 7 locales).
+    `OwnerImageChangedEvent` carries ids only and is dispatched after the write.
+  - SPIs: `OwnerImageAccessInterface` (default: users change their own `user`-kind image; reading follows `read`),
+    `OwnerImagePointerStoreInterface` (default: DBAL on the new table `user_kit_owner_image`, binary collation on
+    MySQL / MariaDB, `===` re-check) and `OwnerImageStorageInterface` (default: StorageKitBundle 1.6+).
+  - StorageKit adapter: square-only file contexts, WebP squares (256 / 128 / 64), reference so the purge keeps the
+    image, previous image removed at once, downloads through StorageKit's read check.
+  - Twig: `owner_image()`, `user_avatar()`, `owner_image_url()`, `owner_image_ready()`, `owner_image_preload()`. The
+    per-request memo is cleared at every request boundary.
+  - Form type `OwnerImageType`: UiKit 2.47+ image input with the client-side crop step.
+  - GDPR: export section `owner_images`; the eraser forgets the person's own images without a bucket call (the
+    files are no longer served from then on, StorageKit 1.6 expiry).
+  - `owner_images.user_class` (default: the `user_class` of the only profile): only instances of that class get their
+    identifier as subject id; any other user object gets none unless it implements `OwnerImageSubjectInterface`, so
+    two user classes sharing an id never share an image, its access, export or erasure (audit QJ-M1).
+  - StorageKit's audit events of changes made inside a transaction (the GDPR erasure, a wrapped call) wait for the
+    commit on the commit queue (`sessions.enabled`) and are dropped on rollback. `ready()` is false on a GD build
+    without WebP.
+  - Standard host (attribute entities, bundle table) and DDD host (own pointer store and access by id) are both tested.
+
+### Changed
+
+- `require-dev`: `nowo-tech/storage-kit-bundle` (tests of the default storage) and `league/flysystem-memory`; `suggest`:
+  `nowo-tech/storage-kit-bundle`. The Docker image and CI add the `gd` and `sodium` extensions.
+
+[1.18.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.18.0
 
 ## [1.17.0] - 2026-11-13
 

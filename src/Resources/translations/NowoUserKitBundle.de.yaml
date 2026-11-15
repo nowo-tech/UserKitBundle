@@ -51,3 +51,14 @@ sessions:
         no_others: 'Es gab keine anderen Sitzungen zum Abmelden.'
         revoked_others: '%count% andere Sitzung(en) abgemeldet.'
         revoked_all: '%count% Sitzung(en) abgemeldet.'
+owner_image:
+    error:
+        type: 'Verwenden Sie ein PNG-, JPEG- oder WebP-Bild.'
+        size: 'Das Bild ist zu groß.'
+        pixels: 'Das Bild hat zu viele Pixel.'
+        empty: 'Wählen Sie ein Bild aus.'
+        kind: 'Dieses Bild kann hier nicht geändert werden.'
+        forbidden: 'Sie dürfen dieses Bild nicht ändern.'
+        off: 'Bild-Uploads sind derzeit nicht verfügbar.'
+        limit: 'Das Speicherlimit ist erreicht.'
+        storage: 'Das Bild konnte nicht gespeichert werden. Versuchen Sie es später erneut.'

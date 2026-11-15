@@ -51,3 +51,14 @@ sessions:
         no_others: 'There were no other sessions to sign out.'
         revoked_others: 'Signed out %count% other session(s).'
         revoked_all: 'Signed out %count% session(s).'
+owner_image:
+    error:
+        type: 'Use a PNG, JPEG or WebP image.'
+        size: 'The image is too large.'
+        pixels: 'The image has too many pixels.'
+        empty: 'Choose an image.'
+        kind: 'This image cannot be changed here.'
+        forbidden: 'You may not change this image.'
+        off: 'Image uploads are not available right now.'
+        limit: 'The storage limit has been reached.'
+        storage: 'The image could not be saved. Try again later.'

@@ -3,6 +3,8 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.18.0](#to-1180)
+  - [To 1.18.0: owner images (opt-in)](#to-1180-owner-images-opt-in)
 - [To 1.17.0](#to-1170)
   - [To 1.17.0: `sessions.doctrine.exact_owner_collation` (optional, one query less per session list)](#to-1170-sessionsdoctrineexact_owner_collation-optional-one-query-less-per-session-list)
 - [To 1.16.3](#to-1163)
@@ -56,7 +58,7 @@
 
 ## Unreleased
 
-From **1.17.0** (target 1.18.0):
+From **1.18.0** (target 1.19.0):
 
 ```bash
 composer update nowo-tech/user-kit-bundle
@@ -93,6 +95,51 @@ No configuration change is required. New requirements: `nowo-tech/transaction-co
   (DoctrineDeadlockRetryBundle's or yours): it uses `nowo_user_kit.transaction_runner`. Nothing to configure.
 - **Constructors:** `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore` and `LastActivitySubscriber`
   take an optional trailing `UserKitTransactionRunner`. Positional callers are unaffected.
+
+## To 1.18.0
+
+From **1.17.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+### To 1.18.0: owner images (opt-in)
+
+No breaking change: `owner_images` is off by default. To move a host's own profile-picture / logo code to it:
+
+1. `composer require nowo-tech/storage-kit-bundle:^1.6` (the default storage), or set `owner_images.storage` to your
+   own `OwnerImageStorageInterface`. StorageKit 1.6 stops serving expired files (`orphaned_since` before 2000-01-02,
+   e.g. files a personal-data erasure handed to the purge): see its UPGRADING "To 1.6.0" for the query that counts them
+   before you upgrade.
+2. Enable it and declare the kinds:
+
+   ```yaml
+   nowo_user_kit:
+       owner_images:
+           enabled: true
+           kinds:
+               avatar:        { subject: user,  read: authenticated, shape: circle }
+               org_logo:      { subject: other, read: authenticated }
+               org_logo_dark: { subject: other, read: authenticated }
+           access: App\Files\OwnerImageAccess          # who manages an organization
+           pointer_store: App\Files\OwnerImagePointers # optional: keep your avatar_file_uuid / logo columns
+   ```
+
+   The subject id of a `user` kind is `OwnerImageSubjects::idOf($user)`: the Doctrine identifier of an instance of
+   `owner_images.user_class` (default: the `user_class` of your only profile; set it when you have several), or the
+   value of `OwnerImageSubjectInterface` when the user implements it. Implement the interface when the pointer key
+   should be another column (the `uuid` of the example below) or when several user classes have overlapping ids. PHP GD
+   must be built with WebP.
+3. Without `pointer_store`, create the table: `php bin/console doctrine:migrations:diff` (`user_kit_owner_image`, binary
+   collation on MySQL / MariaDB). Copy existing pointers into it:
+   `INSERT INTO user_kit_owner_image (kind, subject_id, file_id, updated_at) SELECT 'avatar', uuid, avatar_file_uuid, NOW() FROM app_user WHERE avatar_file_uuid IS NOT NULL;`
+4. Existing StorageKit files keep working only if their `context_type` is the kind name and their `context_id` the
+   subject id. Otherwise ask the users to upload again, or re-upload them with `OwnerImagesInterface::upload()`.
+5. Replace your Twig helpers with `user_avatar()` / `owner_image()` (pass `class:` to keep your CSS classes), and your
+   upload service calls with `OwnerImagesInterface`. Map `OwnerImageRefused::$reason` to your flashes, or use
+   `owner_image.error.<reason>` (domain `NowoUserKitBundle`).
+6. With `personal_data.enabled`, remove your own avatar eraser: `OwnerImageEraser` runs at priority -140.
 
 ## To 1.17.0
 
