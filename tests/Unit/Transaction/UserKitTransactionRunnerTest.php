@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Unit\Transaction;
 
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\DBAL\Driver\AbstractException;
 use Doctrine\DBAL\Exception\DeadlockException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -168,6 +169,83 @@ final class UserKitTransactionRunnerTest extends TestCase
         self::assertFalse($this->em->contains($tag), 'it points at the detached note');
         self::assertTrue($this->em->contains($other));
         self::assertCount(1, $this->logger->messages);
+    }
+
+    /**
+     * Audit QM-M1: an eraser's `remove()` of a failed unit is cancelled, so the caller's next flush does not delete the
+     * row (up to this fix the runner left it scheduled; 1.18's `wrapInTransaction()` closed the manager).
+     */
+    public function testARemovalOfAFailedUnitIsCancelled(): void
+    {
+        [$address, $hosts] = $this->notes('address', 'host');
+        $this->em->remove($hosts);
+
+        $this->failing(function () use ($address): never {
+            $this->em->remove($address);
+
+            throw new RuntimeException('eraser 2 refused');
+        });
+
+        self::assertTrue($this->em->contains($address));
+        self::assertFalse($this->em->getUnitOfWork()->isScheduledForDelete($address));
+        self::assertTrue($this->em->getUnitOfWork()->isScheduledForDelete($hosts), 'the caller\'s own removal stays scheduled');
+        $this->em->persist(new Note('unrelated'));
+        $this->em->flush();
+        self::assertSame(1, (int) $this->em->getConnection()->fetchOne("SELECT COUNT(*) FROM runner_note WHERE title = 'address'"));
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne("SELECT COUNT(*) FROM runner_note WHERE title = 'host'"));
+    }
+
+    /**
+     * Audit QM-M1: a collection the failed unit changed cannot be reverted row by row: the manager is closed (loud) and
+     * replaced at the next boundary.
+     */
+    public function testACollectionChangeOfAFailedUnitClosesTheManager(): void
+    {
+        [$note] = $this->notes('note');
+        $tag    = new Tag('label');
+        $this->em->persist($tag);
+        $this->em->flush();
+        $doctrine = $this->registry();
+        $doctrine->expects($this->once())->method('resetManager')->with('default');
+        $recovery = new ClosedManagerRecovery($doctrine);
+
+        $this->failing(static function () use ($note, $tag): never {
+            $note->labels->add($tag);
+
+            throw new RuntimeException('refused');
+        }, new UserKitTransactionRunner($doctrine, $recovery));
+
+        self::assertFalse($this->em->isOpen());
+        $recovery->reset();
+    }
+
+    public function testACollectionReplacedByAFailedUnitClosesTheManager(): void
+    {
+        [$note] = $this->notes('note');
+
+        $this->failing(static function () use ($note): never {
+            $note->labels = new ArrayCollection();
+
+            throw new RuntimeException('refused');
+        });
+
+        self::assertFalse($this->em->isOpen());
+    }
+
+    public function testACollectionTheCallerChangedBeforeTheUnitKeepsTheManagerOpen(): void
+    {
+        [$note] = $this->notes('note');
+        $tag    = new Tag('label');
+        $this->em->persist($tag);
+        $this->em->flush();
+        $note->labels->add($tag);
+
+        $this->failing(static function (): never {
+            throw new RuntimeException('refused');
+        });
+
+        self::assertTrue($this->em->isOpen());
+        self::assertTrue($this->em->contains($note));
     }
 
     public function testATransientFailureBecomesAUserKitStorageFailure(): void

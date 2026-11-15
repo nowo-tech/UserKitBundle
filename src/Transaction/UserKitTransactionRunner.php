@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Transaction;
 
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Events;
+use Doctrine\ORM\PersistentCollection;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\TransactionContract\TransactionRunnerInterface;
@@ -17,6 +19,7 @@ use Nowo\TransactionDoctrine\TransientFailureClassifier;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function array_diff_key;
 use function count;
 use function is_object;
 use function random_int;
@@ -43,6 +46,10 @@ use function usleep;
  *   the caller held and the unit did not change stays managed with the caller's pending changes. The runner compares
  *   each row's field values with a copy taken before the unit (no change set is computed for the caller's rows); a lazy
  *   row the unit only loaded stays managed;
+ * - the `remove()` calls of the unit are cancelled (audit QM-M1): a later flush never deletes what the failed unit meant
+ *   to;
+ * - when the unit changed a collection (orphan removal, cascaded children cannot be reverted row by row) the manager is
+ *   closed, as `wrapInTransaction()` did up to 1.18 (audit QM-M1);
  * - a manager the ORM closed in a failed flush stays closed for the rest of the request (the application's next flush
  *   fails loudly) and {@see ClosedManagerRecovery} replaces it at the next boundary.
  *
@@ -117,9 +124,11 @@ final readonly class UserKitTransactionRunner implements TransactionRunnerInterf
      */
     public function runFor(EntityManagerInterface $manager, callable $operation): mixed
     {
-        $before   = $this->rows($manager);
-        $states   = $this->states($manager);
-        $observer = new FlushObserver();
+        $before    = $this->rows($manager);
+        $states    = $this->states($manager);
+        $deletions = $this->deletions($manager);
+        $dirty     = $this->dirtyCollections($manager);
+        $observer  = new FlushObserver();
         $manager->getEventManager()->addEventListener([Events::postFlush], $observer);
 
         try {
@@ -130,7 +139,14 @@ final readonly class UserKitTransactionRunner implements TransactionRunnerInterf
                 return $result;
             });
         } catch (Throwable $failure) {
+            if ($manager->isOpen() && array_diff_key($this->dirtyCollections($manager), $dirty) !== []) {
+                // Audit QM-M1: a collection the unit changed cannot be reverted row by row (orphan removal, cascaded
+                // children): as `wrapInTransaction()` did up to 1.18, the manager is closed, so nothing of the failed unit
+                // can be flushed later; loud for the rest of the request, replaced at the next boundary.
+                $manager->close();
+            }
             if ($manager->isOpen()) {
+                $this->cancelDeletions($manager, $deletions);
                 $this->forget($manager, $before, $states, $observer->flushed);
             } else {
                 // Closed by the ORM in the failed flush: loud for the rest of the request, replaced at the next boundary.
@@ -221,6 +237,61 @@ final readonly class UserKitTransactionRunner implements TransactionRunnerInterf
         }
 
         return $states;
+    }
+
+    /**
+     * @return array<int, object> The entities scheduled for deletion, by object id
+     */
+    private function deletions(EntityManagerInterface $manager): array
+    {
+        $deletions = [];
+        foreach ($manager->getUnitOfWork()->getScheduledEntityDeletions() as $entity) {
+            $deletions[spl_object_id($entity)] = $entity;
+        }
+
+        return $deletions;
+    }
+
+    /**
+     * Audit QM-M1: the `remove()` calls of the failed unit are cancelled (`persist()` turns a removed entity back into a
+     * managed one; its row was never deleted, or its deletion was rolled back), so a later flush of the caller never
+     * deletes what the failed unit meant to. Deletions the caller scheduled before the unit stay scheduled.
+     *
+     * @param array<int, object> $before {@see self::deletions()} before the unit
+     */
+    private function cancelDeletions(EntityManagerInterface $manager, array $before): void
+    {
+        foreach (array_diff_key($this->deletions($manager), $before) as $entity) {
+            $manager->persist($entity);
+        }
+    }
+
+    /**
+     * The changed collections of the managed rows: a dirty `PersistentCollection`, or another collection set on a row
+     * the manager already holds.
+     *
+     * @return array<int, true> collection object id => true
+     */
+    private function dirtyCollections(EntityManagerInterface $manager): array
+    {
+        $unitOfWork = $manager->getUnitOfWork();
+        $dirty      = [];
+        foreach ($unitOfWork->getIdentityMap() as $entities) {
+            foreach ($entities as $entity) {
+                if ($this->isUninitialized($manager, $entity)) {
+                    continue;
+                }
+                $metadata = $manager->getClassMetadata($entity::class);
+                foreach ($metadata->getAssociationNames() as $field) {
+                    $collection = $metadata->isCollectionValuedAssociation($field) ? $metadata->getFieldValue($entity, $field) : null;
+                    if ($collection instanceof Collection && (!$collection instanceof PersistentCollection || $collection->isDirty())) {
+                        $dirty[spl_object_id($collection)] = true;
+                    }
+                }
+            }
+        }
+
+        return $dirty;
     }
 
     /**
