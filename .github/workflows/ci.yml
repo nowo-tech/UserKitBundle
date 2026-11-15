@@ -170,6 +170,8 @@ jobs:
           tools: composer:v2
       - name: Install DBAL 4.3 and ORM 3.6
         run: |
+          # Owner images' StorageKit (dev only) needs ORM 3.7+: this job runs the session listener tests only.
+          composer remove --dev nowo-tech/storage-kit-bundle league/flysystem-memory --no-interaction --no-update
           composer require doctrine/dbal:4.3.* doctrine/orm:3.6.* doctrine/doctrine-bundle:^2.10 --no-interaction --no-update --with-all-dependencies
           composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
           composer show | grep -E '^doctrine/(dbal|orm) '
