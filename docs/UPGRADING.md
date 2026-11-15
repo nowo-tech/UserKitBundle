@@ -89,12 +89,23 @@ No configuration change is required. New requirements: `nowo-tech/transaction-co
   that lost the race to a parallel one is refused after its credentials step: its session is signed out and the browser
   goes back to the path it posted to with the refusal as a flash message (JSON: 401 `session_signed_out`).
   PgBouncer in transaction / statement pooling mode is not supported for UserKit's connection when a limit is set.
+- **Sign-ins under a limit (more).** A sign-in that fails inside the limit section (503) is signed out, a refused one
+  keeps no remember-me cookie and goes back to the same-origin page that posted the form, and a signed-in session
+  without a registry row is registered through the limit (with `reject_new` over the limit it is signed out) instead
+  of unconditionally.
+- **Owner images.** Inside your own transaction, `upload()` and `remove()` expire the previous file (StorageKit 1.6, the
+  purge deletes it) instead of deleting its objects at once; outside a transaction nothing changes. Uploads of one
+  subject are serialised by a named lock (5 s, then 503), and a transient failure of the pointer write answers 503
+  (`UserKitStorageFailure`) instead of an `OwnerImageRefused` `storage` refusal. On PostgreSQL with DBAL 3 see
+  [HIGH-LOAD, Known issues](HIGH-LOAD.md#known-issues) for StorageKit's reference table.
+- **A failed erasure** cancels the `remove()` calls of its erasers, and closes the manager when it changed a collection.
 - **DBAL 3:** set `doctrine.dbal.use_savepoints: true` (DBAL 4 always does). The erasure nested in your transaction,
   and the first-row inserts inside a transaction, use savepoints.
 - **Your own transaction runner.** UserKit does not use the runner you bind to `TransactionRunnerInterface`
   (DoctrineDeadlockRetryBundle's or yours): it uses `nowo_user_kit.transaction_runner`. Nothing to configure.
-- **Constructors:** `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore` and `LastActivitySubscriber`
-  take an optional trailing `UserKitTransactionRunner`. Positional callers are unaffected.
+- **Constructors:** `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore`, `LastActivitySubscriber` and
+  `DbalOwnerImagePointerStore` take an optional trailing `UserKitTransactionRunner`; `OwnerImages` an optional
+  `ManagerRegistry` and manager name. Positional callers are unaffected.
 
 ## To 1.18.0
 

@@ -273,7 +273,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: json, pdo_mysql, pdo_pgsql
+          extensions: json, pdo_mysql, pdo_pgsql, gd, sodium
           coverage: none
           tools: composer:v2
       - name: Install dependencies
@@ -281,7 +281,9 @@ jobs:
       - name: Use DBAL 3
         if: ${{ matrix.dbal != '' }}
         run: |
-          composer require --no-interaction --no-progress --with-all-dependencies "doctrine/dbal:${{ matrix.dbal }}"
+          # A full update: StorageKit's instance-settings dependency must go back to a release that allows DBAL 3.
+          composer require --no-update --no-interaction "doctrine/dbal:${{ matrix.dbal }}"
+          composer update --with-all-dependencies --no-interaction --no-progress
           composer show doctrine/dbal | grep -E '^versions'
       - name: Races on a real server
         timeout-minutes: 10

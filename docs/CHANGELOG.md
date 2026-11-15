@@ -168,12 +168,16 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   lock wait as a raw `1205` / `55P03`, and the closed entity manager was replaced only incidentally (by the last
   activity listener of a later request). The erasure is now one unit of work of UserKit's runner: no transaction level
   left open, `UserKitStorageFailure` (503) for a transient failure, the manager neither reset nor cleared (only the rows
-  the erasure touched are detached), and a manager a failed flush closed stays closed for the request and is replaced
-  at the next boundary.
+  the erasure touched are detached, the `remove()` calls of the failed erasure are cancelled, and a collection it
+  changed closes the manager as `wrapInTransaction()` did), and a manager a failed flush closed stays closed for the
+  request and is replaced at the next boundary.
 - **Concurrent-session limit race.** Two parallel sign-ins of one user both counted the same sessions and both
   registered: one session over `max_sessions`. Counting, evicting and registering now run under a named lock of the
   user (`GET_LOCK()` / `pg_try_advisory_lock()`), and `reject_new` is checked again there: the second sign-in is
-  refused (its session signed out, the refusal shown as the flash message) or, with `evict_oldest`, evicts the first.
+  refused (its session signed out, the refusal shown as the flash message, no remember-me cookie, back to the
+  same-origin page that posted the form) or, with `evict_oldest`, evicts the first. A sign-in that fails in that
+  section (503, e.g. the lock not obtained in 5 s) is signed out, and under a limit a session registered on a later
+  request goes through the limit too.
 - **First row races inside a transaction.** A registry row or a remember-me epoch row inserted inside a transaction (an
   erasure, the application's own transaction) that lost its unique key race aborted the whole PostgreSQL transaction
   (`25P02` on the next statement). The insert now runs in its own savepoint. After a lost first epoch insert the row
@@ -186,6 +190,24 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
 - **PostgreSQL with DBAL 3: session registration failed.** The ORM gives the registry and epoch ids a sequence there
   (`AUTO`), and UserKit's DBAL inserts left the id out: every registration hit a NOT NULL violation. The inserts now take
   the next value of the entity's sequence (`Transaction\UserKitRows::sequenceId()`); identity columns are unchanged.
+- **Owner images (1.18.0) on PostgreSQL with DBAL 3: every first upload failed** (audit QM-M3). The pointer row
+  (`user_kit_owner_image`) was inserted through DBAL without an id while the ORM gives it a sequence there: a NOT NULL
+  violation, the upload refused. It now takes the next value of the sequence. StorageKit 1.6.0 has the same gap in its
+  own reference table: see [HIGH-LOAD](HIGH-LOAD.md#known-issues).
+- **Owner images (1.18.0): a lost first-pointer race failed the upload.** The pointer write (read, then insert, in a
+  hand-written transaction) answered a unique violation when another request stored the subject's first row meanwhile,
+  and inside the application's transaction PostgreSQL then aborted it. It now runs on UserKit's runner with the row
+  locked, the insert in its own savepoint, and a lost race writes over the winner's row; a deadlock or lock wait is
+  retried, else 503.
+- **Owner images (1.18.0): a replaced or removed picture was deleted before the commit.** Inside the application's
+  transaction, `upload()` and `remove()` deleted the previous file's objects from the bucket at once; after a rollback
+  the pointer was back on a file without objects. Inside a transaction the file is now expired (StorageKit 1.6, no
+  bucket call; the purge deletes it after the commit); outside one it is still removed at once.
+- **Owner images (1.18.0): two parallel uploads of one subject.** Both read the same previous picture; the pointer and
+  the StorageKit reference could end on different files (the purge would then delete the picture shown) and the other
+  new file was never removed. Reading the previous picture, writing the pointer and the reference now run under a named
+  lock of the kind and subject; the second upload replaces (and removes) the first one's file. A transient failure of
+  the upload answers 503 instead of a `storage` refusal.
 - **Last activity moves forward only.** Two workers keep separate throttle maps; the later write of an earlier request
   moved the timestamp back. The mapped column is now written with `WHERE column IS NULL OR column < :value`.
 
@@ -193,8 +215,9 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
 
 - Requirements: + `nowo-tech/transaction-contract` ^1.0, + `nowo-tech/transaction-doctrine` ^1.1;
   `doctrine/dbal` ^3.8.2 || ^4.0 (was ^3.8), `doctrine/orm` ^2.16 || ^3.0 (was ^2.15). Dev: `nowo-tech/phpstan-frankenphp` ^1.4.
-- `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore` and `LastActivitySubscriber` take an optional
-  trailing `UserKitTransactionRunner` argument.
+- `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore`, `LastActivitySubscriber` and
+  `DbalOwnerImagePointerStore` take an optional trailing `UserKitTransactionRunner` argument; `OwnerImages` takes an
+  optional `ManagerRegistry` and manager name for its lock.
 - The erasure nested in an open application transaction runs in a savepoint (1.18 joined it directly); on failure it
   still marks that transaction rollback-only.
 

@@ -14,6 +14,7 @@ with Messenger consumers.
 - [The application's entity manager](#the-applications-entity-manager)
 - [Database topology](#database-topology)
 - [Workers and boundaries](#workers-and-boundaries)
+- [Known issues](#known-issues)
 - [Testing on a real database](#testing-on-a-real-database)
 
 ## What UserKit writes
@@ -25,9 +26,11 @@ with Messenger consumers.
 | Remember-me epoch (`revokeAll()`, `revokeOthers()`, erasure) | One row per user, moved forward only | Same as the registry; the re-read after a lost first insert is a locking read |
 | Concurrent-session limit (sign-in) | Count, evict, register | Under a named lock of the user |
 | Last activity (`kernel.request`) | One DQL `UPDATE` of the user's column, throttled | Moves forward only; retried in autocommit; failures only logged |
+| Owner images (`OwnerImagesInterface::upload()` / `remove()`, 1.18.0) | The pointer row (`user_kit_owner_image`), StorageKit's file, reference and bucket objects | Previous picture, pointer and reference under a named lock of the kind and subject; pointer row locked, first row in a savepoint with its sequence id; previous file expired (not deleted) inside a transaction |
 
 UI preferences, profile settings and product tour progress are fields of your user entity: your application writes
-them with its own flush. UserKit only resets them inside the erasure.
+them with its own flush. UserKit only resets them inside the erasure. The erasure forgets owner images with StorageKit's
+`expire()` (no bucket call, safe inside its transaction).
 
 ## UserKit's own transaction runner
 
@@ -95,6 +98,12 @@ reload. Up to 1.18 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTi
   `25P02 current transaction is aborted` on the next statement, which failed an erasure that raced a "sign out
   everywhere"). After a lost first epoch insert the row is re-read with a locking read, so MySQL's REPEATABLE READ
   snapshot no longer hides the winner (up to 1.18 that read as a look-alike collision and failed the erasure).
+- **A sign-in that fails inside the limit section** (the lock not obtained in 5 s, a storage failure: 503) is signed out
+  before the failure goes on (no token kept in the session, no remember-me cookie), and under a limit a signed-in
+  session without a registry row (its sign-in was not registered) is registered through the limit on its next request.
+- **Owner images.** Two uploads (or an upload and a removal) of one subject run one after the other: the previous
+  picture is read, the pointer and StorageKit's reference written under a named lock of the kind and subject, 5 s at
+  most, then 503. The second upload sees the first one's file as the previous picture and removes it.
 - **Last activity.** Two workers keep separate throttle maps, so two requests of one user can both write. The column
   only moves forward (`WHERE column IS NULL OR column < :value`), so the later write of an earlier request no longer
   moves the last activity back. A custom setter on an unmapped field writes the mapped fields it changed, as before,
@@ -106,13 +115,17 @@ After a failed erasure UserKit never resets nor clears your entity manager:
 
 - the rows the unit added, flushed or changed are **detached** (their database state was rolled back): the user entity
   the erasers changed, for example. Reload them before you write them again;
+- the `remove()` calls of the failed erasure are cancelled (the entity is managed again, nothing deleted later), while
+  a removal you scheduled before the erasure stays scheduled;
+- when the failed erasure changed a collection (to-many: orphan removal, cascaded children), the changes cannot be
+  undone row by row: the manager is closed, as `wrapInTransaction()` did up to 1.18, and replaced at the next boundary;
 - a row that points (to-one) at a detached row is detached too, otherwise your next flush would try to insert the
   detached row again; UserKit logs a warning with the count. Its pending changes are lost: reload it;
 - every other row you hold stays managed **with its pending changes**: UserKit compares each row's field values with a
   copy taken before the unit, without asking the ORM for change sets. A lazy reference the erasure only loaded stays
   managed;
-- in-place changes of a mutable object field (a `DateTime` modified in place) and changes of to-many collections made
-  by an eraser without a flush are not seen by that comparison: return new objects from your erasers;
+- in-place changes of a mutable object field (a `DateTime` modified in place) made by an eraser are not seen by that
+  comparison: set new objects in your erasers;
 - a manager the ORM closed in a failed flush **stays closed** for the rest of the request, so your next flush fails
   loudly ("The EntityManager is closed") instead of silently writing nothing. It is replaced at the next boundary.
 
@@ -147,6 +160,22 @@ and every registration failed with a NOT NULL violation).
   (`flagRollbackAfterNestedBegin`, `flagFlushInHandWrittenTransaction`, `flagUnboundedRecursion`,
   `flagFlushWithoutClosedManagerRecovery`). Turn them on in your application too.
 
+## Known issues
+
+- **StorageKit 1.6.0 on PostgreSQL with DBAL 3.** StorageKit writes its file references (`storage_kit_file_reference`)
+  through DBAL without an id, and the ORM gives that id a sequence there: every owner image upload fails in StorageKit
+  with a NOT NULL violation (UserKit's own pointer row is fixed). Until StorageKit fixes it, give the column its sequence
+  as default: `ALTER TABLE storage_kit_file_reference ALTER COLUMN id SET DEFAULT nextval('storage_kit_file_reference_id_seq');`
+  DBAL 4 (identity columns), MySQL and MariaDB are not affected.
+- **The session limit's lock inside your transaction.** The named lock is a session lock released right after the
+  registration. When UserKit's connection is inside a transaction your application opened at sign-in (a request-wide
+  transaction middleware, a PDO session handler on the same connection), the registered row stays invisible to the next
+  sign-in until your transaction commits, so two sign-ins can again both count below the limit. Sign users in outside a
+  transaction (audit QM-L3).
+- **The refused sign-in's redirect.** The browser goes back to the same-origin `Referer` (the page that posted the form),
+  else to the posted path as a GET; a client that sends no `Referer` with `check_path` different from `login_path`
+  lands on the check path (audit QM-L2).
+
 ## Testing on a real database
 
 `tests/Load` runs the races on a real server (CI job **Load readiness**: MySQL 8.4 and PostgreSQL 16, each with DBAL 4
@@ -166,3 +195,7 @@ USER_KIT_LOAD_DATABASE_URL='mysql://root@127.0.0.1:3306/user_kit_load?serverVers
 | `RegistryLoadTest::testATouchThatWaitedTooLongForTheRowIsRetried` | Raw `1205` / `55P03` |
 | `RegistryLoadTest::testAnInsertThatLosesTheRaceInsideATransactionLeavesItUsable` | PostgreSQL: `25P02` |
 | `SessionLimitRaceTest` (`evict_oldest`, `reject_new`; two processes) | Two live sessions under a limit of one |
+| `SessionLimitLockTimeoutTest` (`evict_oldest`, `reject_new`) | (audit QM-M2, on the reviewed head) the 503 sign-in stays signed in: two live sessions |
+| `OwnerImageLoadTest::testTheFirstPointerRowIsWritten` | 1.18.0 on PostgreSQL + DBAL 3: NOT NULL on the pointer id |
+| `OwnerImageLoadTest::testAPointerWriteThatLosesTheFirstRowRaceInsideATransactionWritesOverTheWinner` | 1.18.0: unique violation (MySQL, PostgreSQL) |
+| `OwnerImageLoadTest::testTwoParallelUploadsOfOneSubjectEndOnOneImage` (two processes) | 1.18.0: pointer and reference on different files |
