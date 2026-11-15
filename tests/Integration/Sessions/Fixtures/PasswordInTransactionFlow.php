@@ -30,6 +30,7 @@ final readonly class PasswordInTransactionFlow
         $connection = $this->em->getConnection();
         $connection->beginTransaction();
         $member->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em->flush();
         $request->query->getString('end') === 'commit' ? $connection->commit() : $connection->rollBack();
 

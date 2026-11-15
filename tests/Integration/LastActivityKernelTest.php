@@ -7,11 +7,13 @@ namespace Nowo\UserKitBundle\Tests\Integration;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
+use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\Tests\Integration\Fixtures\Entity\AliasedActivityUser;
 use Nowo\UserKitBundle\Tests\Integration\Fixtures\Entity\TrackedUser;
 use Nowo\UserKitBundle\Tests\Integration\Fixtures\TestKernel;
 use Nowo\UserKitBundle\Tests\Support\ProfileRegistryFactory;
+use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
@@ -88,6 +90,25 @@ final class LastActivityKernelTest extends TestCase
         $unitOfWork = $this->entityManager->getUnitOfWork();
         $unitOfWork->computeChangeSets();
         $this->assertSame(['displayName'], array_keys($unitOfWork->getEntityChangeSet($user)));
+    }
+
+    /**
+     * 1.19.0 (Beacon spec 239): two workers keep separate throttle maps, so two requests of one user can both write; the
+     * later write of the earlier request no longer moves the last activity back (up to 1.18 it stored 10:00).
+     */
+    public function testTheLastActivityOnlyMovesForward(): void
+    {
+        $user = new TrackedUser('alice', 'Alice');
+        $this->entityManager->persist($user);
+        $this->entityManager->flush();
+        $doctrine = $this->kernel?->getContainer()->get('doctrine');
+        $this->assertInstanceOf(ManagerRegistry::class, $doctrine);
+        $runner = new UserKitTransactionRunner($doctrine);
+
+        $this->subscriber($user, now: '2026-10-28 10:05:00', runner: $runner)->onKernelRequest($this->event());
+        $this->subscriber($user, now: '2026-10-28 10:00:00', runner: $runner)->onKernelRequest($this->event());
+
+        $this->assertSame('2026-10-28 10:05:00', $this->entityManager->getConnection()->fetchOne('SELECT lastActivityAt FROM user_kit_tracked_user WHERE username = ?', ['alice']));
     }
 
     public function testACustomSetterOnAnUnmappedFieldWritesOnlyTheColumnsItChanged(): void
@@ -182,7 +203,7 @@ final class LastActivityKernelTest extends TestCase
     /**
      * @param class-string $userClass
      */
-    private function subscriber(TrackedUser|AliasedActivityUser $user, string $userClass = TrackedUser::class): LastActivitySubscriber
+    private function subscriber(TrackedUser|AliasedActivityUser $user, string $userClass = TrackedUser::class, string $now = '2026-10-28 10:00:00', ?UserKitTransactionRunner $runner = null): LastActivitySubscriber
     {
         $tokenStorage = new TokenStorage();
         $tokenStorage->setToken(new UsernamePasswordToken($user, 'main', ['ROLE_USER']));
@@ -192,7 +213,8 @@ final class LastActivityKernelTest extends TestCase
             $this->entityManager,
             $tokenStorage,
             PropertyAccess::createPropertyAccessor(),
-            new MockClock(new DateTimeImmutable('2026-10-28 10:00:00')),
+            new MockClock(new DateTimeImmutable($now)),
+            runner: $runner,
         );
     }
 

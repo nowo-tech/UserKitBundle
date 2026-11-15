@@ -135,6 +135,7 @@ make igor
 - [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Demo with FrankenPHP](docs/DEMO-FRANKENPHP.md)
 - [FrankenPHP worker audit](docs/FRANKENPHP-WORKER-AUDIT.md)
+- [High load (transactions, retries, 503/409, locks)](docs/HIGH-LOAD.md)
 - [Baseline product spec](specs/001-baseline/spec.md)
 - [Code inventory](specs/001-baseline/code-inventory.md)
 - [UI preferences spec (002)](specs/002-ui-preferences/spec.md)

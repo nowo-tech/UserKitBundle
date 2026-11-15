@@ -7,7 +7,6 @@ namespace Nowo\UserKitBundle\Sessions\Doctrine;
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\MySQL80Platform;
@@ -20,6 +19,9 @@ use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use Nowo\UserKitBundle\Transaction\UserKitRows;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
+use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
 use SortDirection;
 
 use function array_column;
@@ -58,6 +60,8 @@ final readonly class UserSessionStore
     /** Upper bound of the rows a page lists (REQ-PERF-001). */
     public const MAX_LIST = 200;
 
+    private UserKitTransactionRunner $runner;
+
     /**
      * @param string|null $entityManagerName `sessions.doctrine.entity_manager` (null = the manager of the entity)
      * @param bool $exactOwnerCollation `sessions.doctrine.exact_owner_collation`: the owner columns are declared with
@@ -65,12 +69,16 @@ final readonly class UserSessionStore
      *                                  candidate scan of {@see self::findActive()} is skipped. Opt-in, default false;
      *                                  the `===` re-check runs in both paths, so a host that turns it on without the
      *                                  `ALTER` finds no session (signed out) instead of a look-alike's.
+     * @param UserKitTransactionRunner|null $runner 1.19.0: retries an autocommit write that deadlocked or waited too long
+     *                                              for a lock ({@see UserKitTransactionRunner::statement()})
      */
     public function __construct(
         private ManagerRegistry $doctrine,
         private ?string $entityManagerName = null,
         private bool $exactOwnerCollation = false,
+        ?UserKitTransactionRunner $runner = null,
     ) {
+        $this->runner = $runner ?? new UserKitTransactionRunner($doctrine);
     }
 
     /**
@@ -88,24 +96,24 @@ final readonly class UserSessionStore
      */
     public function insert(SessionUser $user, string $hash, SessionClient $client, DateTimeImmutable $now): bool
     {
-        try {
-            $this->connection()->insert($this->table(), [
-                'public_id'    => bin2hex(random_bytes(16)),
-                'user_type'    => $user->type,
-                'user_id'      => $user->id,
-                'session_hash' => $hash,
-                'device_id'    => $client->deviceId,
-                'browser'      => $client->browser,
-                'os'           => $client->os,
-                'ip'           => $client->ip,
-                'created_at'   => $now,
-                'last_seen_at' => $now,
-            ], ['created_at' => Types::DATETIME_IMMUTABLE, 'last_seen_at' => Types::DATETIME_IMMUTABLE]);
-        } catch (UniqueConstraintViolationException) {
-            return false;
-        }
+        $connection = $this->connection();
+        $table      = $this->table();
+        $metadata   = $this->entityManager()->getClassMetadata(UserSession::class);
 
-        return true;
+        // 1.19.0: in its own savepoint inside a transaction (a lost race no longer aborts a PostgreSQL transaction), and
+        // retried when it deadlocks in autocommit.
+        return $this->runner->statement($connection, static fn (): bool => UserKitRows::insert($connection, $table, UserKitRows::sequenceId($connection, $metadata) + [
+            'public_id'    => bin2hex(random_bytes(16)),
+            'user_type'    => $user->type,
+            'user_id'      => $user->id,
+            'session_hash' => $hash,
+            'device_id'    => $client->deviceId,
+            'browser'      => $client->browser,
+            'os'           => $client->os,
+            'ip'           => $client->ip,
+            'created_at'   => $now,
+            'last_seen_at' => $now,
+        ], ['created_at' => Types::DATETIME_IMMUTABLE, 'last_seen_at' => Types::DATETIME_IMMUTABLE]));
     }
 
     /**
@@ -122,22 +130,24 @@ final readonly class UserSessionStore
      */
     public function touch(string $hash, SessionUser $owner, DateTimeImmutable $now, ?string $deviceId = null): bool
     {
-        $params   = ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id];
-        $affected = $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
-            ['now' => $now, 'device' => $deviceId] + $params,
-            ['now' => Types::DATETIME_IMMUTABLE],
-        );
-        if ($affected > 0) {
-            return true;
-        }
+        return $this->write(function () use ($hash, $owner, $now, $deviceId): bool {
+            $params   = ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id];
+            $affected = $this->connection()->executeStatement(
+                'UPDATE ' . $this->table() . ' SET last_seen_at = :now, device_id = COALESCE(device_id, :device) WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
+                ['now' => $now, 'device' => $deviceId] + $params,
+                ['now' => Types::DATETIME_IMMUTABLE],
+            );
+            if ($affected > 0) {
+                return true;
+            }
 
-        $rows = $this->connection()->fetchAllAssociative(
-            'SELECT user_type, user_id FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL' . self::sharedLock($this->connection()->getDatabasePlatform()),
-            $params,
-        );
+            $rows = $this->connection()->fetchAllAssociative(
+                'SELECT user_type, user_id FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL' . self::sharedLock($this->connection()->getDatabasePlatform()),
+                $params,
+            );
 
-        return $this->ownRows($owner, $rows) !== [];
+            return $this->ownRows($owner, $rows) !== [];
+        });
     }
 
     /**
@@ -228,10 +238,12 @@ final readonly class UserSessionStore
      */
     public function rekey(string $from, string $to, SessionUser $owner): void
     {
-        $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from AND ' . $this->ownerSql(),
-            ['to' => $to, 'from' => $from, 'type' => $owner->type, 'id' => $owner->id],
-        );
+        $this->write(function () use ($from, $to, $owner): void {
+            $this->connection()->executeStatement(
+                'UPDATE ' . $this->table() . ' SET session_hash = :to WHERE session_hash = :from AND ' . $this->ownerSql(),
+                ['to' => $to, 'from' => $from, 'type' => $owner->type, 'id' => $owner->id],
+            );
+        });
     }
 
     /**
@@ -239,7 +251,9 @@ final readonly class UserSessionStore
      */
     public function deleteByHash(string $hash): void
     {
-        $this->connection()->executeStatement('DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+        $this->write(function () use ($hash): void {
+            $this->connection()->executeStatement('DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash', ['hash' => $hash]);
+        });
     }
 
     /**
@@ -247,10 +261,12 @@ final readonly class UserSessionStore
      */
     public function deleteRow(string $hash, SessionUser $owner): void
     {
-        $this->connection()->executeStatement(
-            'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql(),
-            ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
-        );
+        $this->write(function () use ($hash, $owner): void {
+            $this->connection()->executeStatement(
+                'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql(),
+                ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+            );
+        });
     }
 
     /**
@@ -261,10 +277,10 @@ final readonly class UserSessionStore
      */
     public function deleteLiveRow(string $hash, SessionUser $owner): bool
     {
-        return $this->connection()->executeStatement(
+        return $this->write(fn (): bool => $this->connection()->executeStatement(
             'DELETE FROM ' . $this->table() . ' WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
             ['hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
-        ) > 0;
+        ) > 0);
     }
 
     /**
@@ -272,11 +288,13 @@ final readonly class UserSessionStore
      */
     public function markRevoked(string $hash, SessionUser $owner, string $reason, DateTimeImmutable $now): void
     {
-        $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
-            ['now' => $now, 'reason' => $reason, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
-            ['now' => Types::DATETIME_IMMUTABLE],
-        );
+        $this->write(function () use ($hash, $owner, $reason, $now): void {
+            $this->connection()->executeStatement(
+                'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE session_hash = :hash AND ' . $this->ownerSql() . ' AND revoked_at IS NULL',
+                ['now' => $now, 'reason' => $reason, 'hash' => $hash, 'type' => $owner->type, 'id' => $owner->id],
+                ['now' => Types::DATETIME_IMMUTABLE],
+            );
+        });
     }
 
     /**
@@ -435,39 +453,41 @@ final readonly class UserSessionStore
      */
     public function revoke(SessionUser $user, RevocationReason|string $reason, DateTimeImmutable $now, ?array $publicIds = null, ?string $deviceId = null, ?string $except = null): array
     {
-        if ($publicIds === []) {
-            return [];
-        }
-        $qb = $this->connection()->createQueryBuilder()
-            ->select('public_id', 'session_hash', 'user_type', 'user_id')
-            ->from($this->table())
-            ->where($this->ownerSql())
-            ->andWhere('revoked_at IS NULL')
-            ->setParameter('type', $user->type)
-            ->setParameter('id', $user->id);
-        if ($publicIds !== null) {
-            $qb->andWhere('public_id IN (:ids)')->setParameter('ids', $publicIds, ArrayParameterType::STRING);
-        }
-        if ($deviceId !== null) {
-            $qb->andWhere('device_id = :device')->setParameter('device', $deviceId);
-        }
-        if ($except !== null) {
-            $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
-        }
-        $rows = array_map(
-            static fn (array $row): array => ['public_id' => (string) $row['public_id'], 'hash' => (string) $row['session_hash']],
-            $this->ownRows($user, $qb->executeQuery()->fetchAllAssociative()),
-        );
-        if ($rows === []) {
-            return [];
-        }
-        $this->connection()->executeStatement(
-            'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE revoked_at IS NULL AND session_hash IN (:hashes)',
-            ['now' => $now, 'reason' => $reason instanceof RevocationReason ? $reason->value : $reason, 'hashes' => array_column($rows, 'hash')],
-            ['now' => Types::DATETIME_IMMUTABLE, 'hashes' => ArrayParameterType::STRING],
-        );
+        return $this->write(function () use ($user, $reason, $now, $publicIds, $deviceId, $except): array {
+            if ($publicIds === []) {
+                return [];
+            }
+            $qb = $this->connection()->createQueryBuilder()
+                ->select('public_id', 'session_hash', 'user_type', 'user_id')
+                ->from($this->table())
+                ->where($this->ownerSql())
+                ->andWhere('revoked_at IS NULL')
+                ->setParameter('type', $user->type)
+                ->setParameter('id', $user->id);
+            if ($publicIds !== null) {
+                $qb->andWhere('public_id IN (:ids)')->setParameter('ids', $publicIds, ArrayParameterType::STRING);
+            }
+            if ($deviceId !== null) {
+                $qb->andWhere('device_id = :device')->setParameter('device', $deviceId);
+            }
+            if ($except !== null) {
+                $qb->andWhere('session_hash <> :except')->setParameter('except', $except);
+            }
+            $rows = array_map(
+                static fn (array $row): array => ['public_id' => (string) $row['public_id'], 'hash' => (string) $row['session_hash']],
+                $this->ownRows($user, $qb->executeQuery()->fetchAllAssociative()),
+            );
+            if ($rows === []) {
+                return [];
+            }
+            $this->connection()->executeStatement(
+                'UPDATE ' . $this->table() . ' SET revoked_at = :now, revoked_reason = :reason WHERE revoked_at IS NULL AND session_hash IN (:hashes)',
+                ['now' => $now, 'reason' => $reason instanceof RevocationReason ? $reason->value : $reason, 'hashes' => array_column($rows, 'hash')],
+                ['now' => Types::DATETIME_IMMUTABLE, 'hashes' => ArrayParameterType::STRING],
+            );
 
-        return $rows;
+            return $rows;
+        });
     }
 
     /**
@@ -494,19 +514,21 @@ final readonly class UserSessionStore
      */
     public function deleteFor(SessionUser $user): int
     {
-        $ids = array_map(intval(...), array_column($this->ownRows($user, $this->connection()->fetchAllAssociative(
-            'SELECT id, user_type, user_id FROM ' . $this->table() . ' WHERE ' . $this->ownerSql(),
-            ['type' => $user->type, 'id' => $user->id],
-        )), 'id'));
-        if ($ids === []) {
-            return 0;
-        }
+        return $this->write(function () use ($user): int {
+            $ids = array_map(intval(...), array_column($this->ownRows($user, $this->connection()->fetchAllAssociative(
+                'SELECT id, user_type, user_id FROM ' . $this->table() . ' WHERE ' . $this->ownerSql(),
+                ['type' => $user->type, 'id' => $user->id],
+            )), 'id'));
+            if ($ids === []) {
+                return 0;
+            }
 
-        return (int) $this->connection()->executeStatement(
-            'DELETE FROM ' . $this->table() . ' WHERE id IN (:ids)',
-            ['ids' => $ids],
-            ['ids' => ArrayParameterType::INTEGER],
-        );
+            return (int) $this->connection()->executeStatement(
+                'DELETE FROM ' . $this->table() . ' WHERE id IN (:ids)',
+                ['ids' => $ids],
+                ['ids' => ArrayParameterType::INTEGER],
+            );
+        });
     }
 
     /**
@@ -538,14 +560,31 @@ final readonly class UserSessionStore
             if ($ids === []) {
                 break;
             }
-            $deleted += (int) $this->connection()->executeStatement(
+            $deleted += $this->write(fn (): int => (int) $this->connection()->executeStatement(
                 'DELETE FROM ' . $this->table() . ' WHERE id IN (:ids)',
                 ['ids' => array_map(intval(...), $ids)],
                 ['ids' => ArrayParameterType::INTEGER],
-            );
+            ));
         } while (count($ids) === $batchSize);
 
         return $deleted;
+    }
+
+    /**
+     * 1.19.0 (Beacon spec 239): a write of the registry (one statement, or an idempotent group of them) through
+     * {@see UserKitTransactionRunner::statement()}: retried in autocommit when it deadlocks or waits too long for a
+     * lock, a {@see UserKitStorageFailure} (503) when that keeps failing or happens
+     * inside the caller's transaction.
+     *
+     * @template T
+     *
+     * @param callable(): T $write
+     *
+     * @return T
+     */
+    private function write(callable $write): mixed
+    {
+        return $this->runner->statement($this->connection(), $write);
     }
 
     /**

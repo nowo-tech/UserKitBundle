@@ -33,6 +33,7 @@ use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\OwnerImageFileContext;
 use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\StorageKitOwnerImageStorage;
 use Nowo\UserKitBundle\OwnerImage\Twig\OwnerImageExtension;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -116,7 +117,7 @@ final class OwnerImagesLoader
         $store = self::serviceId($config['pointer_store']);
         if ($store === null) {
             $manager = self::serviceId($config['doctrine']['entity_manager']);
-            $container->setDefinition(DbalOwnerImagePointerStore::class, new Definition(DbalOwnerImagePointerStore::class, [new Reference('doctrine'), $manager]));
+            $container->setDefinition(DbalOwnerImagePointerStore::class, new Definition(DbalOwnerImagePointerStore::class, [new Reference('doctrine'), $manager, new Reference(UserKitTransactionRunner::class)]));
             // House rule LQ: binary collation of kind / subject_id on MySQL / MariaDB.
             $container->setDefinition(PointerCollationListener::class, (new Definition(PointerCollationListener::class, [new Reference('doctrine'), $manager]))
                 ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
@@ -129,6 +130,10 @@ final class OwnerImagesLoader
         }
         $container->setAlias(OwnerImageStorageInterface::class, $storage ?? StorageKitOwnerImageStorage::class)->setPublic(true);
 
+        if (!$container->hasDefinition(CommitQueue::class)) {
+            // 1.19.0 (audit QM-D-M1): a replaced picture is deleted after the outermost commit, also without the registry.
+            SessionsLoader::registerCommitQueue($container, new Reference('doctrine'));
+        }
         $container->setDefinition(OwnerImages::class, (new Definition(OwnerImages::class, [
             new Reference(OwnerImageKinds::class),
             new Reference(OwnerImageAccessInterface::class),
@@ -137,6 +142,9 @@ final class OwnerImagesLoader
             new Reference(OwnerImageSubjects::class),
             new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            new Reference('doctrine', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            self::serviceId($config['doctrine']['entity_manager']),
+            new Reference(CommitQueue::class, ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]))->setPublic(true));
         $container->setAlias(OwnerImagesInterface::class, OwnerImages::class)->setPublic(true);
 

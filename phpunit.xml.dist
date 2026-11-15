@@ -21,6 +21,10 @@
         <testsuite name="Integration">
             <directory>tests/Integration</directory>
         </testsuite>
+        <!-- 1.19.0: real-database load tests (USER_KIT_LOAD_DATABASE_URL; skipped without it). -->
+        <testsuite name="load">
+            <directory>tests/Load</directory>
+        </testsuite>
     </testsuites>
 
     <source ignoreIndirectDeprecations="true" restrictNotices="true" restrictWarnings="true">

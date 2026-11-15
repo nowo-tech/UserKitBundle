@@ -45,6 +45,7 @@ final class SessionRegistryOnAnotherConnectionTest extends SessionsKernelTestCas
         $this->start();
         $this->users()->beginTransaction();
         $this->alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         $this->users()->rollBack();
         $this->manager()->releaseHeldRevocations();
@@ -57,6 +58,7 @@ final class SessionRegistryOnAnotherConnectionTest extends SessionsKernelTestCas
         $this->start();
         $this->users()->beginTransaction();
         $this->alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         self::assertCount(1, $this->manager()->listFor($this->alice), 'Still held.');
         $this->users()->commit();

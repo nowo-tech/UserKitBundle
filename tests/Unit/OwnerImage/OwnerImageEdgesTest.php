@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\DBAL\Types\Types;
@@ -31,7 +32,10 @@ use Nowo\UserKitBundle\OwnerImage\Storage\OwnerImageStorageInterface;
 use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\OwnerImageFileContext;
 use Nowo\UserKitBundle\OwnerImage\Twig\OwnerImageExtension;
 use Nowo\UserKitBundle\PersonalData\ErasureRequest;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
+use RuntimeException;
 use stdClass;
 use Symfony\Component\Security\Core\User\InMemoryUser;
 
@@ -81,6 +85,84 @@ final class OwnerImageEdgesTest extends TestCase
         self::assertNull($context->writableTarget(new InMemoryUser('alice', null), 'alice'));
         self::assertNull($context->writableTarget(new InMemoryUser('alice', null), '../alice'));
         self::assertSame(['a'], $context->readable(null, ['a', 'b']));
+    }
+
+    /**
+     * 1.19.0: a transient failure of the pointer write removes the new file and answers 503, not a `storage` refusal.
+     */
+    private function images(OwnerImagePointerStoreInterface $pointers, OwnerImageStorageInterface $storage, ?ManagerRegistry $doctrine = null, ?string $manager = null): OwnerImages
+    {
+        $access = $this->createStub(OwnerImageAccessInterface::class);
+        $access->method('writableTarget')->willReturn(new OwnerImageTarget());
+
+        return new OwnerImages(
+            new OwnerImageKinds([new OwnerImageKind('avatar', OwnerImageKind::SUBJECT_USER)]),
+            $access,
+            $pointers,
+            $storage,
+            new OwnerImageSubjects(),
+            null,
+            new NullLogger(),
+            $doctrine,
+            $manager,
+        );
+    }
+
+    public function testATransientPointerFailureIsRethrown(): void
+    {
+        $pointers = $this->createMock(OwnerImagePointerStoreInterface::class);
+        $pointers->method('find')->willReturn([]);
+        $pointers->method('set')->willThrowException(new UserKitStorageFailure(1));
+        $storage = $this->createMock(OwnerImageStorageInterface::class);
+        $storage->method('store')->willReturn('new-file');
+        $storage->expects(self::once())->method('delete')->with(self::anything(), 'alice', 'new-file');
+        $access = $this->createStub(OwnerImageAccessInterface::class);
+        $access->method('writableTarget')->willReturn(new OwnerImageTarget());
+        $images = new OwnerImages(
+            new OwnerImageKinds([new OwnerImageKind('avatar', OwnerImageKind::SUBJECT_USER)]),
+            $access,
+            $pointers,
+            $storage,
+            new OwnerImageSubjects(),
+        );
+
+        $this->expectException(UserKitStorageFailure::class);
+        $images->upload(new stdClass(), 'avatar', 'alice', 'bytes', 'a.png');
+    }
+
+    public function testAReferenceFailureAfterThePointerKeepsTheNewFile(): void
+    {
+        $pointers = $this->createMock(OwnerImagePointerStoreInterface::class);
+        $pointers->method('find')->willReturn([]);
+        $storage = $this->createMock(OwnerImageStorageInterface::class);
+        $storage->method('store')->willReturn('new-file');
+        $storage->method('attach')->willThrowException(new RuntimeException('reference'));
+        $storage->expects(self::never())->method('delete');
+
+        $this->expectExceptionMessage('reference');
+        $this->images($pointers, $storage)->upload(new stdClass(), 'avatar', 'alice', 'bytes', 'a.png');
+    }
+
+    /**
+     * 1.19.0 (audit QM-D-L1): inside a transaction of the pointer's connection and without the commit queue the
+     * replaced picture is expired (no bucket call), never deleted before the commit.
+     */
+    public function testInsideATransactionWithoutTheCommitQueueThePreviousPictureIsExpired(): void
+    {
+        $pointers = $this->createMock(OwnerImagePointerStoreInterface::class);
+        $pointers->method('find')->willReturn(['alice' => 'old-file']);
+        $storage = $this->createMock(OwnerImageStorageInterface::class);
+        $storage->method('store')->willReturn('new-file');
+        $storage->expects(self::once())->method('delete')->with(self::anything(), 'alice', 'old-file', true);
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $connection->method('getDatabasePlatform')->willReturn(new SQLitePlatform());
+        $manager = $this->createMock(EntityManagerInterface::class);
+        $manager->method('getConnection')->willReturn($connection);
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManager')->willReturn($manager);
+
+        $this->images($pointers, $storage, $doctrine, 'default')->upload(new stdClass(), 'avatar', 'alice', 'bytes', 'a.png');
     }
 
     public function testAnErasureOfAUserWithoutASubjectIdDoesNothing(): void

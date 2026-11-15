@@ -141,6 +141,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.50.0. See [HIGH-LOAD](HIGH-LOAD.md) and
+[UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **UserKit's own transaction runner** `Transaction\UserKitTransactionRunner` (service `nowo_user_kit.transaction_runner`,
+  on nowo-tech/transaction-contract ^1.0 and transaction-doctrine ^1.1, DBAL 3 and 4). UserKit injects it by class: a
+  runner the application binds to `TransactionRunnerInterface` is never used for UserKit's writes.
+- **503 / 409:** `Transaction\UserKitStorageFailure` (a `TransientStorageFailure`) for a deadlock, a lock wait timeout,
+  a serialization failure or a named lock not obtained in 5 s; `Transaction\UserKitConflict` for a unique key race the
+  erasure cannot resolve. `EventSubscriber\StorageFailureSubscriber` (priority -64) answers them with 503 + `Retry-After`
+  and 409 on every route; the application's own exceptions are left alone.
+- **Unit-of-work boundaries:** `Transaction\ClosedManagerRecovery` + `EventSubscriber\UnitOfWorkBoundarySubscriber`
+  replace an entity manager a failed UserKit write closed before the next main request, at `kernel.terminate`,
+  `console.terminate`, after each Messenger message and on `kernel.reset`.
+- **Real-database load tests** (`tests/Load`, testsuite `load`, `USER_KIT_LOAD_DATABASE_URL`) and the CI job
+  **Load readiness** on MySQL 8.4 and PostgreSQL 16, each with DBAL 4 and DBAL 3. Each test fails against 1.18.0.
+- **Owner images:** optional SPI `OwnerImage\Pointer\LockingOwnerImagePointerStoreInterface::replace()` (the default
+  pointer store implements it): the store returns the image it replaced, read under its row lock. With owner images
+  enabled the commit queue is registered also when the session registry is off.
+- PHPStan: the four load rules of nowo-tech/phpstan-frankenphp 1.4 are on (`flagRollbackAfterNestedBegin`,
+  `flagFlushInHandWrittenTransaction`, `flagUnboundedRecursion`, `flagFlushWithoutClosedManagerRecovery`).
+
+### Fixed
+
+- **Personal data erasure under load (survey Med-High).** `PersonalDataEraser` ran `wrapInTransaction()` with the flush
+  nested in it. A MySQL deadlock in that flush surfaced as a raw `1305 SAVEPOINT DOCTRINE_2 does not exist` (500), a
+  lock wait as a raw `1205` / `55P03`, and the closed entity manager was replaced only incidentally (by the last
+  activity listener of a later request). The erasure is now one unit of work of UserKit's runner: no transaction level
+  left open, `UserKitStorageFailure` (503) for a transient failure, the manager neither reset nor cleared (only the rows
+  the erasure touched are detached, the `remove()` calls of the failed erasure are cancelled, and a collection it
+  changed closes the manager as `wrapInTransaction()` did), and a manager a failed flush closed stays closed for the
+  request and is replaced at the next boundary.
+- **Concurrent-session limit race.** Two parallel sign-ins of one user both counted the same sessions and both
+  registered: one session over `max_sessions`. Counting, evicting and registering now run under a named lock of the
+  user (`GET_LOCK()` / `pg_try_advisory_lock()`), and `reject_new` is checked again there: the second sign-in is
+  refused (its session signed out, the refusal shown as the flash message, no remember-me cookie, back to the
+  same-origin page that posted the form) or, with `evict_oldest`, evicts the first. A sign-in that fails in that
+  section (503, e.g. the lock not obtained in 5 s) is signed out, and under a limit a session registered on a later
+  request goes through the limit too.
+- **First row races inside a transaction.** A registry row or a remember-me epoch row inserted inside a transaction (an
+  erasure, the application's own transaction) that lost its unique key race aborted the whole PostgreSQL transaction
+  (`25P02` on the next statement). The insert now runs in its own savepoint. After a lost first epoch insert the row
+  is re-read with a locking read: under MySQL's REPEATABLE READ the plain re-read missed the winner and refused the bump
+  as a look-alike collision, failing the erasure.
+- **Lock waits and deadlocks of the registry's autocommit writes** (touch, register, revoke, rekey, delete, purge, epoch
+  bump) and of the last activity `UPDATE` are retried, 3 attempts with a short random pause, instead of a 500 on
+  whatever page the user opened. Inside the application's transaction they are not replayed:
+  `UserKitStorageFailure`.
+- **PostgreSQL with DBAL 3: session registration failed.** The ORM gives the registry and epoch ids a sequence there
+  (`AUTO`), and UserKit's DBAL inserts left the id out: every registration hit a NOT NULL violation. The inserts now take
+  the next value of the entity's sequence (`Transaction\UserKitRows::sequenceId()`); identity columns are unchanged.
+- **Owner images (1.18.0) on PostgreSQL with DBAL 3: every first upload failed** (audit QM-M3). The pointer row
+  (`user_kit_owner_image`) was inserted through DBAL without an id while the ORM gives it a sequence there: a NOT NULL
+  violation, the upload refused. It now takes the next value of the sequence. StorageKit had the same gap in its own
+  reference table, fixed in StorageKit 1.6.1: the `suggest` (and the tests) now ask for `^1.6.1`.
+- **Owner images (1.18.0): a lost first-pointer race failed the upload.** The pointer write (read, then insert, in a
+  hand-written transaction) answered a unique violation when another request stored the subject's first row meanwhile,
+  and inside the application's transaction PostgreSQL then aborted it. It now runs on UserKit's runner with the row
+  locked, the insert in its own savepoint, and a lost race writes over the winner's row; a deadlock or lock wait is
+  retried, else 503.
+- **Owner images (1.18.0): a replaced or removed picture was deleted before the commit.** Inside the application's
+  transaction, `upload()` and `remove()` deleted the previous file's objects from the bucket at once; after a rollback
+  the pointer was back on a file without objects. Inside a transaction of the pointer's connection the deletion now
+  waits for the outermost commit (commit queue) and is dropped on rollback; outside one the file is still removed at
+  once.
+- **Owner images (1.18.0): two parallel uploads of one subject.** Both read the same previous picture; the pointer and
+  the StorageKit reference could end on different files (the purge would then delete the picture shown) and the other
+  new file was never removed. Writing the pointer and the reference now run under a named lock of the kind and subject
+  (on the pointer's connection), and the replaced picture is the one the pointer row held under its row lock, also
+  inside an application transaction on MySQL's REPEATABLE READ (audit QM-D-M1); the second upload replaces (and
+  removes) the first one's file. A transient failure of the upload answers 503 instead of a `storage` refusal.
+- **Last activity moves forward only.** Two workers keep separate throttle maps; the later write of an earlier request
+  moved the timestamp back. The mapped column is now written with `WHERE column IS NULL OR column < :value`.
+
+### Changed
+
+- Requirements: + `nowo-tech/transaction-contract` ^1.0, + `nowo-tech/transaction-doctrine` ^1.1;
+  `doctrine/dbal` ^3.8.2 || ^4.0 (was ^3.8), `doctrine/orm` ^2.16 || ^3.0 (was ^2.15); `suggest` / dev
+  `nowo-tech/storage-kit-bundle` ^1.6.1 (its references on PostgreSQL with DBAL 3). Dev: `nowo-tech/phpstan-frankenphp` ^1.4.
+- `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore`, `LastActivitySubscriber` and
+  `DbalOwnerImagePointerStore` take an optional trailing `UserKitTransactionRunner` argument; `OwnerImages` takes an
+  optional `ManagerRegistry` and manager name for its lock.
+- The erasure nested in an open application transaction runs in a savepoint (1.18 joined it directly); on failure it
+  still marks that transaction rollback-only.
+
 ## [1.18.0] - 2026-11-15
 
 ### Added

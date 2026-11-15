@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures;
 
 use Closure;
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\UiKitBundle\NowoUiKitBundle;
@@ -13,6 +14,7 @@ use Nowo\UserKitBundle\NowoUserKitBundle;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Clock\ClockInterface;
 use Psr\Log\NullLogger;
+use ReflectionMethod;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
@@ -171,6 +173,14 @@ final class SessionsTestKernel extends Kernel
         return new Response('login: ' . ($error instanceof AuthenticationException ? $error->getMessageKey() : ''));
     }
 
+    /**
+     * Whether DBAL 3 is installed (its Connection::rollBack() returns bool, DBAL 4's void).
+     */
+    public static function dbal3(): bool
+    {
+        return (string) (new ReflectionMethod(Connection::class, 'rollBack'))->getReturnType() !== 'void';
+    }
+
     protected function configureContainer(ContainerConfigurator $container): void
     {
         $container->extension('framework', [
@@ -204,7 +214,8 @@ final class SessionsTestKernel extends Kernel
                 'registry' => ['connection' => 'registry'],
             ]],
         ] : [
-            'dbal' => ['url' => $this->options['database_url'] ?? 'sqlite:///%kernel.cache_dir%/registry.db'],
+            // DBAL 3 nests transactions with savepoints only when asked (UserKit 1.18 recommends it; DBAL 4 always does).
+            'dbal' => ['url' => $this->options['database_url'] ?? 'sqlite:///%kernel.cache_dir%/registry.db'] + (self::dbal3() ? ['use_savepoints' => true] : []),
             'orm'  => ['mappings' => $mappings],
         ]);
         $container->extension('security', [

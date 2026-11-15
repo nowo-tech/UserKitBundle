@@ -11,6 +11,7 @@ use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Model\LastActivityInterface;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Profile\ProfileSettings;
+use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -69,6 +70,7 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
         private readonly ?Security $security = null,
         private readonly ?LoggerInterface $logger = null,
         private readonly int $maxThrottleEntries = self::MAX_THROTTLE_ENTRIES,
+        private readonly ?UserKitTransactionRunner $runner = null,
     ) {
     }
 
@@ -158,6 +160,11 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
      * When the profile field is not a mapped column (a custom setter that writes another property), the mapped fields
      * changed by the setter are written. A user without identifier (not persisted yet) or whose setter changed no
      * mapped field is not written.
+     *
+     * 1.19.0 (Beacon spec 239): a mapped column only moves forward (`WHERE field IS NULL OR field < :value`): two
+     * workers keep separate throttle maps, so two requests of one user can both write, and the later write of an
+     * earlier request no longer moves the last activity back. The UPDATE is retried when it deadlocks or waits too long
+     * for a lock ({@see UserKitTransactionRunner::statement()}); a failure is still only logged.
      */
     private function store(EntityManagerInterface $entityManager, UserInterface $user, string $field, DateTimeImmutable $now): void
     {
@@ -192,7 +199,15 @@ final class LastActivitySubscriber implements EventSubscriberInterface, ResetInt
             $queryBuilder->andWhere(sprintf('u.%s = :id%d', $name, $index))->setParameter('id' . $index, $value);
             ++$index;
         }
-        $queryBuilder->getQuery()->execute();
+        if ($metadata->hasField($field)) {
+            $queryBuilder->andWhere(sprintf('(u.%1$s IS NULL OR u.%1$s < :value0)', $field));
+        }
+        $query = $queryBuilder->getQuery();
+        if ($this->runner instanceof UserKitTransactionRunner) {
+            $this->runner->statement($entityManager->getConnection(), static fn (): mixed => $query->execute());
+        } else {
+            $query->execute();
+        }
 
         if ($entityManager->contains($user)) {
             $unitOfWork = $entityManager->getUnitOfWork();

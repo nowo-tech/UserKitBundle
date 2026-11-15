@@ -25,10 +25,12 @@ use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInt
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Twig\Environment;
 
+use function array_filter;
 use function count;
 use function gc_collect_cycles;
 use function memory_get_usage;
 use function method_exists;
+use function str_contains;
 use function str_repeat;
 
 /**
@@ -111,6 +113,33 @@ final class StandardHostOwnerImagesTest extends OwnerImagesKernelTestCase
         self::assertSame([null, $first->fileId, $second->fileId], [$events[0]->previousFileId, $events[1]->previousFileId, $events[2]->previousFileId]);
         self::assertSame([$first->fileId, $second->fileId, null], [$events[0]->fileId, $events[1]->fileId, $events[2]->fileId]);
         self::assertSame('alice', $events[0]->actorId);
+    }
+
+    /**
+     * 1.19.0: inside the application's transaction the replaced (or removed) picture is expired, not deleted from its
+     * bucket: after a rollback the pointer is back on it and its objects still exist (1.18.0 deleted them before the
+     * commit, leaving a pointer to a file with no objects).
+     */
+    public function testARolledBackReplaceOrRemoveKeepsThePreviousPicture(): void
+    {
+        $this->boot();
+        $alice      = $this->user('alice');
+        $first      = $this->images()->upload($alice, 'avatar', 'alice', self::png(), 'me.png');
+        $connection = $this->em()->getConnection();
+        $objectsOf  = fn (string $fileId): int => count(array_filter($this->buckets()->keys(), static fn (string $key): bool => str_contains($key, $fileId)));
+        self::assertSame(3, $objectsOf($first->fileId));
+
+        $connection->beginTransaction();
+        $this->images()->upload($alice, 'avatar', 'alice', self::png(50, 400), 'me2.png');
+        $connection->rollBack();
+        self::assertSame(['alice' => $first->fileId], $this->images()->fileIds('avatar', ['alice']));
+        self::assertSame(3, $objectsOf($first->fileId), 'the previous picture survives the rollback');
+
+        $connection->beginTransaction();
+        self::assertTrue($this->images()->remove($alice, 'avatar', 'alice'));
+        $connection->rollBack();
+        self::assertSame(['alice' => $first->fileId], $this->images()->fileIds('avatar', ['alice']));
+        self::assertSame(3, $objectsOf($first->fileId));
     }
 
     public function testOnlyRealStillImagesWithinTheLimitsAreAccepted(): void

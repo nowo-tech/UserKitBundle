@@ -35,6 +35,7 @@ final class SessionCommitBoundaryRunnersTest extends TransactionalSessionsTestCa
         $this->connection()->beginTransaction();
         $member = $this->fresh($member);
         $member->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         $this->connection()->commit();
         self::assertSame([], $this->log()->revoked, 'Not before the boundary.');

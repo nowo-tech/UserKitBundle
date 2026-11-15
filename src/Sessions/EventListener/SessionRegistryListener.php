@@ -19,6 +19,7 @@ use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Security\SessionLimitReachedException;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
+use Nowo\UserKitBundle\Transaction\UserKitNamedLock;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -37,7 +38,9 @@ use Symfony\Component\Security\Http\Event\CheckPassportEvent;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
 use Symfony\Component\Security\Http\RememberMe\RememberMeHandlerInterface;
+use Symfony\Component\Security\Http\RememberMe\ResponseListener;
 use Symfony\Contracts\Translation\TranslatorInterface;
+use Throwable;
 
 use function in_array;
 use function is_array;
@@ -45,6 +48,9 @@ use function is_object;
 use function is_string;
 use function ltrim;
 use function str_contains;
+use function str_starts_with;
+use function strlen;
+use function substr;
 
 use const PHP_INT_MIN;
 
@@ -179,14 +185,12 @@ final readonly class SessionRegistryListener
         if ($this->takePending($session, $context)) {
             // The pending sign-in of this context became final: register it as a sign-in (limit included). Parallel
             // pending sign-ins registered nothing at the first factor, so `reject_new` is checked again here (DC-M1).
-            $rejection = $this->rejection($user, $owner, null);
+            // 1.19.0: the check runs again under the owner's lock, together with the registration.
+            $rejection = $this->rejection($user, $owner, null) ?? $this->guardedSignIn($request, $session, $context, $user, $owner);
             if ($rejection !== null) {
                 $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
                 $event->setResponse($this->afterSignOut($request));
-
-                return;
             }
-            $this->signIn($request, $session, $context, $user, $owner);
 
             return;
         }
@@ -197,7 +201,18 @@ final readonly class SessionRegistryListener
             if ($marker !== null && $previous instanceof SessionUser) {
                 $this->store->deleteRow($marker['h'], $previous);
             }
-            $this->register($request, $session, $context, $user, $owner, false);
+            if ($this->limits->resolve($user)->maxSessions === null) {
+                $this->register($request, $session, $context, $user, $owner, false);
+
+                return;
+            }
+            // Audit QM-M2: under a concurrent-session limit a session registered on a later request (one whose sign-in
+            // was not registered, a session from before the registry) goes through the limit too.
+            $rejection = $this->guardedSignIn($request, $session, $context, $user, $owner, false);
+            if ($rejection !== null) {
+                $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
+                $event->setResponse($this->afterSignOut($request));
+            }
 
             return;
         }
@@ -286,28 +301,74 @@ final readonly class SessionRegistryListener
         if (!$owner instanceof SessionUser) {
             return;
         }
-        $this->signIn($request, $session, $context, $user, $owner);
+        $rejection = $this->guardedSignIn($request, $session, $context, $user, $owner);
+        if ($rejection !== null) {
+            // A parallel sign-in took the last session first (1.19.0): this one ends at once, as a `reject_new` refusal.
+            $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
+            $event->setResponse($this->afterRefusedSignIn($request));
+        }
     }
 
     /**
      * A sign-in: `evict_oldest` signs the oldest sessions out first, then the session is registered.
+     *
+     * 1.19.0 (Beacon spec 239): with a concurrent-session limit, counting, evicting and registering run under a named
+     * lock of the owner ({@see UserKitNamedLock}): two parallel sign-ins of one user no longer both count the same
+     * sessions and both register (one session over the limit up to 1.18). Under the lock `reject_new` is checked again
+     * (the check of the credentials step ran without it): the sign-in that comes second is refused and its session
+     * signed out. Without a limit no lock is taken.
+     *
+     * @return string|null the message refusing the sign-in (`reject_new`, lost race), or null when it was registered
      */
-    private function signIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner): void
+    private function signIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner, bool $atLogin = true): ?string
     {
         $limit = $this->limits->resolve($user);
-        if ($limit->policy === SessionLimitPolicy::EvictOldest && $limit->maxSessions !== null) {
+        $max   = $limit->maxSessions;
+        if ($max === null) {
+            // forget() read the session, so it is started and its id is the migrated one.
+            $this->register($request, $session, $context, $user, $owner, $atLogin);
+
+            return null;
+        }
+
+        // @igor-ignore - Closure runs synchronously while the lock is held; it is not stored on the service.
+        return UserKitNamedLock::hold($this->store->connection(), 'session_limit:' . $owner->key(), function () use ($request, $session, $context, $user, $owner, $limit, $max, $atLogin): ?string {
             // This session is never counted nor evicted (a second registration of it must not evict another, DC-I1).
             $current = $this->sessions->hash($session->getId());
-            $since   = $this->sessions->aliveSince();
-            $active  = $this->store->countActive($owner, $since, $current);
-            $over    = $active - $limit->maxSessions + 1;
-            if ($over > 0) {
-                $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
-                $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+            if ($limit->policy === SessionLimitPolicy::RejectNew) {
+                $rejection = $this->rejection($user, $owner, $current);
+                if ($rejection !== null) {
+                    return $rejection;
+                }
+            } else {
+                $since  = $this->sessions->aliveSince();
+                $active = $this->store->countActive($owner, $since, $current);
+                $over   = $active - $max + 1;
+                if ($over > 0) {
+                    $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
+                    $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+                }
             }
+            $this->register($request, $session, $context, $user, $owner, $atLogin);
+
+            return null;
+        });
+    }
+
+    /**
+     * {@see self::signIn()}, and when it fails (the lock not obtained in 5 s, a storage failure: a 503) the session is
+     * signed out before the failure goes on (audit QM-M2): a sign-in that answered 503 is not signed in, and its next
+     * request is never registered past the limit.
+     */
+    private function guardedSignIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner, bool $atLogin = true): ?string
+    {
+        try {
+            return $this->signIn($request, $session, $context, $user, $owner, $atLogin);
+        } catch (Throwable $failure) {
+            $this->signOut($request, $session, RevocationReason::SignedOut->value, flash: false);
+
+            throw $failure;
         }
-        // forget() read the session, so it is started and its id is the migrated one.
-        $this->register($request, $session, $context, $user, $owner, true);
     }
 
     /**
@@ -460,10 +521,13 @@ final readonly class SessionRegistryListener
      * Ends the session: token dropped, session invalidated, remember-me cookies out of the request (and cleared on the
      * response), flash.
      */
-    private function signOut(Request $request, SessionInterface $session, string $reason, ?string $message = null): void
+    private function signOut(Request $request, SessionInterface $session, string $reason, ?string $message = null, bool $flash = true): void
     {
         $this->tokens->setToken(null);
         $session->invalidate();
+        // Audit QM-L1: a remember-me cookie this request's sign-in created (written by Symfony's ResponseListener after
+        // ours) is not sent: a refused or failed sign-in leaves no way back in.
+        $request->attributes->remove(ResponseListener::COOKIE_ATTR_NAME);
         foreach ($this->rememberMeCookies as $cookie) {
             $request->cookies->remove($cookie['name']);
         }
@@ -471,7 +535,7 @@ final readonly class SessionRegistryListener
             $handler->clearRememberMeCookie();
         }
         $request->attributes->set(self::SIGNED_OUT_ATTRIBUTE, true);
-        if ($this->flash && $session instanceof FlashBagAwareSessionInterface) {
+        if ($flash && $this->flash && $session instanceof FlashBagAwareSessionInterface) {
             $session->getFlashBag()->add('warning', $message ?? $this->signedOutMessage($reason));
         }
     }
@@ -519,6 +583,27 @@ final readonly class SessionRegistryListener
         }
 
         return $this->signedOutJson();
+    }
+
+    /**
+     * A sign-in refused after the credentials step (1.19.0, a parallel sign-in took the last session): JSON clients get
+     * the signed-out 401, a browser goes back to the path it posted to as a GET (with form login's default, where
+     * `check_path` is `login_path`, the login form, which shows the refusal).
+     */
+    private function afterRefusedSignIn(Request $request): Response
+    {
+        if ($this->wantsJson($request)) {
+            return $this->signedOutJson();
+        }
+        // Audit QM-L2: back to the page that posted the form (a same-origin Referer under the application's base URL,
+        // e.g. `/login` when `check_path` is `/login_check`), else to the posted path.
+        $referer = (string) $request->headers->get('Referer', '');
+        $origin  = $request->getSchemeAndHttpHost() . $request->getBaseUrl() . '/';
+        if (str_starts_with($referer, $origin)) {
+            return new RedirectResponse($request->getBaseUrl() . '/' . ltrim(substr($referer, strlen($origin)), '/\\'));
+        }
+
+        return new RedirectResponse($request->getBaseUrl() . '/' . ltrim($request->getPathInfo(), '/\\'));
     }
 
     private function wantsJson(Request $request): bool

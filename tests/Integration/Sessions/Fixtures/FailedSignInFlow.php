@@ -55,6 +55,7 @@ final readonly class FailedSignInFlow
             throw new RuntimeException('The handler failed.');
         } catch (RuntimeException) {
             if ($tx) {
+                // @phpstan-ignore frankenphp.worker.noRollbackAfterNestedBegin (the test plays an application's own hand-written transaction around UserKit)
                 $connection->rollBack();
             }
             if ($request->query->getString('revoke') === 'rolled-back') {
