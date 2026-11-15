@@ -42,6 +42,7 @@ use Nowo\UserKitBundle\Sessions\Twig\SessionsTwigExtension;
 use Nowo\UserKitBundle\Sessions\Ui\SessionsPages;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Sessions\UserSessionsInterface;
+use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\ConsoleEvents;
@@ -193,7 +194,7 @@ final class SessionsLoader
         // House rule LQ: binary NO PAD collation of the owner columns on MySQL / MariaDB (look-alike owners).
         $container->setDefinition(OwnerCollationListener::class, (new Definition(OwnerCollationListener::class, [$doctrine, $sessions['doctrine']['entity_manager']]))
             ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
-        $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager'], $sessions['doctrine']['exact_owner_collation']]))->setPublic(true));
+        $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager'], $sessions['doctrine']['exact_owner_collation'], new Reference(UserKitTransactionRunner::class)]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
         $ownerResolver = $sessions['owner']['resolver'];
         $container->setAlias(SessionOwnerResolverInterface::class, is_string($ownerResolver) && $ownerResolver !== '' ? $ownerResolver : SessionUserResolver::class);
@@ -396,7 +397,7 @@ final class SessionsLoader
         if (is_string($store) && $store !== '') {
             $container->setAlias(SessionEpochStoreInterface::class, $store);
         } else {
-            $container->setDefinition(DoctrineSessionEpochStore::class, new Definition(DoctrineSessionEpochStore::class, [new Reference('doctrine'), $sessions['doctrine']['entity_manager']]));
+            $container->setDefinition(DoctrineSessionEpochStore::class, new Definition(DoctrineSessionEpochStore::class, [new Reference('doctrine'), $sessions['doctrine']['entity_manager'], new Reference(UserKitTransactionRunner::class)]));
             $container->setAlias(SessionEpochStoreInterface::class, DoctrineSessionEpochStore::class);
         }
         $container->setDefinition(RememberMeEpoch::class, (new Definition(RememberMeEpoch::class, [

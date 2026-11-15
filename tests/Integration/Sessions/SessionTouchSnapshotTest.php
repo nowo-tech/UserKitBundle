@@ -42,6 +42,7 @@ final class SessionTouchSnapshotTest extends TransactionalSessionsTestCase
 
             $touched = $this->store()->touch($hash, $owner, $this->clock()->now()->modify('+1 hour'));
         } finally {
+            // @phpstan-ignore frankenphp.worker.noRollbackAfterNestedBegin (the test plays an application's own hand-written transaction around UserKit)
             $connection->rollBack();
         }
 
@@ -71,6 +72,7 @@ final class SessionTouchSnapshotTest extends TransactionalSessionsTestCase
             // Same second: 0 affected rows on MySQL, so the locking fallback answers.
             $touched = $this->store()->touch($hash, $owner, $now);
         } finally {
+            // @phpstan-ignore frankenphp.worker.noRollbackAfterNestedBegin (the test plays an application's own hand-written transaction around UserKit)
             $connection->rollBack();
         }
 

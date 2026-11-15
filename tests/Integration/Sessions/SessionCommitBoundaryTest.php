@@ -42,6 +42,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $alice = $this->fresh($alice);
         $alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         self::assertSame([], $this->log()->revoked, 'Held while the transaction is open.');
         $this->connection()->rollBack();
@@ -64,6 +65,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $alice = $this->fresh($alice);
         $alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         self::assertCount(0, $this->rowsOf($alice), 'The rows are written inside the transaction.');
         self::assertSame([], $this->log()->revoked);
@@ -91,6 +93,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $alice = $this->fresh($alice);
         $alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         $this->connection()->commit();
         $this->manager()->releaseHeldRevocations();
@@ -225,6 +228,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $alice = $this->fresh($alice);
         $alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         $this->connection()->commit();
 
@@ -232,6 +236,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $this->connection()->beginTransaction();
         $bob = $this->fresh($bob);
         $bob->setEnabled(false);
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
         $this->manager()->releaseHeldRevocations();
         self::assertSame([], $this->log()->revoked);
@@ -369,6 +374,7 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         $connection->executeStatement('INSERT INTO uk_child (parent_id) VALUES (1)');
         $alice = $this->fresh($alice);
         $alice->setPassword('changed');
+        // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction (the test plays an application's own hand-written transaction around UserKit)
         $this->em()->flush();
 
         try {

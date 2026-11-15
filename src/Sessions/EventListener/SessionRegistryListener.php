@@ -19,6 +19,7 @@ use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Security\SessionLimitReachedException;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
+use Nowo\UserKitBundle\Transaction\UserKitNamedLock;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -179,14 +180,12 @@ final readonly class SessionRegistryListener
         if ($this->takePending($session, $context)) {
             // The pending sign-in of this context became final: register it as a sign-in (limit included). Parallel
             // pending sign-ins registered nothing at the first factor, so `reject_new` is checked again here (DC-M1).
-            $rejection = $this->rejection($user, $owner, null);
+            // 1.18.0: the check runs again under the owner's lock, together with the registration.
+            $rejection = $this->rejection($user, $owner, null) ?? $this->signIn($request, $session, $context, $user, $owner);
             if ($rejection !== null) {
                 $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
                 $event->setResponse($this->afterSignOut($request));
-
-                return;
             }
-            $this->signIn($request, $session, $context, $user, $owner);
 
             return;
         }
@@ -286,28 +285,58 @@ final readonly class SessionRegistryListener
         if (!$owner instanceof SessionUser) {
             return;
         }
-        $this->signIn($request, $session, $context, $user, $owner);
+        $rejection = $this->signIn($request, $session, $context, $user, $owner);
+        if ($rejection !== null) {
+            // A parallel sign-in took the last session first (1.18.0): this one ends at once, as a `reject_new` refusal.
+            $this->signOut($request, $session, RevocationReason::SignedOut->value, $rejection);
+            $event->setResponse($this->afterRefusedSignIn($request));
+        }
     }
 
     /**
      * A sign-in: `evict_oldest` signs the oldest sessions out first, then the session is registered.
+     *
+     * 1.18.0 (Beacon spec 239): with a concurrent-session limit, counting, evicting and registering run under a named
+     * lock of the owner ({@see UserKitNamedLock}): two parallel sign-ins of one user no longer both count the same
+     * sessions and both register (one session over the limit up to 1.17). Under the lock `reject_new` is checked again
+     * (the check of the credentials step ran without it): the sign-in that comes second is refused and its session
+     * signed out. Without a limit no lock is taken.
+     *
+     * @return string|null the message refusing the sign-in (`reject_new`, lost race), or null when it was registered
      */
-    private function signIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner): void
+    private function signIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner): ?string
     {
         $limit = $this->limits->resolve($user);
-        if ($limit->policy === SessionLimitPolicy::EvictOldest && $limit->maxSessions !== null) {
+        $max   = $limit->maxSessions;
+        if ($max === null) {
+            // forget() read the session, so it is started and its id is the migrated one.
+            $this->register($request, $session, $context, $user, $owner, true);
+
+            return null;
+        }
+
+        // @igor-ignore - Closure runs synchronously while the lock is held; it is not stored on the service.
+        return UserKitNamedLock::hold($this->store->connection(), 'session_limit:' . $owner->key(), function () use ($request, $session, $context, $user, $owner, $limit, $max): ?string {
             // This session is never counted nor evicted (a second registration of it must not evict another, DC-I1).
             $current = $this->sessions->hash($session->getId());
-            $since   = $this->sessions->aliveSince();
-            $active  = $this->store->countActive($owner, $since, $current);
-            $over    = $active - $limit->maxSessions + 1;
-            if ($over > 0) {
-                $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
-                $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+            if ($limit->policy === SessionLimitPolicy::RejectNew) {
+                $rejection = $this->rejection($user, $owner, $current);
+                if ($rejection !== null) {
+                    return $rejection;
+                }
+            } else {
+                $since  = $this->sessions->aliveSince();
+                $active = $this->store->countActive($owner, $since, $current);
+                $over   = $active - $max + 1;
+                if ($over > 0) {
+                    $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
+                    $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+                }
             }
-        }
-        // forget() read the session, so it is started and its id is the migrated one.
-        $this->register($request, $session, $context, $user, $owner, true);
+            $this->register($request, $session, $context, $user, $owner, true);
+
+            return null;
+        });
     }
 
     /**
@@ -519,6 +548,20 @@ final readonly class SessionRegistryListener
         }
 
         return $this->signedOutJson();
+    }
+
+    /**
+     * A sign-in refused after the credentials step (1.18.0, a parallel sign-in took the last session): JSON clients get
+     * the signed-out 401, a browser goes back to the path it posted to as a GET (with form login's default, where
+     * `check_path` is `login_path`, the login form, which shows the refusal).
+     */
+    private function afterRefusedSignIn(Request $request): Response
+    {
+        if ($this->wantsJson($request)) {
+            return $this->signedOutJson();
+        }
+
+        return new RedirectResponse($request->getBaseUrl() . '/' . ltrim($request->getPathInfo(), '/\\'));
     }
 
     private function wantsJson(Request $request): bool

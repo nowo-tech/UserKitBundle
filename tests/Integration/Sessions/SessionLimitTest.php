@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use Nowo\UserKitBundle\Sessions\Event\SessionLimitReachedEvent;
+use Nowo\UserKitBundle\Sessions\Model\SessionClient;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RoleLimitResolver;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface;
+use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 /**
  * Concurrent-session limit: evict oldest, reject new (bundle message, custom message), host resolver.
@@ -63,6 +68,42 @@ final class SessionLimitTest extends SessionsKernelTestCase
         self::assertCount(1, $this->rowsOf($alice));
     }
 
+    /**
+     * 1.18.0 (Beacon spec 239): `reject_new` is checked again under the owner's lock when the session is registered. A
+     * parallel sign-in that registered after this one's credentials check (simulated here between the two events) wins:
+     * this sign-in is refused and its session ends.
+     */
+    public function testRejectNewRefusesASignInThatLostTheRaceAfterItsCredentialsCheck(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice = $this->member('alice@example.com');
+        $this->parallelSignIn($alice);
+
+        $second = $this->signIn('alice@example.com');
+
+        self::assertRedirectsTo($second, '/login');
+        $session = $second->getRequest()->getSession();
+        self::assertInstanceOf(FlashBagAwareSessionInterface::class, $session);
+        self::assertStringContainsString('You are already signed in on 1 devices', implode(' ', $session->getFlashBag()->peek('warning')));
+        self::assertCount(1, $this->rowsOf($alice), 'only the parallel winner');
+        $second->request('GET', '/page');
+        self::assertRedirectsTo($second, '/login');
+    }
+
+    public function testAJsonSignInThatLostTheRaceGetsTheSignedOutAnswer(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice = $this->member('alice@example.com');
+        $this->parallelSignIn($alice);
+
+        $browser = $this->browser();
+        $browser->request('POST', '/login', ['_username' => 'alice@example.com', '_password' => 'secret'], [], ['HTTP_ACCEPT' => 'application/json']);
+
+        self::assertSame(401, $browser->getResponse()->getStatusCode());
+        self::assertSame('{"error":"session_signed_out"}', $browser->getResponse()->getContent());
+        self::assertCount(1, $this->rowsOf($alice));
+    }
+
     public function testAListenerCanReplaceTheMessage(): void
     {
         $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
@@ -96,6 +137,20 @@ final class SessionLimitTest extends SessionsKernelTestCase
         $this->dispatcher()->addListener(SessionLimitReachedEvent::class, $events->record(...));
 
         return $events;
+    }
+
+    /**
+     * Registers a live session of the member while a sign-in runs, after its credentials check and before it registers.
+     */
+    private function parallelSignIn(Member $member): void
+    {
+        $firewall = $this->container()->get('security.event_dispatcher.main');
+        self::assertInstanceOf(EventDispatcherInterface::class, $firewall);
+        $firewall->addListener(LoginSuccessEvent::class, function () use ($member): void {
+            $owner = $this->manager()->owner($member);
+            self::assertInstanceOf(SessionUser::class, $owner);
+            $this->store()->insert($owner, 'parallel-session', new SessionClient(), $this->manager()->now());
+        }, 0);
     }
 
     private function dispatcher(): EventDispatcherInterface
