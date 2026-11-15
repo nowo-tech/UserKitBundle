@@ -288,6 +288,9 @@ Without a catalog, `markPageSeen()` / `hasSeenPage()` accept any id; `getEnabled
 
 ## Personal data export and erasure (GDPR)
 
+> **High load (1.18.0):** the erasure runs as one unit of work of UserKit's own transaction runner; a deadlock or lock
+> wait is a `UserKitStorageFailure` (503), a lost unique key race a `UserKitConflict` (409). See [HIGH-LOAD](HIGH-LOAD.md).
+
 Since **1.5.0**, with `nowo_user_kit.personal_data.enabled: true`. The kit ships the orchestration (SPI, exporter, transactional eraser, guard hook); controllers, routes, confirmation forms and domain guards stay in the application.
 
 | Tag (autoconfigured from the interface) | Interface | Role |
@@ -364,13 +367,16 @@ try {
 }
 ```
 
-`erase()` runs every guard first (any veto throws `ErasureVetoedException` with all vetoes, before anything changes), then every supporting eraser in priority order inside **one** Doctrine transaction (`wrapInTransaction()` on the entity manager of the user class), flushed once. An exception from an eraser rolls everything back. Erasers must not call `flush()` or open transactions; DBAL statements on the same connection join the transaction.
+`erase()` runs every guard first (any veto throws `ErasureVetoedException` with all vetoes, before anything changes), then every supporting eraser in priority order inside **one** Doctrine transaction on the connection of the user class's entity manager (since 1.18.0 a unit of work of UserKit's own transaction runner, `wrapInTransaction()` before), flushed once. An exception from an eraser rolls everything back. Erasers must not call `flush()` or open transactions; DBAL statements on the same connection join the transaction.
 
 `ErasureRequest` carries `user`, `actor` (nullable) and `context` (free array); `isSelfService()` is true without an actor or when the actor is the user. Since **1.12** it also carries `originalIdentifier`: `getUserIdentifier()` captured before the first eraser runs, so an eraser that anonymises the e-mail does not hide the person from later erasers keyed by it; use `$request->identifier()` (the original identifier, else the current one). The `sessions` eraser passes it on as `context['original_identifier']` of its `UserSessionsRevokedEvent` (AuthKit's account switcher uses it). `ErasureVeto` has `reason` (stable code), `message` and `details` (e.g. the blocking projects).
 
 Built-in erasers: `last_activity` (`clearLastActivityAt()`, provided by `LastActivityTrait` since 1.5.0), `ui_preferences` (`resetUiPreferences()` from `UiPreferencesTrait`), `product_tour` (`clearProductTourSeen()`). Account status is not changed by the kit: disabling / anonymising the account itself is a host eraser.
 
 ## Session registry and limits
+
+> **High load (1.18.0):** the registry's writes are retried after a deadlock or lock wait, and sign-ins under a
+> concurrent-session limit are serialised per user. See [HIGH-LOAD](HIGH-LOAD.md).
 
 Since **1.9.0**, opt-in (`sessions.enabled: true`, see [CONFIGURATION](CONFIGURATION.md#session-registry-sessions)).
 One row per signed-in browser session: users see where they are signed in and sign sessions out, administrators do the
@@ -914,8 +920,8 @@ final class RevokeSessionsOnPasswordChanged
 Use `UserSessionManager::forgetUser($user)` before deleting a user. Type your application services against the
 ports, not the final classes: `Sessions\UserSessionsInterface` (`UserSessionManager`; `listRowsFor()` returns
 `SessionRow` DTOs), `PersonalData\PersonalDataExporterInterface`, `PersonalData\PersonalDataErasureInterface`
-(`PersonalDataEraser`; it joins a transaction you already opened instead of nesting its own, marks it rollback-only
-if an eraser fails, and its result is final only once you commit) and
+(`PersonalDataEraser`; inside a transaction you already opened it runs in a savepoint of it (1.18.0; it joined it
+directly before), marks it rollback-only if an eraser fails, and its result is final only once you commit) and
 `Presence\UserPresenceResolverInterface`.
 
 **A security user that is not the entity.** Sessions are registered under the owner of the security user signed in at

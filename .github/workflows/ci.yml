@@ -233,6 +233,56 @@ jobs:
         # Look-alike owners only (house rule LQ): MariaDB's PAD SPACE default collation and utf8mb4_nopad_bin.
         run: vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
 
+  load-readiness:
+    # 1.18.0 (Beacon spec 239): the races of tests/Load on real servers, each test fails against 1.17.0.
+    name: Load readiness (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'MySQL 8.4, DBAL 4', url: 'mysql://root@127.0.0.1:3306/user_kit_load?serverVersion=8.4.0&charset=utf8mb4', dbal: '' }
+          - { name: 'PostgreSQL 16, DBAL 4', url: 'postgresql://postgres@127.0.0.1:5432/user_kit_load?serverVersion=16&charset=utf8', dbal: '' }
+          - { name: 'MySQL 8.4, DBAL 3', url: 'mysql://root@127.0.0.1:3306/user_kit_load?serverVersion=8.4.0&charset=utf8mb4', dbal: '^3.8.2' }
+          - { name: 'PostgreSQL 16, DBAL 3', url: 'postgresql://postgres@127.0.0.1:5432/user_kit_load?serverVersion=16&charset=utf8', dbal: '^3.8.2' }
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: user_kit_load
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h127.0.0.1 -uroot --silent" --health-interval 5s --health-timeout 5s --health-retries 30
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: user_kit_load
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, pdo_mysql, pdo_pgsql
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+      - name: Use DBAL 3
+        if: ${{ matrix.dbal != '' }}
+        run: |
+          composer require --no-interaction --no-progress --with-all-dependencies "doctrine/dbal:${{ matrix.dbal }}"
+          composer show doctrine/dbal | grep -E '^versions'
+      - name: Races on a real server
+        timeout-minutes: 10
+        env:
+          USER_KIT_LOAD_DATABASE_URL: ${{ matrix.url }}
+        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --testsuite load
+
   dbal-floor:
     name: Sessions on the DBAL 3 floor (SQLite)
     runs-on: ubuntu-latest

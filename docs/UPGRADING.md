@@ -56,6 +56,44 @@
 
 ## Unreleased
 
+From **1.17.0** (target 1.18.0):
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration change is required. New requirements: `nowo-tech/transaction-contract` ^1.0 and
+`nowo-tech/transaction-doctrine` ^1.1 (installed with the bundle); `doctrine/dbal` ^3.8.2 || ^4.0 and `doctrine/orm`
+^2.16 || ^3.0. The full picture is in [HIGH-LOAD](HIGH-LOAD.md). What can change for you:
+
+- **Exceptions of the erasure.** `PersonalDataErasureInterface::erase()` throws
+  `Nowo\UserKitBundle\Transaction\UserKitStorageFailure` (a `Nowo\TransactionContract\TransientStorageFailure`) for a
+  deadlock or a lock wait, and `UserKitConflict` for a unique key race it cannot resolve, instead of the raw Doctrine
+  exceptions (`DeadlockException`, `LockWaitTimeoutException`, a 1305 `DriverException`,
+  `UniqueConstraintViolationException`). The Doctrine exception is the previous one. If you caught
+  `Doctrine\DBAL\Exception\RetryableException` around `erase()`, catch `TransientStorageFailure` instead. Any other
+  failure (an eraser's own exception, a veto) is unchanged.
+- **The entity manager after a failed erasure** is no longer closed and reset by `wrapInTransaction()`: the rows the
+  erasure touched (the user entity) are detached, every other entity stays managed with its pending changes; a manager
+  the ORM closed in a failed flush stays closed until the next request, command or message. Reload the user after a
+  failed erasure before writing it again.
+- **Registry and epoch writes inside your transaction** (for example `revokeAll()` in your own transaction) surface a
+  deadlock or lock wait as `UserKitStorageFailure` instead of the raw Doctrine exception; outside a transaction they are
+  retried (3 attempts) before that.
+- **HTTP answers.** A UserKit transient failure answers **503** with `Retry-After: 1`, a UserKit conflict **409**, on
+  every route (was 500). Only UserKit's own exceptions are mapped.
+- **Concurrent-session limit.** With `sessions.limit` configured, sign-ins of one user are serialised by a named lock
+  (`GET_LOCK()` on MySQL / MariaDB, an advisory lock on PostgreSQL), 5 s at most, then 503. With `reject_new`, a sign-in
+  that lost the race to a parallel one is refused after its credentials step: its session is signed out and the browser
+  goes back to the path it posted to with the refusal as a flash message (JSON: 401 `session_signed_out`).
+  PgBouncer in transaction / statement pooling mode is not supported for UserKit's connection when a limit is set.
+- **DBAL 3:** set `doctrine.dbal.use_savepoints: true` (DBAL 4 always does). The erasure nested in your transaction,
+  and the first-row inserts inside a transaction, use savepoints.
+- **Your own transaction runner.** UserKit does not use the runner you bind to `TransactionRunnerInterface`
+  (DoctrineDeadlockRetryBundle's or yours): it uses `nowo_user_kit.transaction_runner`. Nothing to configure.
+- **Constructors:** `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore` and `LastActivitySubscriber`
+  take an optional trailing `UserKitTransactionRunner`. Positional callers are unaffected.
+
 ## To 1.17.0
 
 From **1.16.3**:
