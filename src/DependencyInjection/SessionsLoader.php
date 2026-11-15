@@ -367,9 +367,12 @@ final class SessionsLoader
      * The queue of what must wait for the outermost commit, the driver middleware telling it about transactions (on
      * every connection, since the user's and the registry's may differ) and the boundaries that release it. Priority of
      * `kernel.response`: before the remember-me re-issue, which reads the sessions kept by a revocation. The terminate
-     * events run last, so a commit in another terminate listener still gets released.
+     * events run last, so a commit in another terminate listener still gets released. Also registered by
+     * {@see OwnerImagesLoader} (1.19.0) when the session registry is off.
+     *
+     * @internal
      */
-    private static function registerCommitQueue(ContainerBuilder $container, Reference $doctrine): void
+    public static function registerCommitQueue(ContainerBuilder $container, Reference $doctrine): void
     {
         $queue = (new Definition(CommitQueue::class, [$doctrine, new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE)]))
             ->addTag('doctrine.event_listener', ['event' => 'postFlush'])

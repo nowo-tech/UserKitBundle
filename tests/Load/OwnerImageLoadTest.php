@@ -8,6 +8,7 @@ use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
 use Nowo\UserKitBundle\OwnerImage\Pointer\DbalOwnerImagePointerStore;
 use Nowo\UserKitBundle\OwnerImage\Pointer\OwnerImagePointerStoreInterface;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\OwnerImagesKernelTestCase;
 use Nowo\UserKitBundle\Tests\Load\Support\LoadKernels;
 use Nowo\UserKitBundle\Tests\Load\Support\OwnerImageKernels;
@@ -41,7 +42,9 @@ use const PHP_URL_PATH;
  * - a pointer write that loses the first-row race inside the application's transaction reads the winner and writes over
  *   it (1.18.0: a unique violation, and an aborted PostgreSQL transaction);
  * - two parallel uploads of one subject are serialised (1.18.0: both read the same previous image; the pointer and the
- *   StorageKit reference could end on different files, so the purge would delete the shown image).
+ *   StorageKit reference could end on different files, so the purge would delete the shown image);
+ * - the replaced picture is the one the pointer held under its row lock, also inside an application transaction
+ *   (audit QM-D-M1).
  */
 final class OwnerImageLoadTest extends OwnerImagesKernelTestCase
 {
@@ -134,6 +137,37 @@ final class OwnerImageLoadTest extends OwnerImagesKernelTestCase
         self::assertSame([$pointer], $referenced, 'the shown image is the referenced one');
         $live = $connection->fetchFirstColumn("SELECT uuid FROM storage_kit_file WHERE context_type = 'avatar' AND context_id = 'alice' AND orphaned_since IS NULL");
         self::assertSame([$pointer], $live, 'every other picture was removed: ' . implode(' | ', $answers) . ', first ' . $first->fileId);
+    }
+
+    /**
+     * Audit QM-D-M1: an upload inside the application's transaction (MySQL REPEATABLE READ snapshot taken before) while
+     * another request replaced the picture: the picture that request stored is the one replaced and expired. On 449a7af
+     * the plain read returned the older snapshot, and that picture stayed live and referenced (it also outlived the
+     * erasure).
+     */
+    public function testAnUploadInsideTheApplicationsTransactionReplacesThePictureStoredMeanwhile(): void
+    {
+        $images = $this->service(OwnerImagesInterface::class);
+        $images->upload($this->user('alice'), 'avatar', 'alice', OwnerImageKernels::png(), 'first.png');
+        $connection = $this->em()->getConnection();
+        $connection->beginTransaction();
+        // The application read first: its REPEATABLE READ snapshot is taken here.
+        $connection->fetchOne(sprintf("SELECT file_id FROM %s WHERE kind = 'avatar' AND subject_id = 'alice'", DbalOwnerImagePointerStore::TABLE));
+        // Meanwhile another request uploads (autocommit, committed).
+        [$process, $pipes] = $this->worker('b', 0, 0);
+        fwrite($pipes[0], "GO\n");
+        $answer = rtrim((string) fgets($pipes[1]));
+        proc_close($process);
+        self::assertFalse(str_starts_with($answer, 'ERR'), $answer);
+
+        $third = $images->upload($this->user('alice'), 'avatar', 'alice', OwnerImageKernels::png(), 'third.png');
+        $connection->commit();
+        // The request's boundary: what waited for the commit runs.
+        $this->service(CommitQueue::class)->release();
+        self::assertSame(0, $connection->getTransactionNestingLevel());
+
+        self::assertSame(['alice' => $third->fileId], $this->pointers()->find('avatar', ['alice']));
+        self::assertSame([$third->fileId], $connection->fetchFirstColumn("SELECT uuid FROM storage_kit_file WHERE context_type = 'avatar' AND context_id = 'alice' AND orphaned_since IS NULL"), 'only the shown picture is live');
     }
 
     private function pointers(): OwnerImagePointerStoreInterface

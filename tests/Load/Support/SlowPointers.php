@@ -4,20 +4,21 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Load\Support;
 
-use Nowo\UserKitBundle\OwnerImage\Pointer\OwnerImagePointerStoreInterface;
+use Nowo\UserKitBundle\OwnerImage\Pointer\LockingOwnerImagePointerStoreInterface;
 
 use function getenv;
 use function is_numeric;
 use function usleep;
 
 /**
- * Widens the windows of an owner image upload: after the previous image is read (`USER_KIT_LOAD_SLOW_FIND_MS`) and after
- * the new pointer is written (`USER_KIT_LOAD_SLOW_SET_MS`), in milliseconds (none when unset).
+ * Widens the windows of an owner image upload: before the pointer is replaced (`USER_KIT_LOAD_SLOW_FIND_MS`) and after
+ * it is written (`USER_KIT_LOAD_SLOW_SET_MS`), in milliseconds (none when unset). Without the subject's lock both
+ * uploads would read the same previous image in that window.
  */
-final readonly class SlowPointers implements OwnerImagePointerStoreInterface
+final readonly class SlowPointers implements LockingOwnerImagePointerStoreInterface
 {
     public function __construct(
-        private OwnerImagePointerStoreInterface $inner,
+        private LockingOwnerImagePointerStoreInterface $inner,
     ) {
     }
 
@@ -33,6 +34,15 @@ final readonly class SlowPointers implements OwnerImagePointerStoreInterface
     {
         $this->inner->set($kind, $subjectId, $fileId);
         $this->pause('USER_KIT_LOAD_SLOW_SET_MS');
+    }
+
+    public function replace(string $kind, string $subjectId, ?string $fileId): ?string
+    {
+        $this->pause('USER_KIT_LOAD_SLOW_FIND_MS');
+        $previous = $this->inner->replace($kind, $subjectId, $fileId);
+        $this->pause('USER_KIT_LOAD_SLOW_SET_MS');
+
+        return $previous;
     }
 
     private function pause(string $variable): void

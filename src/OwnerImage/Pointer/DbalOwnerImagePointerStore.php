@@ -39,7 +39,7 @@ use function strlen;
  * folding collation cannot hand `ABC`'s image to `abc`); writes go by primary key. The connection is the one of the
  * entity manager that maps {@see OwnerImagePointer} (or `owner_images.doctrine.entity_manager`).
  */
-final readonly class DbalOwnerImagePointerStore implements OwnerImagePointerStoreInterface
+final readonly class DbalOwnerImagePointerStore implements LockingOwnerImagePointerStoreInterface
 {
     /** Table name. */
     public const TABLE = 'user_kit_owner_image';
@@ -97,6 +97,16 @@ final readonly class DbalOwnerImagePointerStore implements OwnerImagePointerStor
      */
     public function set(string $kind, string $subjectId, ?string $fileId): void
     {
+        $this->replace($kind, $subjectId, $fileId);
+    }
+
+    /**
+     * {@see self::set()}, returning the file id the row held, read under the row lock (audit QM-D-M1).
+     *
+     * @throws InvalidArgumentException on a malformed kind, subject id or file id
+     */
+    public function replace(string $kind, string $subjectId, ?string $fileId): ?string
+    {
         if (preg_match(OwnerImageKind::NAME_PATTERN, $kind) !== 1 || !OwnerImageKinds::isSubjectId($subjectId) || ($fileId !== null && ($fileId === '' || strlen($fileId) > self::FILE_ID_MAX))) {
             throw new InvalidArgumentException('Malformed owner image kind, subject id or file id.');
         }
@@ -104,49 +114,54 @@ final readonly class DbalOwnerImagePointerStore implements OwnerImagePointerStor
         $connection = $manager->getConnection();
         $metadata   = $manager->getClassMetadata(OwnerImagePointer::class);
         $forUpdate  = $this->forUpdate($connection->getDatabasePlatform());
+
         // 1.19.0 (Beacon spec 239, audit QM-M3): one unit of work (a savepoint inside the caller's transaction), the
         // subject's row read with a row lock, the first row inserted in its own savepoint with the id of the entity's
         // sequence where the ORM uses one (PostgreSQL with DBAL 3: a NOT NULL violation in 1.18.0). A lost first-row
         // race reads the winner's row and writes over it (1.18.0: a unique violation, which also aborted a PostgreSQL
         // transaction of the caller). A deadlock or lock wait is retried in autocommit, else UserKitStorageFailure (503).
         // @igor-ignore - The closures run synchronously inside the runner; nothing is kept on the service.
-        $this->runner->statement($connection, static fn () => DoctrineTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $metadata, $forUpdate, $kind, $subjectId, $fileId): void {
-            $rowId = self::rowId($connection, $kind, $subjectId, $forUpdate);
+        return $this->runner->statement($connection, static fn (): ?string => DoctrineTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $metadata, $forUpdate, $kind, $subjectId, $fileId): ?string {
+            $row = self::row($connection, $kind, $subjectId, $forUpdate);
             if ($fileId === null) {
-                if ($rowId !== null) {
-                    $connection->delete(self::TABLE, ['id' => $rowId]);
+                if ($row !== null) {
+                    $connection->delete(self::TABLE, ['id' => $row['id']]);
                 }
 
-                return;
+                return $row['file'] ?? null;
             }
             $now = new DateTimeImmutable();
-            if ($rowId === null) {
+            if ($row === null) {
                 if (UserKitRows::insert($connection, self::TABLE, UserKitRows::sequenceId($connection, $metadata) + ['kind' => $kind, 'subject_id' => $subjectId, 'file_id' => $fileId, 'updated_at' => $now], ['updated_at' => Types::DATETIME_IMMUTABLE])) {
-                    return;
+                    return null;
                 }
-                $rowId = self::rowId($connection, $kind, $subjectId, $forUpdate);
-                if ($rowId === null) {
+                $row = self::row($connection, $kind, $subjectId, $forUpdate);
+                if ($row === null) {
                     // The unique key folds this subject into a look-alike's row (table not on the binary collation).
                     throw new UserKitConflict();
                 }
             }
-            $connection->update(self::TABLE, ['file_id' => $fileId, 'updated_at' => $now], ['id' => $rowId], ['updated_at' => Types::DATETIME_IMMUTABLE]);
+            $connection->update(self::TABLE, ['file_id' => $fileId, 'updated_at' => $now], ['id' => $row['id']], ['updated_at' => Types::DATETIME_IMMUTABLE]);
+
+            return $row['file'];
         }));
     }
 
     /**
-     * The id of the subject's row (exact `===` match), read with `$forUpdate`.
+     * The id and file id of the subject's row (exact `===` match), read with `$forUpdate`.
+     *
+     * @return array{id: int, file: string|null}|null
      */
-    private static function rowId(Connection $connection, string $kind, string $subjectId, string $forUpdate): ?int
+    private static function row(Connection $connection, string $kind, string $subjectId, string $forUpdate): ?array
     {
-        $rowId = null;
-        foreach ($connection->fetchAllAssociative('SELECT id, kind, subject_id FROM ' . self::TABLE . ' WHERE kind = ? AND subject_id = ?' . $forUpdate, [$kind, $subjectId]) as $row) {
+        $found = null;
+        foreach ($connection->fetchAllAssociative('SELECT id, kind, subject_id, file_id FROM ' . self::TABLE . ' WHERE kind = ? AND subject_id = ?' . $forUpdate, [$kind, $subjectId]) as $row) {
             if ($row['kind'] === $kind && $row['subject_id'] === $subjectId) {
-                $rowId = (int) $row['id'];
+                $found = ['id' => (int) $row['id'], 'file' => is_string($row['file_id'] ?? null) ? $row['file_id'] : null];
             }
         }
 
-        return $rowId;
+        return $found;
     }
 
     /**

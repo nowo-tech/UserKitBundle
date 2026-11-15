@@ -130,6 +130,10 @@ final class OwnerImagesLoader
         }
         $container->setAlias(OwnerImageStorageInterface::class, $storage ?? StorageKitOwnerImageStorage::class)->setPublic(true);
 
+        if (!$container->hasDefinition(CommitQueue::class)) {
+            // 1.19.0 (audit QM-D-M1): a replaced picture is deleted after the outermost commit, also without the registry.
+            SessionsLoader::registerCommitQueue($container, new Reference('doctrine'));
+        }
         $container->setDefinition(OwnerImages::class, (new Definition(OwnerImages::class, [
             new Reference(OwnerImageKinds::class),
             new Reference(OwnerImageAccessInterface::class),
@@ -140,6 +144,7 @@ final class OwnerImagesLoader
             new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             new Reference('doctrine', ContainerInterface::NULL_ON_INVALID_REFERENCE),
             self::serviceId($config['doctrine']['entity_manager']),
+            new Reference(CommitQueue::class, ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]))->setPublic(true));
         $container->setAlias(OwnerImagesInterface::class, OwnerImages::class)->setPublic(true);
 
