@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.18.0](#to-1180)
   - [To 1.18.0: owner images (opt-in)](#to-1180-owner-images-opt-in)
 - [To 1.17.0](#to-1170)
   - [To 1.17.0: `sessions.doctrine.exact_owner_collation` (optional, one query less per session list)](#to-1170-sessionsdoctrineexact_owner_collation-optional-one-query-less-per-session-list)
@@ -56,6 +57,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.18.0
+
+From **1.17.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 ### To 1.18.0: owner images (opt-in)
 
