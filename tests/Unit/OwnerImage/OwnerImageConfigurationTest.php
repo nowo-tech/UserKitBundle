@@ -15,6 +15,7 @@ use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 use function array_keys;
+use function json_encode;
 
 /**
  * 1.18 `nowo_user_kit.owner_images`: off by default, kinds validated, the avatar kind is a user kind, the wiring.
@@ -39,6 +40,7 @@ final class OwnerImageConfigurationTest extends TestCase
         self::assertFalse($config['enabled']);
         self::assertSame(['avatar' => ['subject' => 'user', 'read' => 'authenticated', 'shape' => 'circle']], $config['kinds']);
         self::assertSame('avatar', $config['avatar_kind']);
+        self::assertNull($config['user_class']);
         self::assertSame([null, null, null, null], [$config['access'], $config['pointer_store'], $config['storage'], $config['doctrine']['entity_manager']]);
         self::assertSame(OwnerImageExtension::SIZES, $config['twig']['sizes']);
     }
@@ -62,6 +64,26 @@ final class OwnerImageConfigurationTest extends TestCase
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage('avatar_kind');
         $this->process(['kinds' => ['org_logo' => []], 'avatar_kind' => 'org_logo']);
+    }
+
+    public function testTheUserClassMustBeAClassName(): void
+    {
+        self::assertSame('\\App\\Entity\\User', $this->process(['user_class' => '\\App\\Entity\\User'])['user_class']);
+        foreach (['App Entity', 'App\\\\User', 42, '', 'App\\'] as $bad) {
+            try {
+                $this->process(['user_class' => $bad]);
+                self::fail('accepted: ' . json_encode($bad));
+            } catch (InvalidConfigurationException $e) {
+                self::assertStringContainsString('user_class', $e->getMessage());
+            }
+        }
+    }
+
+    public function testAnUnknownUserClassIsRefusedAtBuildTime(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('App\\Missing\\User');
+        (new NowoUserKitExtension())->load([['user_class' => 'App\\Entity\\User', 'owner_images' => ['enabled' => true, 'user_class' => 'App\\Missing\\User']]], new ContainerBuilder());
     }
 
     public function testDisabledRegistersNothing(): void

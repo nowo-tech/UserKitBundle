@@ -231,9 +231,17 @@ final class StandardHostOwnerImagesTest extends OwnerImagesKernelTestCase
         $document = $this->exporter()->export($alice);
         self::assertSame(['avatar' => ['file' => $view->fileId, 'url' => '/storage/files/' . $view->fileId . '/original']], $document['sections']['owner_images'] ?? null);
 
+        $browser = $this->browser();
+        $browser->request('GET', '/storage/files/' . $view->fileId . '/thumb', server: ['PHP_AUTH_USER' => 'bob', 'PHP_AUTH_PW' => 'pw']);
+        self::assertSame(200, $browser->getResponse()->getStatusCode());
+
         $this->eraser()->erase($alice);
         self::assertSame([], $this->images()->fileIds('avatar', ['alice']));
         self::assertCount(3, $this->buckets()->keys(), 'no bucket call inside the erasure transaction');
+        // Audit QJ-L2: the erased picture is not served any more, although the purge has not run yet.
+        $this->em()->clear();
+        $browser->request('GET', '/storage/files/' . $view->fileId . '/thumb', server: ['PHP_AUTH_USER' => 'bob', 'PHP_AUTH_PW' => 'pw']);
+        self::assertSame(404, $browser->getResponse()->getStatusCode());
         $this->service(FilePurger::class)->run(new DateTimeImmutable());
         self::assertSame([], $this->buckets()->keys(), 'the next purge deletes it');
         self::assertFalse($this->images()->forget('avatar', 'alice'));

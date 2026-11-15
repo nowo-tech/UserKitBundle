@@ -75,7 +75,7 @@ final class OwnerImageModelTest extends TestCase
 
     public function testSubjectsAndInitials(): void
     {
-        $subjects = new OwnerImageSubjects();
+        $subjects = new OwnerImageSubjects(null, InMemoryUser::class);
         $own      = new class implements OwnerImageSubjectInterface {
             public function getOwnerImageSubjectId(): string
             {
@@ -99,7 +99,7 @@ final class OwnerImageModelTest extends TestCase
 
     public function testTheDefaultAccess(): void
     {
-        $access = new DefaultOwnerImageAccess(new OwnerImageSubjects());
+        $access = new DefaultOwnerImageAccess(new OwnerImageSubjects(null, InMemoryUser::class));
         $alice  = new InMemoryUser('alice', null);
         $avatar = new OwnerImageKind('avatar', OwnerImageKind::SUBJECT_USER, OwnerImageKind::READ_AUTHENTICATED);
         $target = $access->writableTarget($alice, $avatar, 'alice');

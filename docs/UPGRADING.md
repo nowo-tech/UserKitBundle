@@ -77,6 +77,11 @@ No breaking change: `owner_images` is off by default. To move a host's own profi
            pointer_store: App\Files\OwnerImagePointers # optional: keep your avatar_file_uuid / logo columns
    ```
 
+   The subject id of a `user` kind is `OwnerImageSubjects::idOf($user)`: the Doctrine identifier of an instance of
+   `owner_images.user_class` (default: the `user_class` of your only profile; set it when you have several), or the
+   value of `OwnerImageSubjectInterface` when the user implements it. Implement the interface when the pointer key
+   should be another column (the `uuid` of the example below) or when several user classes have overlapping ids. PHP GD
+   must be built with WebP.
 3. Without `pointer_store`, create the table: `php bin/console doctrine:migrations:diff` (`user_kit_owner_image`, binary
    collation on MySQL / MariaDB). Copy existing pointers into it:
    `INSERT INTO user_kit_owner_image (kind, subject_id, file_id, updated_at) SELECT 'avatar', uuid, avatar_file_uuid, NOW() FROM app_user WHERE avatar_file_uuid IS NOT NULL;`

@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\DependencyInjection;
 
 use Nowo\StorageKitBundle\Context\FileContextInterface;
 use Nowo\StorageKitBundle\Context\SquareImageContextInterface;
+use Nowo\StorageKitBundle\Doctrine\StorageEntityManager;
 use Nowo\StorageKitBundle\Download\FileUrls;
 use Nowo\StorageKitBundle\Lifecycle\FileRemoverInterface;
 use Nowo\StorageKitBundle\Profile\StorageProfiles;
@@ -31,6 +32,7 @@ use Nowo\UserKitBundle\OwnerImage\Storage\OwnerImageStorageInterface;
 use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\OwnerImageFileContext;
 use Nowo\UserKitBundle\OwnerImage\Storage\StorageKit\StorageKitOwnerImageStorage;
 use Nowo\UserKitBundle\OwnerImage\Twig\OwnerImageExtension;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -46,6 +48,8 @@ use function class_exists;
 use function interface_exists;
 use function is_array;
 use function is_string;
+use function ltrim;
+use function sprintf;
 
 /**
  * Registers `nowo_user_kit.owner_images` (1.18, only when `owner_images.enabled` is true) and prepends the Doctrine
@@ -84,9 +88,11 @@ final class OwnerImagesLoader
     /**
      * Registers the services of the feature.
      *
-     * @param array{enabled: bool, kinds: array<string, array{subject: string, read: string, shape: string}>, avatar_kind: string|null, access: string|null, pointer_store: string|null, storage: string|null, doctrine: array{entity_manager: string|null}, twig: array{sizes: array<string, int>}} $config
+     * @param array{enabled: bool, kinds: array<string, array{subject: string, read: string, shape: string}>, user_class: string|null, avatar_kind: string|null, access: string|null, pointer_store: string|null, storage: string|null, doctrine: array{entity_manager: string|null}, twig: array{sizes: array<string, int>}} $config
+     * @param string|null $profileUserClass the user class of the only UserKit profile (null with several profiles):
+     *                                      the default of `user_class`
      */
-    public static function load(ContainerBuilder $container, array $config, bool $twig, bool $personalData): void
+    public static function load(ContainerBuilder $container, array $config, bool $twig, bool $personalData, ?string $profileUserClass = null): void
     {
         $container->setParameter('nowo_user_kit.owner_images.enabled', $config['enabled']);
         if (!$config['enabled']) {
@@ -98,7 +104,11 @@ final class OwnerImagesLoader
             $kinds[$name] = new Definition(OwnerImageKind::class, [(string) $name, $kind['subject'], $kind['read'], $kind['shape']]);
         }
         $container->setDefinition(OwnerImageKinds::class, new Definition(OwnerImageKinds::class, [array_values($kinds)]));
-        $container->setDefinition(OwnerImageSubjects::class, new Definition(OwnerImageSubjects::class, [new Reference('doctrine', ContainerInterface::NULL_ON_INVALID_REFERENCE)]));
+        $userClass = is_string($config['user_class']) ? ltrim($config['user_class'], '\\') : $profileUserClass;
+        if ($userClass !== null && !class_exists($userClass) && !interface_exists($userClass)) {
+            throw new InvalidConfigurationException(sprintf('nowo_user_kit.owner_images.user_class: class or interface "%s" does not exist.', $userClass));
+        }
+        $container->setDefinition(OwnerImageSubjects::class, new Definition(OwnerImageSubjects::class, [new Reference('doctrine', ContainerInterface::NULL_ON_INVALID_REFERENCE), $userClass]));
 
         $container->setDefinition(DefaultOwnerImageAccess::class, new Definition(DefaultOwnerImageAccess::class, [new Reference(OwnerImageSubjects::class)]));
         $container->setAlias(OwnerImageAccessInterface::class, self::serviceId($config['access']) ?? DefaultOwnerImageAccess::class)->setPublic(true);
@@ -174,6 +184,8 @@ final class OwnerImagesLoader
             new Reference(FileUris::class),
             new Reference(StorageProfiles::class),
             new Reference(SquareImageProcessor::class),
+            new Reference(StorageEntityManager::class),
+            new Reference(CommitQueue::class, ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]));
         foreach ($kinds as $name => $kind) {
             $container->setDefinition(self::CONTEXT_PREFIX . $name, (new Definition(OwnerImageFileContext::class, [

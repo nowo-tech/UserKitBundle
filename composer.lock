@@ -7500,12 +7500,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/StorageKitBundle.git",
-                "reference": "6ab55e95937ea7fdc9f53a59d95e4efb9087d203"
+                "reference": "4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/6ab55e95937ea7fdc9f53a59d95e4efb9087d203",
-                "reference": "6ab55e95937ea7fdc9f53a59d95e4efb9087d203",
+                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155",
+                "reference": "4b4ca4d34b6269a7b69dc35cf738d5e3e8eef155",
                 "shasum": ""
             },
             "require": {
@@ -7690,7 +7690,7 @@
                     "url": "https://github.com/HecFranco"
                 }
             ],
-            "time": "2026-11-15T12:11:02+00:00"
+            "time": "2026-11-15T13:12:11+00:00"
         },
         {
             "name": "paragonie/constant_time_encoding",

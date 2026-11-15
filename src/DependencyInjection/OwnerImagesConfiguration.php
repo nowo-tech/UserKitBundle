@@ -23,6 +23,9 @@ final class OwnerImagesConfiguration
         'avatar' => ['subject' => OwnerImageKind::SUBJECT_USER, 'read' => OwnerImageKind::READ_AUTHENTICATED, 'shape' => OwnerImageKind::SHAPE_CIRCLE],
     ];
 
+    /** A fully qualified class name. */
+    public const CLASS_PATTERN = '/^\\\\?[A-Za-z_\\x80-\\xff][A-Za-z0-9_\\x80-\\xff]*(?:\\\\[A-Za-z_\\x80-\\xff][A-Za-z0-9_\\x80-\\xff]*)*$/';
+
     public function node(): ArrayNodeDefinition
     {
         $node = (new TreeBuilder('owner_images'))->getRootNode();
@@ -54,6 +57,14 @@ final class OwnerImagesConfiguration
                             return $kinds === [];
                         })
                         ->thenInvalid('nowo_user_kit.owner_images.kinds needs at least one kind, each named with 1-16 characters [a-z0-9_].')
+                    ->end()
+                ->end()
+                ->scalarNode('user_class')
+                    ->info('The user class (or interface) whose Doctrine identifier (else user identifier) is the subject id of its users (null: the user_class of the only profile; with several profiles none, so set it). Users of any other class get no subject id unless they implement OwnerImageSubjectInterface, so two user classes sharing an id never share an image.')
+                    ->defaultNull()
+                    ->validate()
+                        ->ifTrue(static fn (mixed $v): bool => $v !== null && (!is_string($v) || preg_match(self::CLASS_PATTERN, $v) !== 1))
+                        ->thenInvalid('nowo_user_kit.owner_images.user_class must be a fully qualified class or interface name.')
                     ->end()
                 ->end()
                 ->scalarNode('avatar_kind')

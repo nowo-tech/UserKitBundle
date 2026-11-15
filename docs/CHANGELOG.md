@@ -73,7 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Twig: `owner_image()`, `user_avatar()`, `owner_image_url()`, `owner_image_ready()`, `owner_image_preload()`. The
     per-request memo is cleared at every request boundary.
   - Form type `OwnerImageType`: UiKit 2.47+ image input with the client-side crop step.
-  - GDPR: export section `owner_images`; the eraser forgets the person's own images without a bucket call.
+  - GDPR: export section `owner_images`; the eraser forgets the person's own images without a bucket call (the
+    files are no longer served from then on, StorageKit 1.6 expiry).
+  - `owner_images.user_class` (default: the `user_class` of the only profile): only instances of that class get their
+    identifier as subject id; any other user object gets none unless it implements `OwnerImageSubjectInterface`, so
+    two user classes sharing an id never share an image, its access, export or erasure (audit QJ-M1).
+  - StorageKit's audit events of changes made inside a transaction (the GDPR erasure, a wrapped call) wait for the
+    commit on the commit queue (`sessions.enabled`) and are dropped on rollback. `ready()` is false on a GD build
+    without WebP.
   - Standard host (attribute entities, bundle table) and DDD host (own pointer store and access by id) are both tested.
 
 ### Changed

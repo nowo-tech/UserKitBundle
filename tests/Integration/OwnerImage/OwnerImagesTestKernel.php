@@ -148,8 +148,7 @@ final class OwnerImagesTestKernel extends Kernel
             'web_ui'                  => ['enabled' => false],
             'security'                => ['allow_unauthenticated' => false],
         ]);
-        $container->extension('nowo_user_kit', array_replace_recursive([
-            'user_class'    => User::class,
+        $container->extension('nowo_user_kit', array_replace_recursive(isset($this->userKit['profiles']) ? [] : ['user_class' => User::class], [
             'owner_images'  => ['enabled' => true],
             'personal_data' => ['enabled' => true],
         ], $this->userKit));

@@ -287,6 +287,7 @@ nowo_user_kit:
         kinds:                       # name (1-16 chars [a-z0-9_], also the StorageKit context type) => options
             avatar: { subject: user, read: authenticated, shape: circle }   # the default when kinds is omitted
             # org_logo: { subject: other, read: public, shape: square }
+        user_class: null             # class whose identifier is the subject id (null: the user_class of the only profile)
         avatar_kind: avatar          # kind shown by user_avatar() (a "user" kind)
         access: null                 # service id of your OwnerImageAccessInterface (null: DefaultOwnerImageAccess)
         pointer_store: null          # service id of your OwnerImagePointerStoreInterface (null: table user_kit_owner_image)
@@ -302,7 +303,8 @@ nowo_user_kit:
 | `kinds.*.subject` | `other` | `user`: the subject id is a user's id. The default access lets each user change their own image, and the GDPR hooks cover it. `other`: your access service decides. |
 | `kinds.*.read` | `authenticated` | Who may see the image through the storage's download route: `public` (anonymous too), `authenticated` or `host` (your access service). |
 | `kinds.*.shape` | `square` | Crop frame of the form field (`circle` / `square`). The stored image is always a square. |
-| `storage` | `null` | Without it, `nowo-tech/storage-kit-bundle` 1.6+ must be installed, or the container does not compile. Image limits are StorageKit's `upload.square.max_bytes` (2 MiB), `upload.square.size` (256 px) and `upload.max_pixels`. |
+| `user_class` | `null` | The user class (or interface) whose Doctrine identifier, else user identifier, is the subject id of its users. `null`: the `user_class` of the only profile; with several profiles, nobody, so set it. Users of any other class get no subject id unless they implement `OwnerImageSubjectInterface` (ids unique across your user classes, e.g. `admin:42`): two classes sharing an id never share an image. An unknown class fails the container build. |
+| `storage` | `null` | Without it, `nowo-tech/storage-kit-bundle` 1.6+ must be installed, or the container does not compile. Image limits are StorageKit's `upload.square.max_bytes` (2 MiB), `upload.square.max_pixels` (16 MP), `upload.square.size` (256 px) and `upload.max_pixels`. PHP GD must encode WebP, else uploads are refused with `off`. |
 
 ### Table
 
