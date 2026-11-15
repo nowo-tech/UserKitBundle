@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5f01ce9a69ce43aa909c7fb7c19b86f1",
+    "content-hash": "8b49968e2450ea45c537fb66e2fddafc",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -7327,25 +7327,27 @@
         },
         {
             "name": "nowo-tech/instance-settings-bundle",
-            "version": "v1.18.1",
+            "version": "v1.19.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/InstanceSettingsBundle.git",
-                "reference": "06051c6952fd00d44d67840c1e6548f9d58b8bd1"
+                "reference": "1d1592cfe4e5ec2fc8e3d27794ce7862bb431119"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/InstanceSettingsBundle/zipball/06051c6952fd00d44d67840c1e6548f9d58b8bd1",
-                "reference": "06051c6952fd00d44d67840c1e6548f9d58b8bd1",
+                "url": "https://api.github.com/repos/nowo-tech/InstanceSettingsBundle/zipball/1d1592cfe4e5ec2fc8e3d27794ce7862bb431119",
+                "reference": "1d1592cfe4e5ec2fc8e3d27794ce7862bb431119",
                 "shasum": ""
             },
             "require": {
-                "doctrine/dbal": "^4.0",
+                "doctrine/dbal": "^3.8.2 || ^4.0",
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
                 "doctrine/orm": "^3.3",
                 "doctrine/persistence": "^3.1 || ^4.0",
                 "nowo-tech/doctrine-encrypt-bundle": "^2.10",
                 "nowo-tech/form-kit-bundle": "^2.17",
+                "nowo-tech/transaction-contract": "^1.0",
+                "nowo-tech/transaction-doctrine": "^1.1",
                 "nowo-tech/ui-kit-bundle": "^2.47",
                 "php": ">=8.2 <8.6",
                 "psr/clock": "^1.0",
@@ -7379,7 +7381,7 @@
                 "friendsofphp/php-cs-fixer": "^3.0",
                 "igor-php/igor-php": "^0.10.1",
                 "nowo-tech/brand-contracts": "^1.0",
-                "nowo-tech/phpstan-frankenphp": "^1.0",
+                "nowo-tech/phpstan-frankenphp": "^1.4",
                 "phpstan/extension-installer": "^1.4",
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
@@ -7460,8 +7462,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-15T03:02:44+00:00",
-            "published-time": "2026-11-15T03:09:04+00:00"
+            "time": "2026-11-15T19:33:05+00:00",
+            "published-time": "2026-11-15T19:38:24+00:00"
         },
         {
             "name": "nowo-tech/outbound-url-guard-bundle",
@@ -7648,16 +7650,16 @@
         },
         {
             "name": "nowo-tech/storage-kit-bundle",
-            "version": "v1.6.0",
+            "version": "v1.6.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/StorageKitBundle.git",
-                "reference": "c84bfbbf07bb32755d135369ed80443d6eb8a621"
+                "reference": "2e10820bd98f1742a2b1165071a1e4f860bd7c1d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/c84bfbbf07bb32755d135369ed80443d6eb8a621",
-                "reference": "c84bfbbf07bb32755d135369ed80443d6eb8a621",
+                "url": "https://api.github.com/repos/nowo-tech/StorageKitBundle/zipball/2e10820bd98f1742a2b1165071a1e4f860bd7c1d",
+                "reference": "2e10820bd98f1742a2b1165071a1e4f860bd7c1d",
                 "shasum": ""
             },
             "require": {
@@ -7789,8 +7791,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-15T13:40:06+00:00",
-            "published-time": "2026-11-15T13:45:23+00:00"
+            "time": "2026-11-15T20:52:39+00:00",
+            "published-time": "2026-11-15T20:58:58+00:00"
         },
         {
             "name": "paragonie/constant_time_encoding",

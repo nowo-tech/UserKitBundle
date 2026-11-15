@@ -98,8 +98,8 @@ No configuration change is required. New requirements: `nowo-tech/transaction-co
   instead of deleting its objects at once; outside a transaction nothing changes. A pointer store of your own can
   implement `LockingOwnerImagePointerStoreInterface::replace()` (return the file id it replaced, read with a row lock). Uploads of one
   subject are serialised by a named lock (5 s, then 503), and a transient failure of the pointer write answers 503
-  (`UserKitStorageFailure`) instead of an `OwnerImageRefused` `storage` refusal. On PostgreSQL with DBAL 3 see
-  [HIGH-LOAD, Known issues](HIGH-LOAD.md#known-issues) for StorageKit's reference table.
+  (`UserKitStorageFailure`) instead of an `OwnerImageRefused` `storage` refusal. On PostgreSQL with DBAL 3 use
+  StorageKit 1.6.1 or later (1.6.0 inserted its references without an id there).
 - **A failed erasure** cancels the `remove()` calls of its erasers, and closes the manager when it changed a collection.
 - **DBAL 3:** set `doctrine.dbal.use_savepoints: true` (DBAL 4 always does). The erasure nested in your transaction,
   and the first-row inserts inside a transaction, use savepoints.

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Load;
 
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
 use Nowo\UserKitBundle\OwnerImage\Pointer\DbalOwnerImagePointerStore;
 use Nowo\UserKitBundle\OwnerImage\Pointer\OwnerImagePointerStoreInterface;
@@ -63,13 +62,6 @@ final class OwnerImageLoadTest extends OwnerImagesKernelTestCase
         // @phpstan-ignore frankenphp.classic.noPutenv
         putenv('USER_KIT_TEST_DB_URL=' . $url);
         $this->boot([], null, 'load-parent');
-        $connection = $this->em()->getConnection();
-        if ($connection->getDatabasePlatform() instanceof PostgreSQLPlatform && (bool) $connection->fetchOne("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'storage_kit_file_reference' AND column_name = 'id' AND column_default IS NULL AND is_identity = 'NO'")) {
-            // StorageKit 1.6.0 writes its references through DBAL without an id: on PostgreSQL with DBAL 3 (ids from a
-            // sequence) that is a NOT NULL violation in StorageKit itself. The host workaround of HIGH-LOAD (Known
-            // issues) gives the column its sequence as default.
-            $connection->executeStatement("ALTER TABLE storage_kit_file_reference ALTER COLUMN id SET DEFAULT nextval('storage_kit_file_reference_id_seq')");
-        }
     }
 
     protected function tearDown(): void

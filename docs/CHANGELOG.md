@@ -195,8 +195,8 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   the next value of the entity's sequence (`Transaction\UserKitRows::sequenceId()`); identity columns are unchanged.
 - **Owner images (1.18.0) on PostgreSQL with DBAL 3: every first upload failed** (audit QM-M3). The pointer row
   (`user_kit_owner_image`) was inserted through DBAL without an id while the ORM gives it a sequence there: a NOT NULL
-  violation, the upload refused. It now takes the next value of the sequence. StorageKit 1.6.0 has the same gap in its
-  own reference table: see [HIGH-LOAD](HIGH-LOAD.md#known-issues).
+  violation, the upload refused. It now takes the next value of the sequence. StorageKit had the same gap in its own
+  reference table, fixed in StorageKit 1.6.1: the `suggest` (and the tests) now ask for `^1.6.1`.
 - **Owner images (1.18.0): a lost first-pointer race failed the upload.** The pointer write (read, then insert, in a
   hand-written transaction) answered a unique violation when another request stored the subject's first row meanwhile,
   and inside the application's transaction PostgreSQL then aborted it. It now runs on UserKit's runner with the row
@@ -216,17 +216,11 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
 - **Last activity moves forward only.** Two workers keep separate throttle maps; the later write of an earlier request
   moved the timestamp back. The mapped column is now written with `WHERE column IS NULL OR column < :value`.
 
-### Known issues
-
-- **StorageKit 1.6.0 on PostgreSQL with DBAL 3:** StorageKit inserts its file references (`storage_kit_file_reference`)
-  without an id, a NOT NULL violation there, so owner image uploads fail inside StorageKit. Fixed in StorageKit 1.6.1;
-  until then use the one-line workaround of [HIGH-LOAD](HIGH-LOAD.md#known-issues). The `suggest` moves to `^1.6.1`
-  once it is released.
-
 ### Changed
 
 - Requirements: + `nowo-tech/transaction-contract` ^1.0, + `nowo-tech/transaction-doctrine` ^1.1;
-  `doctrine/dbal` ^3.8.2 || ^4.0 (was ^3.8), `doctrine/orm` ^2.16 || ^3.0 (was ^2.15). Dev: `nowo-tech/phpstan-frankenphp` ^1.4.
+  `doctrine/dbal` ^3.8.2 || ^4.0 (was ^3.8), `doctrine/orm` ^2.16 || ^3.0 (was ^2.15); `suggest` / dev
+  `nowo-tech/storage-kit-bundle` ^1.6.1 (its references on PostgreSQL with DBAL 3). Dev: `nowo-tech/phpstan-frankenphp` ^1.4.
 - `PersonalDataEraser`, `UserSessionStore`, `DoctrineSessionEpochStore`, `LastActivitySubscriber` and
   `DbalOwnerImagePointerStore` take an optional trailing `UserKitTransactionRunner` argument; `OwnerImages` takes an
   optional `ManagerRegistry` and manager name for its lock.

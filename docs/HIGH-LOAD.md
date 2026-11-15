@@ -167,11 +167,6 @@ and every registration failed with a NOT NULL violation).
 
 ## Known issues
 
-- **StorageKit 1.6.0 on PostgreSQL with DBAL 3.** StorageKit writes its file references (`storage_kit_file_reference`)
-  through DBAL without an id, and the ORM gives that id a sequence there: every owner image upload fails in StorageKit
-  with a NOT NULL violation (UserKit's own pointer row is fixed). Fixed in StorageKit 1.6.1; until you can upgrade, give
-  the column its sequence as default: `ALTER TABLE storage_kit_file_reference ALTER COLUMN id SET DEFAULT nextval('storage_kit_file_reference_id_seq');`
-  DBAL 4 (identity columns), MySQL and MariaDB are not affected.
 - **The session limit's lock inside your transaction.** The named lock is a session lock released right after the
   registration. When UserKit's connection is inside a transaction your application opened at sign-in (a request-wide
   transaction middleware, a PDO session handler on the same connection), the registered row stays invisible to the next
