@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
   - [To 1.18.0: owner images (opt-in)](#to-1180-owner-images-opt-in)
 - [To 1.17.0](#to-1170)
@@ -57,6 +58,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.19.0
+
+From **1.18.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.18.x** (target 1.19.0):
 
