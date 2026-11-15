@@ -158,6 +158,9 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   `console.terminate`, after each Messenger message and on `kernel.reset`.
 - **Real-database load tests** (`tests/Load`, testsuite `load`, `USER_KIT_LOAD_DATABASE_URL`) and the CI job
   **Load readiness** on MySQL 8.4 and PostgreSQL 16, each with DBAL 4 and DBAL 3. Each test fails against 1.18.0.
+- **Owner images:** optional SPI `OwnerImage\Pointer\LockingOwnerImagePointerStoreInterface::replace()` (the default
+  pointer store implements it): the store returns the image it replaced, read under its row lock. With owner images
+  enabled the commit queue is registered also when the session registry is off.
 - PHPStan: the four load rules of nowo-tech/phpstan-frankenphp 1.4 are on (`flagRollbackAfterNestedBegin`,
   `flagFlushInHandWrittenTransaction`, `flagUnboundedRecursion`, `flagFlushWithoutClosedManagerRecovery`).
 
@@ -201,15 +204,24 @@ High load readiness (Beacon spec 239), modelled on ChatKit 1.30.0 and AuthKit 1.
   retried, else 503.
 - **Owner images (1.18.0): a replaced or removed picture was deleted before the commit.** Inside the application's
   transaction, `upload()` and `remove()` deleted the previous file's objects from the bucket at once; after a rollback
-  the pointer was back on a file without objects. Inside a transaction the file is now expired (StorageKit 1.6, no
-  bucket call; the purge deletes it after the commit); outside one it is still removed at once.
+  the pointer was back on a file without objects. Inside a transaction of the pointer's connection the deletion now
+  waits for the outermost commit (commit queue) and is dropped on rollback; outside one the file is still removed at
+  once.
 - **Owner images (1.18.0): two parallel uploads of one subject.** Both read the same previous picture; the pointer and
   the StorageKit reference could end on different files (the purge would then delete the picture shown) and the other
-  new file was never removed. Reading the previous picture, writing the pointer and the reference now run under a named
-  lock of the kind and subject; the second upload replaces (and removes) the first one's file. A transient failure of
-  the upload answers 503 instead of a `storage` refusal.
+  new file was never removed. Writing the pointer and the reference now run under a named lock of the kind and subject
+  (on the pointer's connection), and the replaced picture is the one the pointer row held under its row lock, also
+  inside an application transaction on MySQL's REPEATABLE READ (audit QM-D-M1); the second upload replaces (and
+  removes) the first one's file. A transient failure of the upload answers 503 instead of a `storage` refusal.
 - **Last activity moves forward only.** Two workers keep separate throttle maps; the later write of an earlier request
   moved the timestamp back. The mapped column is now written with `WHERE column IS NULL OR column < :value`.
+
+### Known issues
+
+- **StorageKit 1.6.0 on PostgreSQL with DBAL 3:** StorageKit inserts its file references (`storage_kit_file_reference`)
+  without an id, a NOT NULL violation there, so owner image uploads fail inside StorageKit. Fixed in StorageKit 1.6.1;
+  until then use the one-line workaround of [HIGH-LOAD](HIGH-LOAD.md#known-issues). The `suggest` moves to `^1.6.1`
+  once it is released.
 
 ### Changed
 

@@ -26,7 +26,7 @@ with Messenger consumers.
 | Remember-me epoch (`revokeAll()`, `revokeOthers()`, erasure) | One row per user, moved forward only | Same as the registry; the re-read after a lost first insert is a locking read |
 | Concurrent-session limit (sign-in) | Count, evict, register | Under a named lock of the user |
 | Last activity (`kernel.request`) | One DQL `UPDATE` of the user's column, throttled | Moves forward only; retried in autocommit; failures only logged |
-| Owner images (`OwnerImagesInterface::upload()` / `remove()`, 1.18.0) | The pointer row (`user_kit_owner_image`), StorageKit's file, reference and bucket objects | Previous picture, pointer and reference under a named lock of the kind and subject; pointer row locked, first row in a savepoint with its sequence id; previous file expired (not deleted) inside a transaction |
+| Owner images (`OwnerImagesInterface::upload()` / `remove()`, 1.18.0) | The pointer row (`user_kit_owner_image`), StorageKit's file, reference and bucket objects | Pointer and reference under a named lock of the kind and subject (pointer's connection); the replaced picture read under the pointer's row lock; first row in a savepoint with its sequence id; inside a transaction the previous file is deleted after the commit (commit queue) |
 
 UI preferences, profile settings and product tour progress are fields of your user entity: your application writes
 them with its own flush. UserKit only resets them inside the erasure. The erasure forgets owner images with StorageKit's
@@ -101,9 +101,14 @@ reload. Up to 1.18 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTi
 - **A sign-in that fails inside the limit section** (the lock not obtained in 5 s, a storage failure: 503) is signed out
   before the failure goes on (no token kept in the session, no remember-me cookie), and under a limit a signed-in
   session without a registry row (its sign-in was not registered) is registered through the limit on its next request.
-- **Owner images.** Two uploads (or an upload and a removal) of one subject run one after the other: the previous
-  picture is read, the pointer and StorageKit's reference written under a named lock of the kind and subject, 5 s at
-  most, then 503. The second upload sees the first one's file as the previous picture and removes it.
+- **Owner images.** Two uploads (or an upload and a removal) of one subject run one after the other: the pointer and
+  StorageKit's reference are written under a named lock of the kind and subject, on the pointer's connection, 5 s at
+  most, then 503. The replaced picture is the one the pointer row held under its row lock (a store implementing
+  `LockingOwnerImagePointerStoreInterface`, the default one), so the second upload removes the first one's file, also
+  inside your transaction under MySQL's REPEATABLE READ. Inside a transaction of the pointer's connection the replaced
+  file is deleted after the outermost commit (commit queue, registered with owner images) and kept on rollback. When
+  the lock times out the new file was already uploaded but never attached: StorageKit marks every upload as an orphan
+  until a reference points at it, so its purge deletes it after the orphan retention.
 - **Last activity.** Two workers keep separate throttle maps, so two requests of one user can both write. The column
   only moves forward (`WHERE column IS NULL OR column < :value`), so the later write of an earlier request no longer
   moves the last activity back. A custom setter on an unmapped field writes the mapped fields it changed, as before,
@@ -164,14 +169,18 @@ and every registration failed with a NOT NULL violation).
 
 - **StorageKit 1.6.0 on PostgreSQL with DBAL 3.** StorageKit writes its file references (`storage_kit_file_reference`)
   through DBAL without an id, and the ORM gives that id a sequence there: every owner image upload fails in StorageKit
-  with a NOT NULL violation (UserKit's own pointer row is fixed). Until StorageKit fixes it, give the column its sequence
-  as default: `ALTER TABLE storage_kit_file_reference ALTER COLUMN id SET DEFAULT nextval('storage_kit_file_reference_id_seq');`
+  with a NOT NULL violation (UserKit's own pointer row is fixed). Fixed in StorageKit 1.6.1; until you can upgrade, give
+  the column its sequence as default: `ALTER TABLE storage_kit_file_reference ALTER COLUMN id SET DEFAULT nextval('storage_kit_file_reference_id_seq');`
   DBAL 4 (identity columns), MySQL and MariaDB are not affected.
 - **The session limit's lock inside your transaction.** The named lock is a session lock released right after the
   registration. When UserKit's connection is inside a transaction your application opened at sign-in (a request-wide
   transaction middleware, a PDO session handler on the same connection), the registered row stays invisible to the next
   sign-in until your transaction commits, so two sign-ins can again both count below the limit. Sign users in outside a
   transaction (audit QM-L3).
+- **A host pointer store** that implements only `OwnerImagePointerStoreInterface` (not
+  `LockingOwnerImagePointerStoreInterface::replace()`) is read, then written: inside your transaction under MySQL's
+  REPEATABLE READ a picture another request stored meanwhile can stay live until you replace it again. Implement
+  `replace()` with a locking read.
 - **The refused sign-in's redirect.** The browser goes back to the same-origin `Referer` (the page that posted the form),
   else to the posted path as a GET; a client that sends no `Referer` with `check_path` different from `login_path`
   lands on the check path (audit QM-L2).

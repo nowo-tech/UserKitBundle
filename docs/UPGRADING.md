@@ -93,8 +93,10 @@ No configuration change is required. New requirements: `nowo-tech/transaction-co
   keeps no remember-me cookie and goes back to the same-origin page that posted the form, and a signed-in session
   without a registry row is registered through the limit (with `reject_new` over the limit it is signed out) instead
   of unconditionally.
-- **Owner images.** Inside your own transaction, `upload()` and `remove()` expire the previous file (StorageKit 1.6, the
-  purge deletes it) instead of deleting its objects at once; outside a transaction nothing changes. Uploads of one
+- **Owner images.** Inside your own transaction, `upload()` and `remove()` delete the previous file after your commit
+  (the commit queue, now also registered with owner images when the session registry is off) and keep it on rollback,
+  instead of deleting its objects at once; outside a transaction nothing changes. A pointer store of your own can
+  implement `LockingOwnerImagePointerStoreInterface::replace()` (return the file id it replaced, read with a row lock). Uploads of one
   subject are serialised by a named lock (5 s, then 503), and a transient failure of the pointer write answers 503
   (`UserKitStorageFailure`) instead of an `OwnerImageRefused` `storage` refusal. On PostgreSQL with DBAL 3 see
   [HIGH-LOAD, Known issues](HIGH-LOAD.md#known-issues) for StorageKit's reference table.
