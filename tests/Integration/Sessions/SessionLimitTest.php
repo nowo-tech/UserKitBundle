@@ -9,6 +9,7 @@ use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RoleLimitResolver;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface;
@@ -102,6 +103,86 @@ final class SessionLimitTest extends SessionsKernelTestCase
         self::assertSame(401, $browser->getResponse()->getStatusCode());
         self::assertSame('{"error":"session_signed_out"}', $browser->getResponse()->getContent());
         self::assertCount(1, $this->rowsOf($alice));
+    }
+
+    /**
+     * Audit QM-M2: a sign-in that fails inside the limit section (here a storage failure raised while evicting, as a
+     * lock not obtained in 5 s would) answers 503 and is not signed in: its next request is a guest's, and the limit
+     * still holds (on the reviewed head the token stayed in the session and the next request registered it unchecked).
+     */
+    public function testASignInThatFailsInsideTheLimitIsNotSignedIn(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1]]);
+        $alice = $this->member('alice@example.com');
+        $first = $this->signIn('alice@example.com');
+        $first->request('GET', '/page');
+        $this->dispatcher()->addListener(SessionLimitReachedEvent::class, static function (): never {
+            throw new UserKitStorageFailure(1);
+        });
+
+        $second = $this->signIn('alice@example.com');
+        self::assertSame(503, $second->getResponse()->getStatusCode());
+        self::assertSame('1', $second->getResponse()->headers->get('Retry-After'));
+        $second->request('GET', '/page');
+        self::assertRedirectsTo($second, '/login');
+        // The eviction before the failure stands (autocommit): no live session over the limit, none for the failed one.
+        self::assertCount(0, $this->rowsOf($alice));
+    }
+
+    /**
+     * Audit QM-M2 (defence in depth): under a limit, a signed-in session without a registry marker (its sign-in was not
+     * registered) is registered through the limit on its next request.
+     */
+    public function testAnUnregisteredSessionIsRegisteredThroughTheLimit(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice = $this->member('alice@example.com');
+        $first = $this->signIn('alice@example.com');
+        $first->request('GET', '/page');
+        $second = $this->browser();
+        $second->loginUser($alice);
+
+        $second->request('GET', '/page');
+
+        self::assertRedirectsTo($second, '/page');
+        $second->request('GET', '/page');
+        self::assertRedirectsTo($second, '/login');
+        self::assertCount(1, $this->rowsOf($alice));
+    }
+
+    /**
+     * Audit QM-L1: the sign-in refused after its credentials step keeps no remember-me cookie (Symfony's
+     * ResponseListener wrote it after UserKit cleared it).
+     */
+    public function testARefusedSignInKeepsNoRememberMeCookie(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice = $this->member('alice@example.com');
+        $this->parallelSignIn($alice);
+
+        $loser = $this->signIn('alice@example.com', remember: true);
+
+        self::assertRedirectsTo($loser, '/login');
+        self::assertNull($loser->getCookieJar()->get('REMEMBERME'));
+    }
+
+    /**
+     * Audit QM-L2: the refused browser goes back to the same-origin page that posted the form (`check_path` may be
+     * another path), never to a foreign Referer.
+     */
+    public function testARefusedSignInGoesBackToTheSameOriginFormPage(): void
+    {
+        $this->boot(['limit' => ['max_sessions' => 1, 'policy' => 'reject_new']]);
+        $alice = $this->member('alice@example.com');
+        $this->parallelSignIn($alice);
+
+        $same = $this->browser();
+        $same->request('POST', '/login', ['_username' => 'alice@example.com', '_password' => 'secret'], [], ['HTTP_REFERER' => 'http://localhost/page/form?step=2']);
+        self::assertRedirectsTo($same, '/page/form?step=2');
+
+        $foreign = $this->browser();
+        $foreign->request('POST', '/login', ['_username' => 'alice@example.com', '_password' => 'secret'], [], ['HTTP_REFERER' => 'https://evil.example/login']);
+        self::assertRedirectsTo($foreign, '/login');
     }
 
     public function testAListenerCanReplaceTheMessage(): void
