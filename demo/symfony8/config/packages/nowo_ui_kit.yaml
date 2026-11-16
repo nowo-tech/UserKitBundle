@@ -1,8 +1,8 @@
-# UiKit page contract (REQ-UI-003): one host layout and one theme for every bundle page. The demo admin layout extends
-# base.html.twig (Bootstrap 5 + Bootstrap Icons) to match css_framework / icon_set, so "My sessions" and the session
-# administration render inside the demo shell (masthead, icons for the row actions).
+# REQ-DEMO-014: UiKit's default theme, unchanged, with UiKit's own semantic stylesheet only (no CSS framework, no CDN).
+# UiKit page contract (REQ-UI-003): one host layout for every bundle page; the demo shell is templates/base.html.twig,
+# so "My sessions" and the session administration render inside it.
 nowo_ui_kit:
-    css_framework: bootstrap5
-    icon_set: bootstrap-icons
+    css_framework: custom
+    icon_set: none
     layouts:
-        admin: 'layouts/admin.html.twig'
+        admin: 'base.html.twig'

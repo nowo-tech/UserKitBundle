@@ -2,40 +2,39 @@
 
 {% block title %}User Kit Demo{% endblock %}
 
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header'), {title: 'Account status & presence'}) }}
+{% endblock %}
+
 {% block body %}
-<div class="row justify-content-center">
-    <div class="col-lg-7">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h1 class="h3 mb-3">Account status &amp; presence</h1>
-                {% if app.user %}
-                    <ul class="list-unstyled mb-0">
-                        <li><strong>Email:</strong> {{ user.email }}</li>
-                        {% if profile %}
-                            <li><strong>Profile:</strong> <code>{{ profile.name }}</code> (online threshold {{ profile.onlineThreshold }}s)</li>
-                        {% endif %}
-                        <li><strong>Enabled:</strong> {{ user.enabled ? 'yes' : 'no' }}</li>
-                        <li><strong>Last activity:</strong> {{ user.lastActivityAt ? user.lastActivityAt|date('Y-m-d H:i:s') : 'never' }}</li>
-                        <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
-                        <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
-                    </ul>
-                    <p class="text-muted small mt-3 mb-0">
-                        Configuration uses <code>nowo_user_kit.profiles.app_user</code> — see
-                        <code>config/packages/nowo_user_kit.yaml</code>.
-                        Reload this page to see throttled <code>lastActivityAt</code> updates.
-                        Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
-                    </p>
-                    <h2 class="h5 mt-4">Sessions</h2>
-                    <p class="mb-0">
-                        <a href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-sessions-link">My sessions</a>
-                        — sign in from another browser, sign that session out here, and it is signed out on its next request
-                        (<code>nowo_user_kit.sessions</code>, limit 3 sessions).
-                    </p>
-                {% else %}
-                    <p class="mb-0">Not authenticated. <a href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
-                {% endif %}
-            </div>
+    <section class="nowo-ui-card">
+        <div class="nowo-ui-card__body">
+            {% if app.user %}
+                <ul class="nowo-ui-list">
+                    <li><strong>Email:</strong> {{ user.email }}</li>
+                    {% if profile %}
+                        <li><strong>Profile:</strong> <code>{{ profile.name }}</code> (online threshold {{ profile.onlineThreshold }}s)</li>
+                    {% endif %}
+                    <li><strong>Enabled:</strong> {{ user.enabled ? 'yes' : 'no' }}</li>
+                    <li><strong>Last activity:</strong> {{ user.lastActivityAt ? user.lastActivityAt|date('Y-m-d H:i:s') : 'never' }}</li>
+                    <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
+                    <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
+                </ul>
+                <p class="nowo-ui-muted">
+                    Configuration uses <code>nowo_user_kit.profiles.app_user</code> — see
+                    <code>config/packages/nowo_user_kit.yaml</code>.
+                    Reload this page to see throttled <code>lastActivityAt</code> updates.
+                    Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
+                </p>
+                <h2>Sessions</h2>
+                <p>
+                    <a class="nowo-ui-link" href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-sessions-link">My sessions</a>
+                    — sign in from another browser, sign that session out here, and it is signed out on its next request
+                    (<code>nowo_user_kit.sessions</code>, limit 3 sessions).
+                </p>
+            {% else %}
+                <p>Not authenticated. <a class="nowo-ui-link" href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
+            {% endif %}
         </div>
-    </div>
-</div>
+    </section>
 {% endblock %}

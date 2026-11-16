@@ -6,3 +6,7 @@ services:
     App\Controller\:
         resource: '../src/Controller/'
         tags: ['controller.service_arguments']
+
+    # REQ-DEMO-015: the FormKit form types are services (FormKit injects its option merger by setter).
+    App\Form\:
+        resource: '../src/Form/'

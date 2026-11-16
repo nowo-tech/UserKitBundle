@@ -2,26 +2,20 @@
 
 {% block title %}Login{% endblock %}
 
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header'), {title: 'Demo login'}) }}
+{% endblock %}
+
 {% block body %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h1 class="h4 mb-3">Demo login</h1>
-                {% if error %}
-                    <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-                {% endif %}
-                {{ form_start(form) }}
-                    {% for child in form %}
-                        {% if not child.rendered %}
-                            {{ form_row(child) }}
-                        {% endif %}
-                    {% endfor %}
-                    <button type="submit" class="btn btn-primary w-100">Sign in</button>
-                {{ form_end(form) }}
-                <p class="text-muted small mt-3 mb-0">Demo credentials: <code>demo@user-kit.test</code> / <code>demo</code></p>
-            </div>
+    {% if error %}
+        <div class="nowo-ui-flash nowo-ui-flash--error" role="alert">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+    {% endif %}
+    <section class="nowo-ui-card">
+        <div class="nowo-ui-card__body">
+            {{ form_start(form) }}
+                {{ form_rest(form) }}
+            {{ form_end(form, {render_rest: false}) }}
+            <p class="nowo-ui-muted">Demo credentials: <code>demo@user-kit.test</code> / <code>demo</code></p>
         </div>
-    </div>
-</div>
+    </section>
 {% endblock %}

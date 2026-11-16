@@ -145,6 +145,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Demo
+
+- The demo is built on UiKit and FormKit (REQ-DEMO-014/015): the base template extends the UiKit admin layout with UiKit's default theme (no Bootstrap / Bootstrap Icons CDN, no demo admin bridge), the login form is a FormKit form themed by the `demo` profile and UiKit's form theme. The demo now requires `nowo-tech/ui-kit-bundle` ^2.49 and `nowo-tech/form-kit-bundle` ^2.22 directly.
+
 ### Documentation
 
 - Spec Kit baseline: the code inventory maps all 171 files under `src/` (1.15–1.19 owner images, ports, XML mappings, load-readiness transaction runner, session commit queue, collation listeners) with `FR-IMG-001`–`003`, `FR-PORT-001`, `FR-TX-001`, `FR-SES-011` and `FR-KEY-001` in the spec (REQ-SPECKIT-001/003). `docs/SPEC-DRIVEN-DEVELOPMENT.md` no longer links a non-existent `nowo-tech/bundles` repository (REQ-DOCS-014).
