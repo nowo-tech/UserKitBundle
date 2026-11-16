@@ -145,7 +145,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
 ### Documentation
 
 - Spec Kit baseline: the code inventory maps all 171 files under `src/` (1.15–1.19 owner images, ports, XML mappings, load-readiness transaction runner, session commit queue, collation listeners) with `FR-IMG-001`–`003`, `FR-PORT-001`, `FR-TX-001`, `FR-SES-011` and `FR-KEY-001` in the spec (REQ-SPECKIT-001/003). `docs/SPEC-DRIVEN-DEVELOPMENT.md` no longer links a non-existent `nowo-tech/bundles` repository (REQ-DOCS-014).
