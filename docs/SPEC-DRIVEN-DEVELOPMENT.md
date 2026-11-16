@@ -97,5 +97,5 @@ make release-check
 
 ## Reference anchors
 
-- [REQ-SPECKIT-001](https://github.com/nowo-tech/bundles/blob/main/BUNDLES_FULL_SPECS_DETAILS.md#REQ-SPECKIT-001) — baseline spec + code inventory
-- [REQ-DOCS-013](https://github.com/nowo-tech/bundles/blob/main/BUNDLES_FULL_SPECS_DETAILS.md#REQ-DOCS-013) — spec-driven development pattern
+- `REQ-SPECKIT-001` (nowo-tech bundle standards, `BUNDLES_FULL_SPECS_DETAILS.md`) — baseline spec + code inventory
+- `REQ-DOCS-013` (nowo-tech bundle standards) — spec-driven development pattern

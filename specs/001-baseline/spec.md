@@ -141,6 +141,19 @@ Opt-in (`nowo_user_kit.sessions.enabled`, since 1.9.0); full specification in [`
 - **FR-SES-009** (004 FR-007): configuration and wiring — services only when enabled, opt-in route loader (REQ-SF-004 rule 7), REQ-UI-002 access checkers (role lists never empty, `allow_unauthenticated` debug-only), compile-time guards, table prefix (REQ-ORM-002).
 - **FR-SES-010** (004 FR-008): GDPR `sessions` export section and eraser when `personal_data.enabled`.
 
+### Owner images (1.18, opt-in `owner_images.enabled`)
+
+- **FR-IMG-001**: `OwnerImagesInterface` (default `OwnerImages`) stores, replaces and removes one square image per subject and kind (`OwnerImageKind` / `OwnerImageKinds`: user avatar, organisation logo, …), returns an `OwnerImageView` or an `OwnerImageRefused` reason, and dispatches `OwnerImageChangedEvent` after the change; subjects resolve through `OwnerImageSubjectInterface` / `OwnerImageSubjects`.
+- **FR-IMG-002**: SPIs — `Access\OwnerImageAccessInterface` (default `DefaultOwnerImageAccess`: a user changes only their own image; `OwnerImageTarget`), `Pointer\OwnerImagePointerStoreInterface` / `LockingOwnerImagePointerStoreInterface` (default `DbalOwnerImagePointerStore`, table `user_kit_owner_image`, `OwnerImagePointer`) and `Storage\OwnerImageStorageInterface` (StorageKit 1.6+ adapter `StorageKitOwnerImageStorage`, one `OwnerImageFileContext` per kind).
+- **FR-IMG-003**: presentation and data — `OwnerImageType` form field, `OwnerImageExtension` Twig helpers with a request memo cleared by `OwnerImageMemoListener` at every boundary, GDPR `OwnerImageExportProvider` / `OwnerImageEraser`; wiring by `OwnerImagesConfiguration` / `OwnerImagesLoader` only when enabled.
+
+### Ports, transactions and load readiness (1.15–1.19)
+
+- **FR-PORT-001** (REQ-ARCH-001 rule 1): application services type-hint `UserSessionsInterface`, `PersonalDataExporterInterface`, `PersonalDataErasureInterface`, `UserPresenceResolverInterface` and `Sessions\Owner\SessionOwnerResolverInterface` (`UnresolvedSessionOwnerException` when no owner can be derived); UI preferences and product tour ship XML mappings for DDD hosts.
+- **FR-TX-001** (1.19, load readiness): every UserKit write unit runs through `UserKitTransactionRunner` (one attempt, one transaction; `FlushObserver`, `ClosedManagerRecovery`, `UserKitNamedLock`, `UserKitRows` savepoint inserts); storage errors surface as `UserKitStorageFailure` / `UserKitConflict`, mapped by `StorageFailureSubscriber`, and `UnitOfWorkBoundarySubscriber` replaces a closed manager at every request / message / command boundary.
+- **FR-SES-011**: session state and commit safety — `SessionState` / `SessionStatus` describe a session from outside, `FirewallContext` tells which firewall a request belongs to, `PendingAuthentication` / `PendingAuthenticationTokenInterface` keep incomplete sign-ins (second factor) out of the registry, `DeviceContextValues` holds per-request values in a WeakMap, and `Transaction\CommitQueue` (+ the DBAL `TransactionBoundaryMiddleware` / `Driver` / `Connection`) defers markers and events until the outermost transaction commits.
+- **FR-KEY-001** (REQ-SEC-006): `Sessions\Doctrine\OwnerCollationListener` and `OwnerImage\Pointer\PointerCollationListener` give the owner / subject id columns an exact (binary NO PAD) collation on MySQL / MariaDB.
+
 ### Integration & i18n
 
 - **FR-I18N-001**: Translation domain `NowoUserKitBundle` — disabled account message (minimum `en`, `es`; align with AuthKit locale set when implemented).
@@ -154,7 +167,7 @@ Opt-in (`nowo_user_kit.sessions.enabled`, since 1.9.0); full specification in [`
 
 ## Success Criteria
 
-- **SC-001**: **105/105** production files under `src/` mapped in [`code-inventory.md`](code-inventory.md), including the `002-ui-preferences`, `003-personal-data` and `004-sessions` features (audited 2026-11-01; `git ls-files src | wc -l`).
+- **SC-001**: **171/171** production files under `src/` mapped in [`code-inventory.md`](code-inventory.md), including the `002-ui-preferences`, `003-personal-data` and `004-sessions` features (audited 2026-11-01; `git ls-files src | wc -l`).
 - **SC-002**: Disabled user cannot authenticate with valid password (functional test).
 - **SC-003**: Enabled user authenticates without regression (functional test).
 - **SC-004**: Last activity updates respect throttle (unit test).

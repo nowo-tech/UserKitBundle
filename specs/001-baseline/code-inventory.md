@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-11-02  
+**Last audited**: 2026-11-16  
 **Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
@@ -154,6 +154,71 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `Resources/views/sessions/admin.html.twig` | Administration of one user's sessions (UiKit list scaffold) | FR-SES-005 | Mapped |
 | `Resources/views/sessions/_cells.html.twig` | Shared row cells (device, network, signed in, last active) | FR-SES-005 | Mapped |
 
+## Owner images (1.18)
+
+| Source file | Spec section | Requirement IDs | Status |
+| --- | --- | --- | --- |
+| `DependencyInjection/OwnerImagesConfiguration.php` | `owner_images` config tree | FR-IMG-003, FR-CFG-001 | Mapped |
+| `DependencyInjection/OwnerImagesLoader.php` | Services only when enabled | FR-IMG-003 | Mapped |
+| `OwnerImage/OwnerImagesInterface.php` | Public port | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImages.php` | Default service | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageKind.php` | One kind (VO) | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageKinds.php` | Configured kinds | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageView.php` | Stored image (VO) | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageRefused.php` | Refusal reason (VO) | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageChangedEvent.php` | After-change event | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageSubjectInterface.php` | Optional subject contract | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageSubjects.php` | Subject id + initials | FR-IMG-001 | Mapped |
+| `OwnerImage/OwnerImageTarget.php` | Writable target (VO) | FR-IMG-002 | Mapped |
+| `OwnerImage/Access/OwnerImageAccessInterface.php` | Access SPI | FR-IMG-002 | Mapped |
+| `OwnerImage/Access/DefaultOwnerImageAccess.php` | Default access | FR-IMG-002 | Mapped |
+| `OwnerImage/Pointer/OwnerImagePointerStoreInterface.php` | Pointer store SPI | FR-IMG-002 | Mapped |
+| `OwnerImage/Pointer/LockingOwnerImagePointerStoreInterface.php` | Locking pointer store SPI | FR-IMG-002 | Mapped |
+| `OwnerImage/Pointer/DbalOwnerImagePointerStore.php` | Default pointer store (DBAL) | FR-IMG-002 | Mapped |
+| `OwnerImage/Pointer/PointerCollationListener.php` | Exact collation on kind / subject_id | FR-KEY-001 | Mapped |
+| `OwnerImage/Entity/OwnerImagePointer.php` | Table `user_kit_owner_image` | FR-IMG-002 | Mapped |
+| `OwnerImage/Storage/OwnerImageStorageInterface.php` | Storage SPI | FR-IMG-002 | Mapped |
+| `OwnerImage/Storage/StorageKit/StorageKitOwnerImageStorage.php` | StorageKit adapter | FR-IMG-002 | Mapped |
+| `OwnerImage/Storage/StorageKit/OwnerImageFileContext.php` | File context per kind | FR-IMG-002 | Mapped |
+| `OwnerImage/Form/OwnerImageType.php` | Form field | FR-IMG-003 | Mapped |
+| `OwnerImage/Twig/OwnerImageExtension.php` | Twig helpers | FR-IMG-003 | Mapped |
+| `OwnerImage/EventListener/OwnerImageMemoListener.php` | Memo cleared at boundaries | FR-IMG-003, FR-RUNTIME-001 | Mapped |
+| `OwnerImage/PersonalData/OwnerImageExportProvider.php` | GDPR export section | FR-IMG-003, 003 FR-001 | Mapped |
+| `OwnerImage/PersonalData/OwnerImageEraser.php` | GDPR eraser | FR-IMG-003, 003 FR-002 | Mapped |
+
+## Ports, transactions and load readiness (1.15–1.19)
+
+| Source file | Spec section | Requirement IDs | Status |
+| --- | --- | --- | --- |
+| `PersonalData/PersonalDataExporterInterface.php` | Exporter port | FR-PORT-001, 003 FR-001 | Mapped |
+| `PersonalData/PersonalDataErasureInterface.php` | Erasure port | FR-PORT-001, 003 FR-002 | Mapped |
+| `Presence/UserPresenceResolverInterface.php` | Presence port | FR-PORT-001, FR-PRES-001 | Mapped |
+| `Sessions/UserSessionsInterface.php` | Session registry API port | FR-PORT-001, FR-SES-005 | Mapped |
+| `Sessions/Owner/SessionOwnerResolverInterface.php` | Owner reference resolver | FR-PORT-001, FR-SES-003 | Mapped |
+| `Sessions/Owner/UnresolvedSessionOwnerException.php` | Owner cannot be mapped | FR-PORT-001 | Mapped |
+| `Resources/config/doctrine/model/UiPreferences.orm.xml` | XML mapping (DDD hosts) | FR-PORT-001, 002 FR-001 | Mapped |
+| `Resources/config/doctrine/model/ProductTourProgress.orm.xml` | XML mapping (DDD hosts) | FR-PORT-001, 002 FR-005 | Mapped |
+| `Sessions/Model/SessionState.php` | State of one session | FR-SES-011 | Mapped |
+| `Sessions/Model/SessionStatus.php` | Status enum | FR-SES-011 | Mapped |
+| `Sessions/Model/DeviceContextValues.php` | Per-request values (WeakMap) | FR-SES-011, FR-RUNTIME-001 | Mapped |
+| `Sessions/FirewallContext.php` | Firewall context marker | FR-SES-011 | Mapped |
+| `Security/PendingAuthentication.php` | Pending vs final sign-in | FR-SES-011 | Mapped |
+| `Security/PendingAuthenticationTokenInterface.php` | Pending sign-in token contract | FR-SES-011 | Mapped |
+| `Sessions/Transaction/CommitQueue.php` | After-commit effects | FR-SES-011, FR-TX-001 | Mapped |
+| `Sessions/Transaction/TransactionBoundaryMiddleware.php` | DBAL middleware | FR-SES-011 | Mapped |
+| `Sessions/Transaction/TransactionBoundaryDriver.php` | DBAL driver wrapper | FR-SES-011 | Mapped |
+| `Sessions/Transaction/TransactionBoundaryConnection.php` | Outermost transaction hooks | FR-SES-011 | Mapped |
+| `Sessions/Doctrine/OwnerCollationListener.php` | Exact collation on owner columns | FR-KEY-001 | Mapped |
+| `Transaction/UserKitTransactionRunner.php` | Unit-of-work runner | FR-TX-001 | Mapped |
+| `Transaction/FlushObserver.php` | Flush detection per unit | FR-TX-001 | Mapped |
+| `Transaction/ClosedManagerRecovery.php` | Closed managers of the request | FR-TX-001, FR-RUNTIME-001 | Mapped |
+| `Transaction/UserKitNamedLock.php` | Named lock (stateless) | FR-TX-001 | Mapped |
+| `Transaction/UserKitRows.php` | Savepoint inserts | FR-TX-001 | Mapped |
+| `Transaction/UserKitStorageFailure.php` | Transient storage failure | FR-TX-001 | Mapped |
+| `Transaction/UserKitConflict.php` | Write conflict | FR-TX-001 | Mapped |
+| `EventSubscriber/StorageFailureSubscriber.php` | Maps UserKit failures to responses | FR-TX-001 | Mapped |
+| `EventSubscriber/UnitOfWorkBoundarySubscriber.php` | Replaces a closed manager at boundaries | FR-TX-001, FR-RUNTIME-001 | Mapped |
+
 ## Translations
 
 | Source file | Spec section | Requirement IDs | Status |
@@ -178,10 +243,16 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | PHP — UI preferences & product tour (002) | 18 | 18 |
 | PHP — personal data / GDPR (003) | 15 | 15 |
 | Sessions — session registry and limits (004, 005) | 51 | 51 |
+| Owner images (1.18) | 27 | 27 |
+| Ports, transactions and load readiness | 28 | 28 |
 | Translations | 7 | 7 |
-| **Total production sources** | **112** | **112** |
+| **Total production sources** | **171** | **171** |
 
-Audit command (production count): `git ls-files src | wc -l` → **112** (2026-11-02). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+Audit command (production count): `git ls-files src | wc -l` → **171** (2026-11-16). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+
+## Inventory refresh (2026-11-16)
+
+- 1.15–1.19 sources (owner images, framework-free ports, XML mappings, load-readiness transaction runner, session commit queue, collation listeners): 55 files mapped under two new categories (`FR-IMG-*`, `FR-PORT-001`, `FR-TX-001`, `FR-SES-011`, `FR-KEY-001`).
 
 ## Inventory refresh (2026-11-02)
 
