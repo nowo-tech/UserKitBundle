@@ -55,6 +55,12 @@ them. The change is additive (BC).
 - **FR-008** With an action log of user relations, `user_id_field` maps subject ids to the user class's identifiers. The
   lookup is a scalar query with an exact match; no match or several matches gives no link. If the user class
   implements `OwnerImageSubjectInterface` (or there is no user class) and `user_id_field` is missing, the build fails.
+- **FR-010** (audit TC) The bridge needs `flush_mode: isolated` and fails the build in `host` mode (M1). A row that
+  fails is logged as a warning with the exception class only, never thrown (L4). Managed entities are synced only
+  after a real write (L1). Inside the application's transaction their original value is left unchanged, so after a
+  rollback they show up as dirty; reload or clear them (L2). The identity map answers only for a unique subject
+  field (L3). Malformed guid / uuid and integer / bigint subject ids never reach the query (I1). The `UPDATE`
+  bypasses lifecycle callbacks, listeners and `#[Version]` (I2, documented).
 - **FR-009** Worker mode with kernel reset off: no service keeps state. The default pointer store, table
   `user_kit_owner_image`, is unchanged.
 
@@ -96,8 +102,12 @@ Differences from Beacon's listener:
   keys from the context.
 - An upload with no known actor is still recorded (actor null); Beacon's listener skipped it.
 
-Recommended: `nowo_audit_kit.action_log.flush_mode: isolated`, so the bridge never flushes the request's pending
-changes.
+```yaml
+nowo_audit_kit:
+    action_log:
+        entity_class: App\Identity\Entity\UserAction
+        flush_mode: isolated             # required by owner_images.audit (audit TC-M1)
+```
 
 ## Success criteria
 

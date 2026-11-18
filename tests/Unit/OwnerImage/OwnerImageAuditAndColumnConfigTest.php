@@ -130,9 +130,12 @@ final class OwnerImageAuditAndColumnConfigTest extends TestCase
         ], 'user_id_field' => 'uuid'], $container->getParameter(OwnerImageAuditPass::PARAMETER));
     }
 
-    private function audited(?string $logClass, ?string $userIdField = null, mixed $userClass = ColumnHost::class, bool $recorder = true): ContainerBuilder
+    private function audited(?string $logClass, ?string $userIdField = null, mixed $userClass = ColumnHost::class, bool $recorder = true, ?string $flushMode = 'isolated'): ContainerBuilder
     {
         $container = new ContainerBuilder();
+        if ($flushMode !== null) {
+            $container->setParameter(OwnerImageAuditPass::FLUSH_MODE_PARAMETER, $flushMode);
+        }
         $container->setParameter(OwnerImageAuditPass::PARAMETER, ['actions' => ['avatar' => ['uploaded' => 'u', 'replaced' => 'r', 'removed' => 'd']], 'user_id_field' => $userIdField]);
         if ($recorder) {
             $container->setDefinition(ActionLogIdRecorderInterface::class, new Definition(stdClass::class));
@@ -164,20 +167,22 @@ final class OwnerImageAuditAndColumnConfigTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string|null, mixed, bool, string}>
+     * @return iterable<string, array{string|null, mixed, bool, string|null, string}>
      */
     public static function badAudits(): iterable
     {
-        yield 'no AuditKit action log' => [IdActionLog::class, ColumnHost::class, false, 'needs nowo-tech/audit-kit-bundle'];
-        yield 'relations and own subject ids' => [RelationActionLog::class, SubjectUser::class, true, 'set owner_images.audit.user_id_field'];
-        yield 'relations and no user class' => [RelationActionLog::class, null, true, 'set owner_images.audit.user_id_field'];
+        yield 'no AuditKit action log' => [IdActionLog::class, ColumnHost::class, false, 'isolated', 'needs nowo-tech/audit-kit-bundle'];
+        yield 'relations and own subject ids' => [RelationActionLog::class, SubjectUser::class, true, 'isolated', 'set owner_images.audit.user_id_field'];
+        yield 'relations and no user class' => [RelationActionLog::class, null, true, 'isolated', 'set owner_images.audit.user_id_field'];
+        yield 'the host flush mode' => [IdActionLog::class, ColumnHost::class, true, 'host', 'needs nowo_audit_kit.action_log.flush_mode: isolated'];
+        yield 'no flush mode' => [IdActionLog::class, ColumnHost::class, true, null, 'needs nowo_audit_kit.action_log.flush_mode: isolated'];
     }
 
     #[DataProvider('badAudits')]
-    public function testThePassRefusesWhatCannotBeRecorded(?string $logClass, mixed $userClass, bool $recorder, string $message): void
+    public function testThePassRefusesWhatCannotBeRecorded(?string $logClass, mixed $userClass, bool $recorder, ?string $flushMode, string $message): void
     {
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage($message);
-        $this->audited($logClass, null, $userClass, $recorder);
+        $this->audited($logClass, null, $userClass, $recorder, $flushMode);
     }
 }

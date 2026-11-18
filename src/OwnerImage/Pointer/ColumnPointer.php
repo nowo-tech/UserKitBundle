@@ -48,10 +48,21 @@ final readonly class ColumnPointer
     /** Integer subject ids that can be bound to an integer column. */
     private const INTEGER_PATTERN = '/^-?[0-9]{1,18}$/D';
 
+    /** UUID subject ids for a `guid` / `uuid` subject column (PostgreSQL's native uuid refuses anything else). */
+    private const UUID_PATTERN = '/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/D';
+
+    /** Integer DBAL types (a `bigint` binds as a string with DBAL 4). */
+    private const INTEGER_TYPES = [Types::INTEGER, Types::SMALLINT, Types::BIGINT];
+
+    /** UUID DBAL types (`uuid`: symfony/doctrine-bridge). */
+    private const UUID_TYPES = [Types::GUID, 'uuid'];
+
     /**
      * @param ClassMetadata<object> $metadata
      * @param list<string> $identifierColumns quoted identifier columns
      * @param list<string> $identifierFields identifier fields, in the order of `$identifierColumns`
+     * @param bool $uniqueSubject whether the subject field is the single identifier or a unique column (one row per
+     *                            subject id, so a managed entity may answer a read)
      */
     private function __construct(
         public EntityManagerInterface $manager,
@@ -64,6 +75,7 @@ final readonly class ColumnPointer
         public string $subjectColumn,
         public array $identifierColumns,
         public array $identifierFields,
+        public bool $uniqueSubject,
     ) {
     }
 
@@ -125,7 +137,29 @@ final readonly class ColumnPointer
             $quotes->getColumnName($subjectField, $metadata, $platform),
             $columns,
             $identifierFields,
+            self::unique($metadata, $subjectField),
         );
+    }
+
+    /**
+     * Whether `$field` holds one value per row: the single identifier, a `unique` column or the only column of a unique
+     * constraint.
+     *
+     * @param ClassMetadata<object> $metadata
+     */
+    private static function unique(ClassMetadata $metadata, string $field): bool
+    {
+        if ($metadata->getIdentifierFieldNames() === [$field] || ($metadata->getFieldMapping($field)['unique'] ?? false) === true) {
+            return true;
+        }
+        $column = $metadata->getColumnName($field);
+        foreach ($metadata->table['uniqueConstraints'] ?? [] as $constraint) {
+            if (($constraint['columns'] ?? null) === [$column] || ($constraint['fields'] ?? null) === [$field]) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function connection(): Connection
@@ -160,7 +194,11 @@ final readonly class ColumnPointer
     public function subjectValue(string $subjectId): mixed
     {
         $type = $this->type($this->subjectField);
-        if ($type->getBindingType() === ParameterType::INTEGER && preg_match(self::INTEGER_PATTERN, $subjectId) !== 1) {
+        $name = $this->metadata->getTypeOfField($this->subjectField);
+        if (($type->getBindingType() === ParameterType::INTEGER || in_array($name, self::INTEGER_TYPES, true)) && preg_match(self::INTEGER_PATTERN, $subjectId) !== 1) {
+            return null;
+        }
+        if (in_array($name, self::UUID_TYPES, true) && preg_match(self::UUID_PATTERN, $subjectId) !== 1) {
             return null;
         }
         try {

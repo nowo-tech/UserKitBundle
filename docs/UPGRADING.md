@@ -86,8 +86,12 @@ Both additions are opt-in. Without them nothing changes: the default pointer sto
   action log of user relations (`AbstractActionLog`) and users whose subject id is not their identifier (they
   implement `OwnerImageSubjectInterface`), set `owner_images.audit.user_id_field`; the build fails without it. If the
   action log stores actions as a PHP enum, add the new actions to it, or set `audit.actions` / `audit.kinds` to
-  actions you already have. AuditKit's `action_log.flush_mode: isolated` is recommended: the bridge then never
-  flushes the application's pending changes.
+  actions you already have. It also needs AuditKit's `nowo_audit_kit.action_log.flush_mode: isolated`. With the
+  default `host` mode the build fails, because each row would flush the application's pending changes. A row that
+  fails is logged as a warning, never thrown.
+- **Column pointer store and transactions.** Write the image inside your own transaction and then roll back, and
+  the managed entity still holds the new value (shown as a pending change). Reload or clear it. The `UPDATE` bypasses
+  lifecycle callbacks, entity listeners and `#[ORM\Version]`.
 
 ## To 1.19.0
 

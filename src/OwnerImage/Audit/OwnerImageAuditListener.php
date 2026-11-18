@@ -12,6 +12,8 @@ use Nowo\UserKitBundle\OwnerImage\OwnerImageChangedEvent;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKind;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKinds;
 use Nowo\UserKitBundle\OwnerImage\Pointer\ColumnPointer;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 use function count;
 use function sprintf;
@@ -31,6 +33,10 @@ use function sprintf;
  * so they must be its identifier: with `owner_images.audit.user_id_field` (users whose subject id is another field, such
  * as a public UUID) the identifier is looked up by that field, as a scalar (no entity is loaded) and matched byte for
  * byte; a subject id that matches no user, or several, is recorded without that user link.
+ *
+ * A failed row (database error, a misconfigured `user_id_field`) is logged as a warning with the exception class only and
+ * never rethrown: the image change it describes is already done. The bridge requires AuditKit's
+ * `action_log.flush_mode: isolated`, so it never flushes (or, on failure, closes) the application's entity manager.
  *
  * Stateless (worker mode, kernel reset off).
  */
@@ -58,6 +64,7 @@ final readonly class OwnerImageAuditListener
         private ?ManagerRegistry $doctrine = null,
         private ?string $userIdField = null,
         private ?string $logClass = null,
+        private ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -73,18 +80,24 @@ final readonly class OwnerImageAuditListener
             $event->previousFileId === null => self::UPLOADED,
             default                         => self::REPLACED,
         };
-        $this->recorder->recordIdsAndFlush(
-            $actions[$change],
-            $this->userId($event->actorId),
-            $kind->isUserKind() ? $this->userId($event->subjectId) : null,
-            [
-                'kind'          => $kind->name,
-                'subject_id'    => $event->subjectId,
-                'actor_id'      => $event->actorId,
-                'file'          => $event->fileId,
-                'previous_file' => $event->previousFileId,
-            ],
-        );
+        try {
+            $this->recorder->recordIdsAndFlush(
+                $actions[$change],
+                $this->userId($event->actorId),
+                $kind->isUserKind() ? $this->userId($event->subjectId) : null,
+                [
+                    'kind'          => $kind->name,
+                    'subject_id'    => $event->subjectId,
+                    'actor_id'      => $event->actorId,
+                    'file'          => $event->fileId,
+                    'previous_file' => $event->previousFileId,
+                ],
+            );
+        } catch (Throwable $e) {
+            // The change is already done (and the replaced file disposed of): a failed audit row must not turn it into
+            // an error page. Only the exception class is logged (its message may hold ids or SQL).
+            $this->logger?->warning('Owner image: the {kind} audit row could not be recorded ({class}).', ['kind' => $kind->name, 'class' => $e::class]);
+        }
     }
 
     /**

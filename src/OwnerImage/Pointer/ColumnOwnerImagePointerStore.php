@@ -30,7 +30,8 @@ use function strlen;
  * Identity-map aware, never flushing the application's entity manager (architecture bar rule 6):
  * - reads take the subjects whose entity is managed and initialised from the identity map (what the request sees), the
  *   rest in one DBAL query per {@see self::CHUNK} subject ids;
- * - a write is one DBAL `UPDATE` of the subject's own row, by its identifier and subject, in one transaction (a
+ * - a write is one DBAL `UPDATE` of the subject's own row (no lifecycle callbacks, entity listeners or `#[Version]`
+ *   increment: the ORM does not see it), by its identifier and subject, in one transaction (a
  *   savepoint inside the caller's) with the row locked; the previous file id is read under that lock
  *   ({@see LockingOwnerImagePointerStoreInterface}). Once the write returned, a managed entity of that subject gets the
  *   new value, also as its original value, so the next flush writes nothing for it.
@@ -76,7 +77,9 @@ final readonly class ColumnOwnerImagePointerStore implements LockingOwnerImagePo
             $pending['s' . $id] = $id;
         }
         $found = [];
-        foreach ($column->loaded() as $entity) {
+        // A managed entity answers only when the subject field holds one row per subject id (the identifier or a
+        // unique column): otherwise the database counts the rows, and two rows of one subject give no pointer.
+        foreach ($column->uniqueSubject ? $column->loaded() : [] as $entity) {
             $subject = ColumnPointer::text($column->metadata->getFieldValue($entity, $column->subjectField));
             if ($subject !== null && isset($pending['s' . $subject])) {
                 unset($pending['s' . $subject]);
@@ -150,14 +153,14 @@ final readonly class ColumnOwnerImagePointerStore implements LockingOwnerImagePo
         $update = sprintf('UPDATE %s SET %s = ? WHERE %s AND %s = ?', $column->table, $column->fileColumn, implode(' AND ', $criteria), $column->subjectColumn);
 
         // @igor-ignore - The closures run synchronously inside the runner; nothing is kept on the service.
-        $previous = $this->runner->statement($connection, static fn (): ?string => DoctrineTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $column, $select, $update, $subject, $subjectId, $fileId): ?string {
+        [$previous, $updated] = $this->runner->statement($connection, static fn (): array => DoctrineTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $column, $select, $update, $subject, $subjectId, $fileId): array {
             $rows = $subject === null ? [] : $column->exact($connection->fetchAllAssociative($select, [$subjectId], [$column->type($column->subjectField)]), $subjectId);
             if (count($rows) > 1) {
                 throw new UserKitConflict();
             }
             if ($rows === []) {
                 if ($fileId === null) {
-                    return null;
+                    return [null, false];
                 }
 
                 throw new InvalidArgumentException('No owner row has that subject id.');
@@ -174,26 +177,37 @@ final readonly class ColumnOwnerImagePointerStore implements LockingOwnerImagePo
                 $params[] = $subjectId;
                 $types[]  = $column->type($column->subjectField);
                 $connection->executeStatement($update, $params, $types);
+
+                return [$previous, true];
             }
 
-            return $previous;
+            return [$previous, false];
         }));
-        $this->sync($column, $subjectId, $fileId);
+        if ($updated) {
+            // Only after a real write: a managed entity's pending value of the pointer is never overwritten for nothing.
+            $this->sync($column, $subjectId, $fileId);
+        }
 
         return $previous;
     }
 
     /**
-     * The managed entities of the subject get the written value (and it as their original value: no `UPDATE` at the
-     * application's next flush). Runs after the write returned, so a failed attempt never changes an entity.
+     * The managed entities of the subject get the written value. Outside a transaction it is also their original value
+     * (it is committed: no `UPDATE` at the application's next flush). Inside the application's transaction the original
+     * stays the previous value, so the unit of work still sees the field as changed: after a commit the next flush writes
+     * the same value again, after a rollback it writes the entity's value back (reload or clear the entity to drop it).
+     * Runs after the write returned, so a failed attempt never changes an entity.
      */
     private function sync(ColumnPointer $column, string $subjectId, ?string $fileId): void
     {
         $unitOfWork = $column->manager->getUnitOfWork();
         $value      = $column->filePhpValue($fileId);
+        $committed  = !$column->connection()->isTransactionActive();
         foreach ($column->loaded($subjectId) as $entity) {
             $column->metadata->setFieldValue($entity, $column->field, $value);
-            $unitOfWork->setOriginalEntityProperty(spl_object_id($entity), $column->field, $value);
+            if ($committed) {
+                $unitOfWork->setOriginalEntityProperty(spl_object_id($entity), $column->field, $value);
+            }
         }
     }
 }

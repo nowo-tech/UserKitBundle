@@ -16,13 +16,19 @@ use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\AuditedUse
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\IdActionLog;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\RelationActionLog;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\Organizations;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RecordingLogger;
+use RuntimeException;
 use stdClass;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 use function array_map;
+use function array_unique;
+use function array_values;
 use function is_string;
 use function json_decode;
+use function json_encode;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
@@ -72,7 +78,7 @@ final class OwnerImageAuditBridgeTest extends OwnerImagesKernelTestCase
 
     public function testEveryChangeIsRecordedByIds(): void
     {
-        $this->bootAudit(['enabled' => true, 'kinds' => ['org_logo' => ['removed' => 'organization.{kind}_removed']]], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class]]);
+        $this->bootAudit(['enabled' => true, 'kinds' => ['org_logo' => ['removed' => 'organization.{kind}_removed']]], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class, 'flush_mode' => 'isolated']]);
         $images = $this->images();
 
         $first = $images->upload($this->user('alice'), 'avatar', 'alice', self::png(), 'a.png');
@@ -104,7 +110,7 @@ final class OwnerImageAuditBridgeTest extends OwnerImagesKernelTestCase
 
     public function testAnActionLogOfUserRelationsGetsTheUsersIdentifiers(): void
     {
-        $this->bootAudit(['enabled' => true, 'user_id_field' => 'handle'], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => RelationActionLog::class]]);
+        $this->bootAudit(['enabled' => true, 'user_id_field' => 'handle'], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => RelationActionLog::class, 'flush_mode' => 'isolated']]);
         $em = $this->em();
         $em->persist($alice = new AuditedUser('alice'));
         $em->persist(new AuditedUser('bob'));
@@ -123,23 +129,55 @@ final class OwnerImageAuditBridgeTest extends OwnerImagesKernelTestCase
         self::assertSame('bob', $rows[1]['context']['actor_id']);
     }
 
-    public function testAMisconfiguredUserFieldFailsLoudly(): void
+    /**
+     * Audit TC-L4: a failed row (here a misconfigured user_id_field, or a recorder that fails) never turns the done
+     * change into an error; a warning names the exception class only.
+     */
+    public function testAFailedRowIsLoggedNotThrown(): void
     {
-        $this->bootAudit(['enabled' => true, 'user_id_field' => 'handle'], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => RelationActionLog::class]]);
+        $this->bootAudit(['enabled' => true, 'user_id_field' => 'handle'], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => RelationActionLog::class, 'flush_mode' => 'isolated']]);
         $doctrine = $this->container()->get('doctrine');
         self::assertInstanceOf(ManagerRegistry::class, $doctrine);
         $recorder = $this->service(ActionLogIdRecorderInterface::class);
         $kinds    = $this->service(OwnerImageKinds::class);
         $actions  = ['avatar' => ['uploaded' => 'u', 'replaced' => 'r', 'removed' => 'd']];
         $event    = new OwnerImageChangedEvent('avatar', 'alice', 'f', null, 'alice');
+        $logger   = new RecordingLogger();
 
-        foreach ([[stdClass::class, 'handle', 'no Doctrine entity manager maps'], [RelationActionLog::class, 'nope', 'user_id_field: "nope" is not a mapped field']] as [$logClass, $field, $message]) {
-            try {
-                (new OwnerImageAuditListener($recorder, $kinds, $actions, $doctrine, $field, $logClass))($event);
-                self::fail('accepted');
-            } catch (LogicException $e) {
-                self::assertStringContainsStringIgnoringCase($message, $e->getMessage());
-            }
-        }
+        (new OwnerImageAuditListener($recorder, $kinds, $actions, $doctrine, 'handle', stdClass::class, $logger))($event);
+        (new OwnerImageAuditListener($recorder, $kinds, $actions, $doctrine, 'nope', RelationActionLog::class, $logger))($event);
+        $failing = $this->createMock(ActionLogIdRecorderInterface::class);
+        $failing->method('recordIdsAndFlush')->willThrowException(new RuntimeException('SQLSTATE secret-id'));
+        (new OwnerImageAuditListener($failing, $kinds, $actions, null, null, null, $logger))($event);
+        (new OwnerImageAuditListener($failing, $kinds, $actions))($event); // no logger: still not thrown
+
+        $records = $logger->take();
+        self::assertSame([LogicException::class, LogicException::class, RuntimeException::class], array_map(static fn (array $r): mixed => $r['context']['class'] ?? null, $records));
+        self::assertSame(['warning'], array_values(array_unique(array_map(static fn (array $r): mixed => $r['level'], $records))));
+        self::assertStringNotContainsString('secret-id', (string) json_encode($records), 'only the class is logged');
+        self::assertSame(0, (int) $this->em()->getConnection()->fetchOne('SELECT COUNT(*) FROM user_kit_test_relation_action_log'));
+    }
+
+    /**
+     * Audit TC-M1: the bridge never flushes the application's entity manager — a half-edited entity stays unwritten.
+     */
+    public function testTheApplicationsPendingChangesAreNotFlushed(): void
+    {
+        $this->bootAudit(['enabled' => true], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class, 'flush_mode' => 'isolated']]);
+        $alice = $this->user('alice');
+        $alice->setAvatarFileId('half-edited');
+        $this->images()->upload($alice, 'avatar', 'alice', self::png(), 'a.png');
+        self::assertCount(1, $this->rows('user_kit_test_id_action_log'));
+        self::assertNull($this->em()->getConnection()->fetchOne('SELECT avatar_file_id FROM user_kit_test_user WHERE username = ?', ['alice']));
+    }
+
+    /**
+     * Audit TC-M1: AuditKit's default flush mode "host" fails the container build.
+     */
+    public function testTheHostFlushModeFailsTheBuild(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('flush_mode: isolated');
+        $this->bootAudit(['enabled' => true], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class]]);
     }
 }

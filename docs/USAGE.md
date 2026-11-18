@@ -1033,12 +1033,19 @@ nowo_user_kit:
 - `entity` is the root entity of the table. `field` is a nullable string column for the image id (at least 64
   characters). `subject_field` holds the subject id; give it a unique key. Wrong classes or properties fail the
   container build, and the store checks the Doctrine mapping again when it runs, so XML mappings are covered too.
-- Reads: an entity that is loaded (managed and initialised) answers from the identity map, as the request sees it.
-  The other subjects are read with one query per 500 ids. A lazy proxy is not loaded.
+- Reads: when `subject_field` holds one row per subject id (the single identifier, a `unique: true` column or the only
+  column of a unique constraint), a loaded entity (managed and initialised) answers from the identity map, as the
+  request sees it. Otherwise the database counts the rows. The other subjects are read with one query per 500 ids.
+  A lazy proxy is not loaded.
 - Writes: one DBAL `UPDATE` of the subject's own row, matched by its identifier and the exact subject id, inside a
-  transaction (a savepoint within yours) with the row locked. The image it replaced is read under that lock. If the
-  entity is loaded, it gets the new value, also as its original value, so your next flush writes nothing for it. The
-  application's entity manager is never flushed.
+  transaction (a savepoint within yours) with the row locked. The image it replaced is read under that lock. The
+  application's entity manager is never flushed. The statement bypasses the ORM: no lifecycle callbacks, no entity
+  listeners, and no `#[ORM\Version]` increment.
+- Loaded entities are updated only when the row really changed, so a write that changes nothing leaves your pending
+  value of the field alone. Outside a transaction the new value is also the entity's original value, so your next
+  flush writes nothing for it. Inside your transaction the original stays the previous value, and the unit of work
+  still sees the field as changed. After a commit, your next flush writes the same value again. **After a rollback,
+  reload (`refresh()`) or clear the entity**: it still holds the rolled-back value.
 - Tenant safety: rows are compared byte for byte after they are read. On a folding collation, `ORG-1` never reads
   or writes `org-1`'s image. A subject id that matches two rows writes nothing (`UserKitConflict`, 409). A subject
   with no row cannot get an image: the upload is refused and the new file is removed.
@@ -1065,8 +1072,16 @@ calls made inside a transaction; `OwnerImageChangedEvent` (upload / remove) is d
 #### AuditKit action log (1.20)
 
 `owner_images.audit: true` writes one row to AuditKit's action log for each `OwnerImageChangedEvent`. It needs
-`nowo-tech/audit-kit-bundle` 1.14+ with `nowo_audit_kit.action_log.entity_class` set; without it, the container does
-not compile.
+`nowo-tech/audit-kit-bundle` 1.14+ with `nowo_audit_kit.action_log.entity_class` set, and with
+`nowo_audit_kit.action_log.flush_mode: isolated`. Otherwise the container does not compile: in AuditKit's default
+`host` mode every audit row would flush your pending changes, and would close your entity manager if the row failed.
+
+```yaml
+nowo_audit_kit:
+    action_log:
+        entity_class: App\Entity\UserAction
+        flush_mode: isolated   # required by owner_images.audit
+```
 
 ```yaml
 nowo_user_kit:
@@ -1094,8 +1109,8 @@ nowo_user_kit:
   looks the identifier up by that field, as a scalar query with an exact match. A subject id that matches no user, or
   several, is recorded without the link, but its id stays in the context.
 - An organization's logo (an `other` kind) has no user subject. Its id is only in the context.
-- Prefer AuditKit's `action_log.flush_mode: isolated`. In `host` mode the recorder flushes the entity manager that
-  maps the action log, which includes your pending changes.
+- A row that cannot be recorded (a database error, or a `user_id_field` that is not mapped) is logged as a warning
+  that names only the exception class, and is never thrown: the image change is already done.
 - Erasures (`forget()`) dispatch no event and are not recorded here. The erasure has its own audit.
 
 ### Worker mode

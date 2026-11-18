@@ -75,6 +75,21 @@ final class ColumnPointerMappingTest extends OwnerImagesKernelTestCase
         self::assertNull($composite->read('founded', '2026-11-18'), 'a date is no subject id string');
         self::assertSame([ArrayParameterType::STRING], $composite->subjectListTypes());
         self::assertNull($composite->read('imageFileId', null));
+        self::assertFalse($composite->uniqueSubject, 'a date column without a unique key: the database counts the rows');
+
+        // Audit TC-I1: malformed ids never reach a guid / bigint column (PostgreSQL's uuid would fail the query).
+        $guid = ColumnPointer::resolve($this->doctrine(), 'guid', ['entity' => CompositeOwner::class, 'field' => 'imageFileId', 'subject_field' => 'reference']);
+        self::assertNull($guid->subjectValue('not-a-uuid'));
+        self::assertSame('0b6f3c58-2b0c-4c8e-9d43-6f6d5b2b7a11', $guid->subjectValue('0b6f3c58-2b0c-4c8e-9d43-6f6d5b2b7a11'));
+        $bigint = ColumnPointer::resolve($this->doctrine(), 'bigint', ['entity' => CompositeOwner::class, 'field' => 'imageFileId', 'subject_field' => 'serial']);
+        self::assertNull($bigint->subjectValue('12a'));
+        self::assertNotNull($bigint->subjectValue('9007199254740993'));
+
+        // Audit TC-L3: the identity map answers only for one row per subject id.
+        self::assertTrue($root->uniqueSubject, 'the single identifier');
+        self::assertTrue(ColumnPointer::resolve($this->doctrine(), 'code', ['entity' => Team::class, 'field' => 'imageFileId', 'subject_field' => 'code'])->uniqueSubject, 'a unique column');
+        self::assertTrue(ColumnPointer::resolve($this->doctrine(), 'label', ['entity' => Team::class, 'field' => 'imageFileId', 'subject_field' => 'label'])->uniqueSubject, 'a unique constraint');
+        self::assertFalse(ColumnPointer::resolve($this->doctrine(), 'tenant', ['entity' => CompositeOwner::class, 'field' => 'imageFileId', 'subject_field' => 'tenant'])->uniqueSubject, 'one part of a composite identifier');
 
         $stringable = new class implements Stringable {
             public function __toString(): string

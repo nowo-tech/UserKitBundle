@@ -126,16 +126,25 @@ final class ColumnPointerStoreTest extends OwnerImagesKernelTestCase
         self::assertSame([$light->fileId, $dark->fileId], [$this->column('SELECT logo_file_id FROM user_kit_test_organization WHERE uuid = ?', 'org-1'), $this->column('SELECT logo_dark_file_id FROM user_kit_test_organization WHERE uuid = ?', 'org-1')]);
         self::assertNull($this->column('SELECT logo_file_id FROM user_kit_test_organization WHERE uuid = ?', 'org-2'));
 
-        // A managed organization answers from the identity map (what the request sees), the rest from the database.
+        // Audit TC-L3: `uuid` has no unique key, so a managed organization's unflushed logo is not trusted: the database
+        // counts the rows of that subject id.
         $this->em()->clear();
-        $managed = $this->organization('org-1');
-        $managed->setLogoFileId('in-memory');
-        self::assertSame(['org-1' => 'in-memory'], $this->images()->fileIds('org_logo', ['org-1', 'org-2']));
+        $this->organization('org-1')->setLogoFileId('in-memory');
+        self::assertSame(['org-1' => $light->fileId], $this->images()->fileIds('org_logo', ['org-1', 'org-2']));
+
+        // The badge's subject is the identifier: a managed organization answers from the identity map (what the request
+        // sees), a lazy one is read from the database without being loaded.
         $this->em()->clear();
-        $proxy = $this->em()->getReference(Organization::class, $this->organizationId('org-1'));
+        $id = (string) $this->organizationId('org-1');
+        $this->store()->set('org_badge', $id, 'badge-db');
+        $this->organization('org-1')->setBadgeFileId('in-memory');
+        self::assertEquals([$id => 'in-memory'], $this->store()->find('org_badge', [$id]));
+        $this->em()->clear();
+        $proxy = $this->em()->getReference(Organization::class, (int) $id);
         self::assertNotNull($proxy);
-        self::assertSame(['org-1' => $light->fileId], $this->images()->fileIds('org_logo', ['org-1']));
-        self::assertTrue($this->em()->getUnitOfWork()->isUninitializedObject($proxy), 'a lazy organization is not loaded to read its logo');
+        self::assertEquals([$id => 'badge-db'], $this->store()->find('org_badge', [$id]));
+        self::assertTrue($this->em()->getUnitOfWork()->isUninitializedObject($proxy), 'a lazy organization is not loaded to read its badge');
+        $this->em()->clear();
 
         self::assertTrue($this->images()->remove($alice, 'org_logo', 'org-1'));
         self::assertSame(['org-1' => $dark->fileId], $this->images()->fileIds('org_logo_dark', ['org-1']));
@@ -225,6 +234,69 @@ final class ColumnPointerStoreTest extends OwnerImagesKernelTestCase
         }
         self::assertSame([], $store->find('nope', ['org-1']));
         self::assertSame([], $store->find('org_logo', ['a b', '']));
+    }
+
+    /**
+     * Audit TC-L1 (probe P1): a write that changes nothing (the same file, or no row to clear) leaves the managed
+     * entity's pending value of the pointer field alone.
+     */
+    public function testANoOpWriteKeepsTheHostsPendingValue(): void
+    {
+        $this->bootColumns();
+        $store = $this->store();
+        $store->set('avatar', 'alice', 'file-1');
+        $alice = $this->user('alice');
+        $alice->setAvatarFileId('host-pending');
+        self::assertSame('file-1', $store->replace('avatar', 'alice', 'file-1'));
+        self::assertSame('host-pending', $alice->getAvatarFileId());
+        $store->set('avatar', 'alice', null);
+        self::assertNull($alice->getAvatarFileId(), 'a real write updates it');
+        $alice->setAvatarFileId('host-pending');
+        self::assertNull($store->replace('avatar', 'alice', null), 'nothing to clear');
+        self::assertSame('host-pending', $alice->getAvatarFileId());
+    }
+
+    /**
+     * Audit TC-L2 (probe P4): inside the application's transaction the managed entity gets the new value but keeps the
+     * previous one as its original, so the unit of work still sees the field as changed after a rollback (reload or
+     * clear the entity to drop it); outside one the value is committed and no change is pending.
+     */
+    public function testInsideATransactionTheEntityStaysDirty(): void
+    {
+        $this->bootColumns();
+        $em         = $this->em();
+        $store      = $this->store();
+        $connection = $em->getConnection();
+        $alice      = $this->user('alice');
+
+        $connection->beginTransaction();
+        $store->set('avatar', 'alice', 'file-tx');
+        self::assertSame('file-tx', $alice->getAvatarFileId());
+        $connection->rollBack();
+        self::assertNull($this->column('SELECT avatar_file_id FROM user_kit_test_user WHERE username = ?', 'alice'));
+        $em->getUnitOfWork()->computeChangeSets();
+        self::assertSame(['avatarFileId' => [null, 'file-tx']], $em->getUnitOfWork()->getEntityChangeSet($alice), 'the stale value is visible as a pending change');
+        $em->clear();
+        $alice = $this->user('alice');
+        self::assertNull($alice->getAvatarFileId(), 'cleared and reloaded after the rollback');
+
+        $store->set('avatar', 'alice', 'file-1');
+        $em->getUnitOfWork()->computeChangeSets();
+        self::assertSame([], $em->getUnitOfWork()->getEntityChangeSet($alice));
+    }
+
+    /**
+     * Audit TC-L3 (probe P3): two rows of one subject id with one of them managed: still no pointer.
+     */
+    public function testAManagedRowOfAnAmbiguousSubjectIsNoAnswer(): void
+    {
+        $this->bootColumns();
+        $em = $this->em();
+        $em->persist(new Organization('org-1'));
+        $em->flush();
+        $em->clear();
+        $this->organization('org-1')->setLogoFileId('in-memory');
+        self::assertSame([], $this->store()->find('org_logo', ['org-1']));
     }
 
     /**
