@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\OwnerImage;
 
+use Doctrine\Persistence\ManagerRegistry;
 use InvalidArgumentException;
+use Nowo\UserKitBundle\OwnerImage\Entity\OwnerImagePointer;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageRefused;
 use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageSubjects;
@@ -81,9 +83,11 @@ final class ColumnPointerStoreTest extends OwnerImagesKernelTestCase
     public function testAUsersAvatarLivesOnTheUserRow(): void
     {
         $this->bootColumns();
-        $em    = $this->em();
-        $alice = $this->user('alice');
-        self::assertFalse($em->getConnection()->createSchemaManager()->tablesExist(['user_kit_owner_image']), 'no bundle table');
+        $em       = $this->em();
+        $alice    = $this->user('alice');
+        $doctrine = $this->container()->get('doctrine');
+        self::assertInstanceOf(ManagerRegistry::class, $doctrine);
+        self::assertNull($doctrine->getManagerForClass(OwnerImagePointer::class), 'no bundle table is mapped');
 
         $first = $this->images()->upload($alice, 'avatar', 'alice', self::png(), 'me.png');
         self::assertSame($first->fileId, $this->column('SELECT avatar_file_id FROM user_kit_test_user WHERE username = ?', 'alice'));
