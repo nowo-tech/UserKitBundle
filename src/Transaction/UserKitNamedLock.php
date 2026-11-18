@@ -24,7 +24,7 @@ use function usleep;
  *
  * - MySQL / MariaDB: `GET_LOCK()`; PostgreSQL: `pg_try_advisory_lock()` polled; SQLite and other platforms: no lock
  *   (one writer at a time).
- * - Waits {@see self::TIMEOUT_SECONDS} at most, then {@see UserKitStorageFailure} (503 + Retry-After).
+ * - Waits {@see self::TIMEOUT_SECONDS} at most, then {@see UserKitStorageFailure} (409 + Retry-After + CONFLICT_001).
  * - Session locks: taken outside a transaction, released in `finally`. A release that fails (a network error, a
  *   statement timeout, a killed query) may leave the session alive with the lock held: the connection is closed, which
  *   ends the session and drops its locks, so a FrankenPHP worker (kernel reset off) never carries the lock into its next

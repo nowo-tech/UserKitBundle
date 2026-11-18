@@ -10,6 +10,7 @@ A commented default template ships at `src/Resources/config/packages/nowo_user_k
   - [Resolving profiles at runtime](#resolving-profiles-at-runtime)
 - [Legacy flat configuration](#legacy-flat-configuration)
 - [Doctrine mapping for the kit embeddables](#doctrine-mapping-for-the-kit-embeddables)
+- [Conflict answer (conflict_response)](#conflict-answer-conflict_response)
 - [Personal data (GDPR)](#personal-data-gdpr)
 - [Session registry (sessions)](#session-registry-sessions)
   - [Keys](#keys)
@@ -125,6 +126,29 @@ doctrine:
 DDD / XML-mapped hosts (1.15): register the shipped XML mapping instead (`type: xml`, `dir: '%kernel.project_dir%/vendor/nowo-tech/user-kit-bundle/src/Resources/config/doctrine/model'`, same prefix), never both; see [USAGE](USAGE.md#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields).
 
 Not needed when you only use the traits (`UiPreferencesTrait`, `ProductTourProgressTrait`) inside your own entity or embeddable. No other configuration key is involved: the preference columns are plain entity mapping. See [USAGE](USAGE.md#ui-preferences).
+
+## Conflict answer (conflict_response)
+
+Since **1.21.0** (REQ-RUNTIME-003 rule 6). How a UserKit lock conflict (`UserKitStorageFailure`: a deadlock, a lock
+wait timeout, a serialization failure, a lock UserKit waits for) is answered on any route. See
+[CONCURRENCY](CONCURRENCY.md).
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `conflict_response.status` | `409`, `503` or null | `null` | Status of the answer. Null: `nowo_transaction_doctrine.conflict_response.status` when `NowoTransactionDoctrineBundle` is registered, else 409. `503` keeps the status of 1.19–1.20 (and the `ServiceUnavailableHttpException` class). |
+| `conflict_response.retry_after` | int ≥ 0 or null | `null` | `Retry-After` seconds of a `CONFLICT_001` answer. Null: `nowo_transaction_doctrine.conflict_response.retry_after` when the bundle is registered, else 1. |
+| `conflict_response.platform_answer` | bool or null | `null` | `true`: answer with transaction-doctrine's platform conflict answer (JSON `{"error", "code", "message"}` or the "try again" page); `false`: your application's error rendering. Both always win. Null (auto): the platform answer only when `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true; registering the bundle alone keeps your rendering. See the table in [CONCURRENCY](CONCURRENCY.md#host-options). |
+
+By default your application renders the answer: UserKit replaces the failure by a `ConflictHttpException` (a
+`ServiceUnavailableHttpException` at 503) with `Retry-After` and the code in the `X-Conflict-Code` header
+(`CONFLICT_001` or `CONFLICT_002`), so your error pages and JSON error format keep their shapes.
+
+```yaml
+nowo_user_kit:
+    conflict_response:
+        status: 503        # keep the 1.20 status
+        retry_after: 2
+```
 
 ## Personal data (GDPR)
 

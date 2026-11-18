@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
+use Nowo\UserKitBundle\DependencyInjection\Compiler\ConflictResponsePass;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\PersonalData\Eraser\LastActivityEraser;
@@ -97,6 +98,7 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter('nowo_user_kit.last_activity.online_threshold', $defaultProfile['last_activity']['online_threshold']);
         $container->setParameter('nowo_user_kit.last_activity.update_throttle', $defaultProfile['last_activity']['update_throttle']);
         $container->setParameter('nowo_user_kit.twig', $config['twig']);
+        $container->setParameter(ConflictResponsePass::PARAMETER, $config['conflict_response']);
 
         $loader = new YamlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.yaml');

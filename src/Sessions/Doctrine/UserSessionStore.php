@@ -573,7 +573,7 @@ final readonly class UserSessionStore
     /**
      * 1.19.0 (Beacon spec 239): a write of the registry (one statement, or an idempotent group of them) through
      * {@see UserKitTransactionRunner::statement()}: retried in autocommit when it deadlocks or waits too long for a
-     * lock, a {@see UserKitStorageFailure} (503) when that keeps failing or happens
+     * lock, a {@see UserKitStorageFailure} (409 + CONFLICT_001) when that keeps failing or happens
      * inside the caller's transaction.
      *
      * @template T

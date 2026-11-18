@@ -107,7 +107,7 @@ final class SessionLimitTest extends SessionsKernelTestCase
 
     /**
      * Audit QM-M2: a sign-in that fails inside the limit section (here a storage failure raised while evicting, as a
-     * lock not obtained in 5 s would) answers 503 and is not signed in: its next request is a guest's, and the limit
+     * lock not obtained in 5 s would) answers 409 (CONFLICT_002: the eviction is committed) and is not signed in: its next request is a guest's, and the limit
      * still holds (on the reviewed head the token stayed in the session and the next request registered it unchecked).
      */
     public function testASignInThatFailsInsideTheLimitIsNotSignedIn(): void
@@ -121,8 +121,10 @@ final class SessionLimitTest extends SessionsKernelTestCase
         });
 
         $second = $this->signIn('alice@example.com');
-        self::assertSame(503, $second->getResponse()->getStatusCode());
-        self::assertSame('1', $second->getResponse()->headers->get('Retry-After'));
+        // 1.21.0 (REQ-RUNTIME-003 rule 6): the eviction was committed before the failure: 409 CONFLICT_002, no Retry-After.
+        self::assertSame(409, $second->getResponse()->getStatusCode());
+        self::assertNull($second->getResponse()->headers->get('Retry-After'));
+        self::assertSame('CONFLICT_002', $second->getResponse()->headers->get('X-Conflict-Code'));
         $second->request('GET', '/page');
         self::assertRedirectsTo($second, '/login');
         // The eviction before the failure stands (autocommit): no live session over the limit, none for the failed one.

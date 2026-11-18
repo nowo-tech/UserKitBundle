@@ -300,7 +300,9 @@ Without a catalog, `markPageSeen()` / `hasSeenPage()` accept any id; `getEnabled
 ## Personal data export and erasure (GDPR)
 
 > **High load (1.19.0):** the erasure runs as one unit of work of UserKit's own transaction runner; a deadlock or lock
-> wait is a `UserKitStorageFailure` (503), a lost unique key race a `UserKitConflict` (409). See [HIGH-LOAD](HIGH-LOAD.md).
+> wait is a `UserKitStorageFailure`, answered 409 + `Retry-After` + `CONFLICT_001` since 1.21.0 (503 up to 1.20). A unique
+> violation raised by your erasers is rethrown as it is since 1.21.0 (a `UserKitConflict`, 409, up to 1.20). See
+> [CONCURRENCY](CONCURRENCY.md) and [HIGH-LOAD](HIGH-LOAD.md).
 
 Since **1.5.0**, with `nowo_user_kit.personal_data.enabled: true`. The kit ships the orchestration (SPI, exporter, transactional eraser, guard hook); controllers, routes, confirmation forms and domain guards stay in the application.
 

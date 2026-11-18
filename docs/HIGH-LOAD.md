@@ -2,13 +2,14 @@
 
 How UserKit behaves when many requests write at once (Beacon spec 239), since **1.19.0**. Read this when you run
 UserKit behind a busy site, in FrankenPHP worker mode with the kernel kept alive (`FRANKENPHP_RESET_KERNEL=false`), or
-with Messenger consumers.
+with Messenger consumers. The concurrency summary (write paths, conflict codes, host options, residual risks) is in
+[CONCURRENCY](CONCURRENCY.md).
 
 ## Table of contents
 
 - [What UserKit writes](#what-userkit-writes)
 - [UserKit's own transaction runner](#userkits-own-transaction-runner)
-- [503 and 409](#503-and-409)
+- [409 and the conflict codes](#409-and-the-conflict-codes)
 - [Retries](#retries)
 - [Races that are serialised](#races-that-are-serialised)
 - [The application's entity manager](#the-applications-entity-manager)
@@ -53,22 +54,34 @@ UserKit never flushes your manager **before** a unit (to keep your pending work 
 is the erasure's own, as in every earlier version: if your application left other changes pending in the same manager,
 the erasure's flush writes them too, and rolls them back with it on failure. Flush your own work first if that matters.
 
-## 503 and 409
+## 409 and the conflict codes
+
+Since **1.21.0** (REQ-RUNTIME-003 rule 6; 503 up to 1.20). The full table of write paths, codes and host options is in
+[CONCURRENCY](CONCURRENCY.md).
 
 | Exception (namespace `Nowo\UserKitBundle\Transaction`) | When | HTTP answer |
 | --- | --- | --- |
-| `UserKitStorageFailure` (a `Nowo\TransactionContract\TransientStorageFailure`) | Deadlock, lock wait timeout, serialization failure, a named lock not obtained in 5 s | 503 + `Retry-After: 1` |
-| `UserKitConflict` | The erasure lost a unique key race it cannot resolve (another request stored the same value first) | 409 |
+| `UserKitStorageFailure` (a `Nowo\TransactionContract\TransientStorageFailure`) | Deadlock, lock wait timeout, serialization failure, a named lock not obtained in 5 s; nothing committed | 409 + `Retry-After: 1` + `X-Conflict-Code: CONFLICT_001` |
+| `UserKitStorageFailure` after `afterCommit()` | The same, after the request already committed part of its work (an eviction before a failed registration, a revocation next to a failed epoch bump) | 409 + `X-Conflict-Code: CONFLICT_002`, no `Retry-After` |
+| `UserKitConflict` | A domain conflict: an owner image subject whose key a look-alike subject holds, several rows for one subject id | 409 through your error page, no `CONFLICT_*` code |
 
-`StorageFailureSubscriber` (`kernel.exception`, priority -64) replaces these two exceptions with
-`ServiceUnavailableHttpException` / `ConflictHttpException` on **every** route, because a session listener or the
-erasure can run on any of your pages. Your own exceptions are never touched. The messages are generic; the database
-error stays in the previous exception, for your logs. Your error pages and JSON error format render the answer as usual.
+`StorageFailureSubscriber` (`kernel.exception`, priority -72 since 1.21.0, after the route owner's mapper) answers these exceptions on **every** route, because a
+session listener or the erasure can run on any of your pages. Your own exceptions are never touched. The messages are
+generic; the database error stays in the previous exception, for your logs. By default your error pages and JSON
+error format render a lock conflict, as up to 1.20 (a `ConflictHttpException`, or a `ServiceUnavailableHttpException`
+at 503): the code is added as the `X-Conflict-Code` header only. With `conflict_response.platform_answer: true` (or left
+null while `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true), it gets the platform conflict answer instead: JSON
+`{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": …}` for JSON, XHR and `/api/` requests, else the
+"try again" page with `data-conflict-code`, plus the header. Set `nowo_user_kit.conflict_response.status: 503` to keep
+the 1.20 status (see [CONFIGURATION](CONFIGURATION.md#conflict-answer-conflict_response)).
 
 In code that calls UserKit directly (a console command, a Messenger handler, an API controller with its own error
-mapping), catch `TransientStorageFailure` (or `UserKitStorageFailure`) and retry later; catch `UserKitConflict` and
-reload. Up to 1.18 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTimeoutException`, a 1305
-`DriverException`, `UniqueConstraintViolationException`) escaped instead; they are now the previous exception.
+mapping), catch `TransientStorageFailure` (or `UserKitStorageFailure`): retry later when
+`UserKitStorageFailure::conflictCode()` is `ConflictCode::RetrySafe`, read again first when it is
+`ConflictCode::Committed`. Catch `UserKitConflict` and reload. Up to 1.18 the raw Doctrine exceptions
+(`DeadlockException`, `LockWaitTimeoutException`, a 1305 `DriverException`) escaped instead; they are now the previous
+exception. A `UniqueConstraintViolationException` of your erasers is rethrown as it is since 1.21.0 (it was a
+`UserKitConflict` in 1.19–1.20).
 
 ## Retries
 
@@ -92,18 +105,18 @@ reload. Up to 1.18 the raw Doctrine exceptions (`DeadlockException`, `LockWaitTi
     credentials were accepted: its session is signed out, the refusal is the flash message, and the browser goes back
     to the path it posted to (with form login's default, where `check_path` is `login_path`, the login form); a JSON
     client gets `401 {"error":"session_signed_out"}`.
-  - A sign-in waits 5 s at most for the lock, then answers 503. Without a limit no lock is taken.
+  - A sign-in waits 5 s at most for the lock, then answers 409 + `CONFLICT_001`. Without a limit no lock is taken.
 - **First row of a session or of an epoch.** A lost unique key race is resolved by reading the winner's row. Inside a
   transaction the `INSERT` runs in its own savepoint, so PostgreSQL no longer aborts the whole transaction (up to 1.18:
   `25P02 current transaction is aborted` on the next statement, which failed an erasure that raced a "sign out
   everywhere"). After a lost first epoch insert the row is re-read with a locking read, so MySQL's REPEATABLE READ
   snapshot no longer hides the winner (up to 1.18 that read as a look-alike collision and failed the erasure).
-- **A sign-in that fails inside the limit section** (the lock not obtained in 5 s, a storage failure: 503) is signed out
+- **A sign-in that fails inside the limit section** (the lock not obtained in 5 s, a storage failure: 409) is signed out
   before the failure goes on (no token kept in the session, no remember-me cookie), and under a limit a signed-in
   session without a registry row (its sign-in was not registered) is registered through the limit on its next request.
 - **Owner images.** Two uploads (or an upload and a removal) of one subject run one after the other: the pointer and
   StorageKit's reference are written under a named lock of the kind and subject, on the pointer's connection, 5 s at
-  most, then 503. The replaced picture is the one the pointer row held under its row lock (a store implementing
+  most, then 409 + `CONFLICT_001`. The replaced picture is the one the pointer row held under its row lock (a store implementing
   `LockingOwnerImagePointerStoreInterface`, the default one), so the second upload removes the first one's file, also
   inside your transaction under MySQL's REPEATABLE READ. Inside a transaction of the pointer's connection the replaced
   file is deleted after the outermost commit (commit queue, registered with owner images) and kept on rollback. When
@@ -182,8 +195,8 @@ and every registration failed with a NOT NULL violation).
 
 ## Testing on a real database
 
-`tests/Load` runs the races on a real server (CI job **Load readiness**: MySQL 8.4 and PostgreSQL 16, each with DBAL 4
-and DBAL 3). Use a throwaway database: the setup drops everything in it and refuses a database name without a `test`,
+`tests/Load` runs the races on a real server (CI job **Load readiness**: MySQL 8.4, MariaDB 11.4 and PostgreSQL 16,
+each with DBAL 4 and DBAL 3). Use a throwaway database: the setup drops everything in it and refuses a database name without a `test`,
 `race`, `load` or `throwaway` part.
 
 ```bash
@@ -199,7 +212,8 @@ USER_KIT_LOAD_DATABASE_URL='mysql://root@127.0.0.1:3306/user_kit_load?serverVers
 | `RegistryLoadTest::testATouchThatWaitedTooLongForTheRowIsRetried` | Raw `1205` / `55P03` |
 | `RegistryLoadTest::testAnInsertThatLosesTheRaceInsideATransactionLeavesItUsable` | PostgreSQL: `25P02` |
 | `SessionLimitRaceTest` (`evict_oldest`, `reject_new`; two processes) | Two live sessions under a limit of one |
-| `SessionLimitLockTimeoutTest` (`evict_oldest`, `reject_new`) | (audit QM-M2, on the reviewed head) the 503 sign-in stays signed in: two live sessions |
+| `SessionLimitLockTimeoutTest` (`evict_oldest`, `reject_new`) | (audit QM-M2, on the reviewed head) the failed sign-in stays signed in: two live sessions |
+| `SessionLimitLockTimeoutTest::testAnEvictionCommittedBeforeALockWaitIsConflict002WithoutRetryAfter` | 1.20: 503 with `Retry-After` (a blind retry invited after the eviction was committed) |
 | `OwnerImageLoadTest::testTheFirstPointerRowIsWritten` | 1.18.0 on PostgreSQL + DBAL 3: NOT NULL on the pointer id |
 | `OwnerImageLoadTest::testAPointerWriteThatLosesTheFirstRowRaceInsideATransactionWritesOverTheWinner` | 1.18.0: unique violation (MySQL, PostgreSQL) |
 | `OwnerImageLoadTest::testTwoParallelUploadsOfOneSubjectEndOnOneImage` (two processes) | 1.18.0: pointer and reference on different files |

@@ -293,17 +293,17 @@ final class UserKitTransactionRunnerTest extends TestCase
         }));
     }
 
-    public function testALostUniqueKeyRaceIsAConflict(): void
+    public function testAUniqueViolationIsNotAConflict(): void
     {
+        // 1.21.0 (REQ-RUNTIME-003 rule 6): a unique violation is a real error, never a 409 (up to 1.20: UserKitConflict).
         $this->notes('taken');
 
         $failure = $this->failing(function (): void {
             $this->em->getConnection()->insert('runner_note', ['title' => 'taken']);
         });
 
-        self::assertInstanceOf(UserKitConflict::class, $failure);
-        self::assertInstanceOf(UniqueConstraintViolationException::class, $failure->getPrevious());
-        self::assertSame(UserKitConflict::DEFAULT_MESSAGE, $failure->getMessage());
+        self::assertInstanceOf(UniqueConstraintViolationException::class, $failure);
+        self::assertSame(0, $this->em->getConnection()->getTransactionNestingLevel());
     }
 
     public function testAManagerTheFailedFlushClosedStaysClosedUntilTheBoundary(): void
@@ -317,7 +317,7 @@ final class UserKitTransactionRunnerTest extends TestCase
             $this->em->persist(new Note('taken'));
         }, new UserKitTransactionRunner($doctrine, $recovery));
 
-        self::assertInstanceOf(UserKitConflict::class, $failure);
+        self::assertInstanceOf(UniqueConstraintViolationException::class, $failure);
         self::assertFalse($this->em->isOpen(), 'loud for the rest of the request');
         self::assertSame(0, $this->em->getConnection()->getTransactionNestingLevel());
         $recovery->reset();

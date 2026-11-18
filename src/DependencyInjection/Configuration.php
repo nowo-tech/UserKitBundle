@@ -73,12 +73,43 @@ final class Configuration implements ConfigurationInterface
                     ->defaultTrue()
                     ->info('Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.')
                 ->end()
+                ->append($this->createConflictResponseNode())
                 ->append($this->createPersonalDataNode())
                 ->append((new SessionsConfiguration())->node())
                 ->append((new OwnerImagesConfiguration())->node())
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * 1.21.0 (REQ-RUNTIME-003 rule 6): how a UserKit lock conflict (UserKitStorageFailure) is answered.
+     */
+    private function createConflictResponseNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('conflict_response'))->getRootNode();
+        $node
+            ->info('Answer to a UserKit lock conflict (deadlock, lock wait timeout, serialization failure, a lock UserKit waits for): 409 + Retry-After + X-Conflict-Code: CONFLICT_001, or CONFLICT_002 without Retry-After when part of the request was committed.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->enumNode('status')
+                    ->values([null, 409, 503])
+                    ->defaultNull()
+                    ->info('409 or 503 (the 1.20 status). Null: nowo_transaction_doctrine.conflict_response.status when NowoTransactionDoctrineBundle is registered, else 409.')
+                ->end()
+                ->integerNode('retry_after')
+                    ->min(0)
+                    ->defaultNull()
+                    ->info('Retry-After seconds of a CONFLICT_001 answer. Null: nowo_transaction_doctrine.conflict_response.retry_after when NowoTransactionDoctrineBundle is registered, else 1.')
+                ->end()
+                ->enumNode('platform_answer')
+                    ->values([null, true, false])
+                    ->defaultNull()
+                    ->info('true: answer with the platform conflict answer of nowo-tech/transaction-doctrine (JSON {"error", "code", "message"} or the "try again" page); false: your application\'s error rendering (with X-Conflict-Code). Null (auto): the platform answer only when nowo_transaction_doctrine.conflict_response.map_transient_failures is true.')
+                ->end()
+            ->end();
+
+        return $node;
     }
 
     private function createPersonalDataNode(): ArrayNodeDefinition

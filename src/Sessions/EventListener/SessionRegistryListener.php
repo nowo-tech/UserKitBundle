@@ -20,6 +20,7 @@ use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Security\SessionLimitReachedException;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Nowo\UserKitBundle\Transaction\UserKitNamedLock;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -346,7 +347,16 @@ final readonly class SessionRegistryListener
                 $over   = $active - $max + 1;
                 if ($over > 0) {
                     $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
-                    $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+                    try {
+                        $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+                        $this->register($request, $session, $context, $user, $owner, $atLogin);
+                    } catch (UserKitStorageFailure $failure) {
+                        // 1.21.0 (REQ-RUNTIME-003 rule 6): the eviction is committed (autocommit) and the rest of the
+                        // sign-in failed: CONFLICT_002, no Retry-After. Inside a transaction of yours nothing is committed.
+                        throw $evicted === [] || $this->store->connection()->isTransactionActive() ? $failure : UserKitStorageFailure::afterCommit($failure);
+                    }
+
+                    return null;
                 }
             }
             $this->register($request, $session, $context, $user, $owner, $atLogin);
@@ -356,8 +366,8 @@ final readonly class SessionRegistryListener
     }
 
     /**
-     * {@see self::signIn()}, and when it fails (the lock not obtained in 5 s, a storage failure: a 503) the session is
-     * signed out before the failure goes on (audit QM-M2): a sign-in that answered 503 is not signed in, and its next
+     * {@see self::signIn()}, and when it fails (the lock not obtained in 5 s, a storage failure: a 409) the session is
+     * signed out before the failure goes on (audit QM-M2): a sign-in that answered 409 is not signed in, and its next
      * request is never registered past the limit.
      */
     private function guardedSignIn(Request $request, SessionInterface $session, string $context, object $user, SessionUser $owner, bool $atLogin = true): ?string

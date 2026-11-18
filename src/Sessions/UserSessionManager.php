@@ -29,6 +29,7 @@ use Nowo\UserKitBundle\Sessions\Owner\UnresolvedSessionOwnerException;
 use Nowo\UserKitBundle\Sessions\Revocation\RevocationStoreInterface;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Sessions\Ui\SessionRow;
+use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -388,8 +389,13 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
      */
     public function forgetOwner(SessionUser $owner, ?object $user = null): int
     {
-        $this->revokeRows($owner, $user, null, RevocationReason::AccountChanged, epoch: true);
-        $deleted = $this->store->deleteFor($owner);
+        $revoked = $this->revokeRows($owner, $user, null, RevocationReason::AccountChanged, epoch: true);
+        try {
+            $deleted = $this->store->deleteFor($owner);
+        } catch (Throwable $e) {
+            // 1.21.0: the revocation or the epoch bump is committed, the deletion is not: CONFLICT_002.
+            throw $revoked !== [] || $this->epoch instanceof RememberMeEpoch ? $this->afterCommit($e) : $e;
+        }
         $this->dispatcher?->dispatch(new UserSessionsDeletedEvent($owner, $user, $deleted));
 
         return $deleted;
@@ -674,8 +680,13 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
                 $bumpFailure = $e;
             }
         }
-        $code   = $customReason ?? $reason->value;
-        $rows   = $this->store->revoke($owner, $code, $this->now(), $publicIds, $deviceId, $except);
+        $code = $customReason ?? $reason->value;
+        try {
+            $rows = $this->store->revoke($owner, $code, $this->now(), $publicIds, $deviceId, $except);
+        } catch (Throwable $e) {
+            // 1.21.0 (REQ-RUNTIME-003 rule 6): the epoch bump is committed, the revocation is not: CONFLICT_002.
+            throw $bumped !== null ? $this->afterCommit($e) : $e;
+        }
         $ids    = array_column($rows, 'public_id');
         $hashes = array_column($rows, 'hash');
         // Only a password change raises its event after the fact, from a flush the caller may not know is nested. Any
@@ -704,10 +715,25 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         if ($bumpFailure instanceof Throwable) {
             $this->logger?->error('NowoUserKitBundle: {count} session(s) of the owner were revoked, but its remember-me epoch could not be bumped, so its remember-me cookies still sign in: {message}', ['count' => count($ids), 'message' => $bumpFailure->getMessage(), 'exception' => $bumpFailure]);
 
-            throw $bumpFailure;
+            // 1.21.0: the revocation is committed, the epoch bump is not: CONFLICT_002 when it was transient.
+            throw $ids !== [] ? $this->afterCommit($bumpFailure) : $bumpFailure;
         }
 
         return $ids;
+    }
+
+    /**
+     * 1.21.0 (REQ-RUNTIME-003 rule 6): a transient failure after an autocommit write of the same call is answered
+     * `CONFLICT_002` (part of the request is committed). Inside a transaction of the application nothing is committed
+     * yet: the failure is left as it is (`CONFLICT_001`).
+     */
+    private function afterCommit(Throwable $failure): Throwable
+    {
+        if (!$failure instanceof UserKitStorageFailure || $this->store->connection()->isTransactionActive()) {
+            return $failure;
+        }
+
+        return UserKitStorageFailure::afterCommit($failure);
     }
 
     /**

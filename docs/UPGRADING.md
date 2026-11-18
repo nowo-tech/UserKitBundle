@@ -60,6 +60,50 @@
 
 ## Unreleased
 
+From **1.20.0** (REQ-RUNTIME-003 rule 6; the next minor):
+
+```bash
+composer update nowo-tech/user-kit-bundle nowo-tech/transaction-doctrine --with-dependencies
+```
+
+nowo-tech/transaction-doctrine ^1.5 is required (was ^1.1).
+
+- **409 instead of 503.** A UserKit lock conflict (deadlock, lock wait timeout, serialization failure, a named lock not
+  obtained in 5 s: `UserKitStorageFailure`) now answers **409**. Your error pages and JSON error format still render
+  it (the failure becomes a `ConflictHttpException` instead of a `ServiceUnavailableHttpException`); the code is added
+  as a header:
+  - `X-Conflict-Code: CONFLICT_001` with `Retry-After` when nothing was committed;
+  - `X-Conflict-Code: CONFLICT_002` without `Retry-After` when the request had already committed part of its work (an
+    eviction before a failed sign-in, a revocation or epoch bump before a failed statement).
+
+  To keep the 1.20 status and exception class (a host listener matching `ServiceUnavailableHttpException` keeps
+  working):
+
+  ```yaml
+  nowo_user_kit:
+      conflict_response:
+          status: 503
+  ```
+
+  With `NowoTransactionDoctrineBundle` registered, UserKit follows its `conflict_response.status` and `retry_after`
+  when yours are left out. Registering the bundle does not change your rendering. UserKit switches to the platform
+  answer (JSON `{"error", "code", "message"}` or the "try again" page) only with `conflict_response.platform_answer:
+  true`, or when `platform_answer` is left null and `nowo_transaction_doctrine.conflict_response.map_transient_failures`
+  is true. `platform_answer: false` keeps your rendering in every case.
+- **Subscriber priority.** `StorageFailureSubscriber` moves from `kernel.exception` priority -64 to **-72**, so the
+  bundle that owns the route (AuthKit at -64) answers a UserKit failure first. A listener of yours between -64 and -72
+  now sees UserKit's exception before it is replaced.
+
+  Clients and monitors that retried on 503 should retry on 409 when the code is `CONFLICT_001`, and read again (not
+  repeat) on `CONFLICT_002`.
+- **Unique violations of your erasers are no longer a 409.** A `UniqueConstraintViolationException` that reaches the end
+  of an erasure is rethrown as it is (it was a `UserKitConflict` in 1.19–1.20). If your erasers write values that may
+  collide (an anonymised e-mail, a placeholder username), make them unique per user (for example with the user's id) or
+  catch the violation in the eraser. `UserKitConflict` stays for the owner image domain conflicts (409, no
+  `CONFLICT_*` code).
+- Code that catches `UserKitStorageFailure` keeps working; `conflictCode()` and `committed()` tell whether a retry is
+  safe.
+
 ## To 1.20.0
 
 From **1.19.0**:
