@@ -123,11 +123,12 @@ final class ConflictCodeTest extends TestCase
     {
         $request = Request::create('/api/me', 'POST', server: ['HTTP_ACCEPT' => 'application/json']);
         $event   = new ExceptionEvent($this->createMock(HttpKernelInterface::class), $request, HttpKernelInterface::MAIN_REQUEST, $failure);
-        (new StorageFailureSubscriber())->onException($event);
+        (new StorageFailureSubscriber(null, null, true))->onException($event);
         $response = $event->getResponse();
         self::assertNotNull($response);
         $body = json_decode((string) $response->getContent(), true);
         self::assertIsArray($body);
+        self::assertSame($body['code'] ?? null, $response->headers->get('X-Conflict-Code'), 'the header carries the same code');
 
         return ['status' => $response->getStatusCode(), 'retryAfter' => $response->headers->get('Retry-After'), 'code' => $body['code'] ?? null];
     }

@@ -34,17 +34,23 @@ outermost commit through the commit queue when a transaction is open, else right
 ## Conflict codes
 
 Since **1.21.0** (with nowo-tech/transaction-doctrine ^1.5). A `UserKitStorageFailure` reaching the kernel is answered
-by `StorageFailureSubscriber` on any route with the platform conflict answer:
+by `StorageFailureSubscriber` on any route (UserKit's session listener and erasure run on your own pages and APIs):
 
-| Code | When | Status | `Retry-After` | JSON `error` | Client should |
+| Code (`X-Conflict-Code`) | When | Status | `Retry-After` | Platform JSON `error` | Client should |
 | --- | --- | --- | --- | --- | --- |
 | `CONFLICT_001` | Deadlock (MySQL / MariaDB 1213, PostgreSQL 40P01), lock wait timeout (1205, 55P03), serialization failure (MariaDB 1020, PostgreSQL 40001), a UserKit named lock not obtained in 5 s; nothing of the request committed | 409 | `1` | `concurrency_conflict` | Retry |
 | `CONFLICT_002` | The same, after the request already committed part of its work (`UserKitStorageFailure::afterCommit()`) | 409 | none | `concurrency_conflict_partial` | Read again, do not repeat blindly |
 
-- JSON, XHR and `/api/` requests: `{"error": "…", "code": "CONFLICT_00n", "message": "…"}`.
-- HTML: the "try again" page with `data-testid="concurrency-conflict"` and `data-conflict-code="CONFLICT_00n"`
-  (transaction-doctrine's template, extending UiKit's error page, when `NowoTransactionDoctrineBundle` is registered;
-  a plain English page otherwise).
+- **Default: your rendering.** The failure becomes a `ConflictHttpException` (a `ServiceUnavailableHttpException` at
+  503) with `Retry-After` and `X-Conflict-Code`, so your error pages and JSON error format (problem+json, API Platform,
+  your templates) keep their shapes; the code is added as a header only.
+- **Platform answer** (`conflict_response.platform_answer: true`, or NowoTransactionDoctrineBundle's `conflict_response`
+  enabled): JSON, XHR and `/api/` requests get `{"error": "…", "code": "CONFLICT_00n", "message": "…"}`, HTML the
+  "try again" page with `data-testid="concurrency-conflict"` and `data-conflict-code="CONFLICT_00n"`
+  (transaction-doctrine's template, extending UiKit's error page, when its bundle is registered; a plain English page
+  otherwise). The `X-Conflict-Code` header is set too.
+- `X-Conflict-Code` only ever carries `CONFLICT_001` or `CONFLICT_002` (platform convention); domain conflicts never
+  use it.
 - Code that calls UserKit directly: `UserKitStorageFailure::conflictCode()` (a `Nowo\TransactionDoctrine\ConflictCode`)
   and `committed()`. A committed failure also holds a `ConcurrencyConflict` with `committed: true` in its previous
   chain, so `ConflictCode::forFailure()` and transaction-doctrine's own responder give the same code.
@@ -64,9 +70,10 @@ by `StorageFailureSubscriber` on any route with the platform conflict answer:
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `nowo_user_kit.conflict_response.status` | null | `409` or `503`. Null: transaction-doctrine's `conflict_response.status` when its bundle is registered, else 409. |
-| `nowo_user_kit.conflict_response.error_page` | `false` | `true`: your error page renders the answer (an `HttpException` with the status and `Retry-After`, as up to 1.20); no code in the body. |
-| `nowo_transaction_doctrine.conflict_response.*` | — | With the bundle registered and `status` left null: `status`, `retry_after`, `template`, `json_error`, `json_path_prefixes`, and your `ConflictResponseFormatterInterface` services shape UserKit's answer too. |
+| `nowo_user_kit.conflict_response.status` | null | `409` or `503` (503 keeps the 1.20 `ServiceUnavailableHttpException`). Null: transaction-doctrine's `conflict_response.status` when its bundle is registered, else 409. |
+| `nowo_user_kit.conflict_response.retry_after` | null | Seconds of `Retry-After` on `CONFLICT_001`. Null: transaction-doctrine's `conflict_response.retry_after` when its bundle is registered, else 1. |
+| `nowo_user_kit.conflict_response.platform_answer` | `false` | `true`: transaction-doctrine's platform answer instead of your error rendering. |
+| `nowo_transaction_doctrine.conflict_response.*` | — | With the bundle registered: `status` and `retry_after` apply when UserKit's are null; with its `conflict_response` enabled UserKit gives the platform answer, shaped by `template`, `json_error`, `json_path_prefixes` and your `ConflictResponseFormatterInterface` services (when UserKit's `status` and `retry_after` are null). |
 | `sessions.limit` | none | The named lock is taken only with a limit. |
 | `doctrine.dbal.use_savepoints: true` | — | Required with DBAL 3 (DBAL 4 always uses savepoints). |
 
@@ -96,6 +103,12 @@ replayed.
   and `CONFLICT_002` without it after a commit; a unique violation is never a conflict.
 
 ## Residual risks
+
+- **Commits made outside UserKit's own steps (audit TH UK-2).** UserKit marks `CONFLICT_002` only around its own
+  multi-step autocommit paths. When your controller commits and then a UserKit call meets a lock conflict (for example
+  a password change, then the session revocation), the answer is `CONFLICT_001` with `Retry-After`, as 1.20 answered 503
+  with `Retry-After`. Request-level commit detection is covered from nowo-tech/transaction-doctrine 1.6 (UserKit adopts it
+  with that version); until then, make such controllers idempotent or run them as one write unit.
 
 - **The session limit's lock inside your transaction (audit QM-L3).** The named lock is a session lock released right
   after the registration. When UserKit's connection is inside a transaction your application opened at sign-in, the

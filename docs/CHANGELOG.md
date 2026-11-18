@@ -154,16 +154,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Conflict codes (REQ-RUNTIME-003 rule 6):** every UserKit lock conflict answer carries `CONFLICT_001` (nothing
-  committed, with `Retry-After`) or `CONFLICT_002` (part of the request committed, no `Retry-After`), from
-  nowo-tech/transaction-doctrine 1.5's `ConflictCode`.
+- **Conflict codes (REQ-RUNTIME-003 rule 6):** every UserKit lock conflict answer carries the `X-Conflict-Code` header,
+  `CONFLICT_001` (nothing committed, with `Retry-After`) or `CONFLICT_002` (part of the request committed, no
+  `Retry-After`), from nowo-tech/transaction-doctrine 1.5's `ConflictCode`.
   - `UserKitStorageFailure::conflictCode()`, `committed()` and `afterCommit()`. A committed failure holds a
     `ConcurrencyConflict` with `committed: true` in its previous chain.
   - `CONFLICT_002` after an `evict_oldest` eviction committed before the sign-in failed, after a revocation or epoch
     bump committed before the next statement of `revokeAll()` / `revokeOthers()` / `forgetOwner()` failed (outside a
     transaction of the application).
-- `nowo_user_kit.conflict_response.status` (`409`, `503` or null: transaction-doctrine's setting when its bundle is
-  registered, else 409) and `conflict_response.error_page` (render with the application's error page, as up to 1.20).
+- `nowo_user_kit.conflict_response`: `status` (`409`, `503` or null: transaction-doctrine's setting when its bundle is
+  registered, else 409), `retry_after` (null: transaction-doctrine's, else 1) and `platform_answer` (transaction-doctrine's
+  JSON or "try again" page instead of the application's error rendering; implied when that bundle's
+  `conflict_response` is enabled).
 - `docs/CONCURRENCY.md`: write paths, conflict codes, host options, residual risks.
 - Load readiness on MariaDB 11.4 (DBAL 4 and DBAL 3), next to MySQL 8.4 and PostgreSQL 16; a committed-then-conflict
   test on the three servers.
@@ -171,9 +173,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **A UserKit lock conflict answers 409 instead of 503** (deadlock, lock wait timeout, serialization failure, a named
-  lock not obtained in 5 s), with the platform conflict answer of nowo-tech/transaction-doctrine: JSON
-  `{"error", "code", "message"}` for JSON, XHR and `/api/` requests, else the "try again" page with
-  `data-conflict-code`. Set `conflict_response.status: 503` and `error_page: true` for the 1.20 answer (see UPGRADING).
+  lock not obtained in 5 s): a `ConflictHttpException` with `Retry-After` and `X-Conflict-Code`, still rendered by the
+  application's error pages and JSON error format (shapes unchanged). Set `conflict_response.status: 503` for the 1.20
+  status and exception class (see UPGRADING).
 - **A unique violation is no longer a conflict:** one that reaches the end of an erasure (raised by the application's
   erasers) is rethrown as it is instead of a `UserKitConflict` (409). `UserKitConflict` stays for the owner image
   domain conflicts (look-alike subjects), answered 409 without a `CONFLICT_*` code.

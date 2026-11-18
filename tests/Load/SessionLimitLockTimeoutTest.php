@@ -15,8 +15,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
-use function json_decode;
-
 /**
  * Audit QM-M2 (from its proof of concept), MySQL 8.4 / PostgreSQL 16: a sign-in whose owner lock is held by another
  * session past the 5 s wait answers 409 + CONFLICT_001 (503 up to 1.20) **and is not signed in**: its next request is a guest's and the user keeps one
@@ -57,7 +55,7 @@ final class SessionLimitLockTimeoutTest extends LoadTestCase
         // 1.21.0 (REQ-RUNTIME-003 rule 6): nothing was committed: 409 + Retry-After + CONFLICT_001 (503 up to 1.20).
         self::assertSame(409, $second->getResponse()->getStatusCode());
         self::assertSame('1', $second->getResponse()->headers->get('Retry-After'));
-        self::assertStringContainsString('data-conflict-code="CONFLICT_001"', (string) $second->getResponse()->getContent());
+        self::assertSame('CONFLICT_001', $second->getResponse()->headers->get('X-Conflict-Code'));
 
         $this->otherSession()->value($this->mysql() ? "SELECT RELEASE_LOCK('" . UserKitNamedLock::name($key) . "')" : 'SELECT pg_advisory_unlock(' . UserKitNamedLock::advisoryKey($key) . ')');
         if ($policy === 'reject_new') {
@@ -107,9 +105,7 @@ final class SessionLimitLockTimeoutTest extends LoadTestCase
         $response = $second->getResponse();
         self::assertSame(409, $response->getStatusCode());
         self::assertFalse($response->headers->has('Retry-After'));
-        $body = json_decode((string) $response->getContent(), true);
-        self::assertIsArray($body);
-        self::assertSame('CONFLICT_002', $body['code']);
+        self::assertSame('CONFLICT_002', $response->headers->get('X-Conflict-Code'));
         self::assertSame(0, $this->rows('SELECT COUNT(*) FROM user_kit_session WHERE revoked_at IS NULL'), 'the eviction stands, the failed sign-in is not registered');
 
         self::assertSame('OK', $peer->execute('ROLLBACK'));

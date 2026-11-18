@@ -30,10 +30,10 @@ final class ConflictResponsePassTest extends TestCase
     public function testTheConfigurationDefaultsToTheSharedPolicyAndThePlatformAnswer(): void
     {
         $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
-        self::assertSame(['status' => null, 'error_page' => false], $config['conflict_response']);
+        self::assertSame(['status' => null, 'retry_after' => null, 'platform_answer' => false], $config['conflict_response']);
 
-        $config = (new Processor())->processConfiguration(new Configuration(), [['conflict_response' => ['status' => 503, 'error_page' => true]]]);
-        self::assertSame(['status' => 503, 'error_page' => true], $config['conflict_response']);
+        $config = (new Processor())->processConfiguration(new Configuration(), [['conflict_response' => ['status' => 503, 'retry_after' => 5, 'platform_answer' => true]]]);
+        self::assertSame(['status' => 503, 'retry_after' => 5, 'platform_answer' => true], $config['conflict_response']);
 
         $this->expectException(InvalidConfigurationException::class);
         (new Processor())->processConfiguration(new Configuration(), [['conflict_response' => ['status' => 500]]]);
@@ -56,15 +56,15 @@ final class ConflictResponsePassTest extends TestCase
 
         $container->setDefinition(StorageFailureSubscriber::class, new Definition(StorageFailureSubscriber::class));
         (new ConflictResponsePass())->process($container);
-        self::assertSame([409], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments(), 'defaults without the parameter');
+        self::assertSame([409, 1], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments(), 'defaults without the parameter');
     }
 
-    public function testWithoutTransactionDoctrinesBundleUserKitAnswers409PlainEnglish(): void
+    public function testWithoutTransactionDoctrinesBundleTheApplicationRendersA409(): void
     {
         $container = $this->container(null);
         (new ConflictResponsePass())->process($container);
 
-        self::assertSame([409], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments());
+        self::assertSame([409, 1], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments());
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::OWN_POLICY), $subscriber->getArgument('$policy'));
         $responder = $subscriber->getArgument('$responder');
@@ -73,7 +73,7 @@ final class ConflictResponsePassTest extends TestCase
         self::assertSame([], $responder->getArgument(2), 'no formatters');
         self::assertNull($responder->getArgument(3), 'no template without the bundle');
         self::assertNull($responder->getArgument(4), 'no translations without the bundle');
-        self::assertFalse($subscriber->getArgument('$errorPage'));
+        self::assertFalse($subscriber->getArgument('$platformAnswer'), 'the application\'s error rendering');
 
         $container->compile();
         $answer = $container->get(StorageFailureSubscriber::class);
@@ -88,6 +88,7 @@ final class ConflictResponsePassTest extends TestCase
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::SHARED_POLICY), $subscriber->getArgument('$policy'));
         self::assertEquals(new Reference(ConflictResponsePass::SHARED_RESPONDER), $subscriber->getArgument('$responder'));
+        self::assertTrue($subscriber->getArgument('$platformAnswer'), 'the bundle answers conflicts: the platform answer');
         self::assertFalse($container->hasDefinition(ConflictResponsePass::OWN_POLICY));
     }
 
@@ -103,24 +104,57 @@ final class ConflictResponsePassTest extends TestCase
         self::assertInstanceOf(TaggedIteratorArgument::class, $responder->getArgument(2));
         self::assertEquals(new Reference('twig', ContainerBuilder::NULL_ON_INVALID_REFERENCE), $responder->getArgument(3));
         self::assertEquals(new Reference('translator', ContainerBuilder::NULL_ON_INVALID_REFERENCE), $responder->getArgument(4));
+        self::assertFalse($subscriber->getArgument('$platformAnswer'), 'its conflict_response is off: the application\'s rendering');
+    }
+
+    public function testThePlatformAnswerIsOptIn(): void
+    {
+        $container = $this->container(null, platformAnswer: true);
+        (new ConflictResponsePass())->process($container);
+
+        self::assertTrue($container->getDefinition(StorageFailureSubscriber::class)->getArgument('$platformAnswer'));
+    }
+
+    public function testRetryAfterOverridesTheBundlesAndKeepsItsStatus(): void
+    {
+        $container = $this->container(null, policy: true, responder: true, retryAfter: 9);
+        $container->setParameter('td.status', 503);
+        $container->getDefinition(ConflictResponsePass::SHARED_POLICY)->setArguments(['%td.status%', 2]);
+        (new ConflictResponsePass())->process($container);
+
+        self::assertSame([503, 9], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments());
+        $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
+        self::assertEquals(new Reference(ConflictResponsePass::OWN_POLICY), $subscriber->getArgument('$policy'));
+        self::assertInstanceOf(Definition::class, $subscriber->getArgument('$responder'), 'a responder with UserKit\'s policy');
+        self::assertTrue($subscriber->getArgument('$platformAnswer'));
+    }
+
+    public function testASharedPolicyServiceWithoutADefinitionGivesTheDefaults(): void
+    {
+        $container = $this->container(503);
+        $container->setDefinition('td.policy', new Definition(ConflictResponsePolicy::class));
+        $container->setAlias(ConflictResponsePass::SHARED_POLICY, 'td.policy');
+        (new ConflictResponsePass())->process($container);
+
+        self::assertSame([503, 1], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments());
     }
 
     public function testAnExplicitStatusWinsOverTheBundle(): void
     {
-        $container = $this->container(503, policy: true, responder: true, errorPage: true);
+        $container = $this->container(503, policy: true, responder: true);
         (new ConflictResponsePass())->process($container);
 
-        self::assertSame([503], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments());
+        self::assertSame([503, 1], $container->getDefinition(ConflictResponsePass::OWN_POLICY)->getArguments(), 'the bundle\'s policy has no arguments: defaults');
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::OWN_POLICY), $subscriber->getArgument('$policy'));
         self::assertInstanceOf(Definition::class, $subscriber->getArgument('$responder'));
-        self::assertTrue($subscriber->getArgument('$errorPage'));
+        self::assertTrue($subscriber->getArgument('$platformAnswer'));
     }
 
-    private function container(?int $status, bool $policy = false, bool $responder = false, bool $errorPage = false): ContainerBuilder
+    private function container(?int $status, bool $policy = false, bool $responder = false, bool $platformAnswer = false, ?int $retryAfter = null): ContainerBuilder
     {
         $container = new ContainerBuilder();
-        $container->setParameter(ConflictResponsePass::PARAMETER, ['status' => $status, 'error_page' => $errorPage]);
+        $container->setParameter(ConflictResponsePass::PARAMETER, ['status' => $status, 'retry_after' => $retryAfter, 'platform_answer' => $platformAnswer]);
         $container->setDefinition(StorageFailureSubscriber::class, (new Definition(StorageFailureSubscriber::class))->setPublic(true));
         if ($policy) {
             $container->setDefinition(ConflictResponsePass::SHARED_POLICY, new Definition(ConflictResponsePolicy::class));

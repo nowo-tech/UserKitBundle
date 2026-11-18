@@ -69,23 +69,26 @@ composer update nowo-tech/user-kit-bundle nowo-tech/transaction-doctrine --with-
 nowo-tech/transaction-doctrine ^1.5 is required (was ^1.1).
 
 - **409 instead of 503.** A UserKit lock conflict (deadlock, lock wait timeout, serialization failure, a named lock not
-  obtained in 5 s: `UserKitStorageFailure`) now answers **409** with the platform conflict answer:
-  - JSON, XHR and `/api/` requests: `{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": "…"}` with
-    `Retry-After`;
-  - HTML: the "try again" page (`data-conflict-code="CONFLICT_001"`);
-  - `CONFLICT_002` (`"error": "concurrency_conflict_partial"`, no `Retry-After`) when the request had already committed
-    part of its work (an eviction before a failed sign-in, a revocation or epoch bump before a failed statement).
+  obtained in 5 s: `UserKitStorageFailure`) now answers **409**. Your error pages and JSON error format still render
+  it (the failure becomes a `ConflictHttpException` instead of a `ServiceUnavailableHttpException`); the code is added
+  as a header:
+  - `X-Conflict-Code: CONFLICT_001` with `Retry-After` when nothing was committed;
+  - `X-Conflict-Code: CONFLICT_002` without `Retry-After` when the request had already committed part of its work (an
+    eviction before a failed sign-in, a revocation or epoch bump before a failed statement).
 
-  With `NowoTransactionDoctrineBundle` registered, UserKit follows its `conflict_response` settings (status,
-  `retry_after`, template, translations, formatters). To keep the 1.20 answer (503 + `Retry-After`, rendered by your
-  error page and JSON error format):
+  To keep the 1.20 status and exception class (a host listener matching `ServiceUnavailableHttpException` keeps
+  working):
 
   ```yaml
   nowo_user_kit:
       conflict_response:
           status: 503
-          error_page: true
   ```
+
+  With `NowoTransactionDoctrineBundle` registered, UserKit follows its `conflict_response.status` and `retry_after`
+  when yours are left out, and, when its `conflict_response` is enabled, answers with its platform answer (JSON
+  `{"error", "code", "message"}` or the "try again" page). `conflict_response.platform_answer: true` asks for that
+  answer without the bundle.
 
   Clients and monitors that retried on 503 should retry on 409 when the code is `CONFLICT_001`, and read again (not
   repeat) on `CONFLICT_002`.

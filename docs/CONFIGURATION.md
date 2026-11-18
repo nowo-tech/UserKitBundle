@@ -135,14 +135,19 @@ wait timeout, a serialization failure, a lock UserKit waits for) is answered on 
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `conflict_response.status` | `409`, `503` or null | `null` | Status of the answer. Null: `nowo_transaction_doctrine.conflict_response.status` (and its `retry_after`, template, translations and formatters) when `NowoTransactionDoctrineBundle` is registered, else 409 with `Retry-After: 1`. `503` keeps the status of 1.19–1.20. |
-| `conflict_response.error_page` | bool | `false` | Render the answer with your application's error page (an `HttpException` with the status and `Retry-After`, as up to 1.20) instead of the platform conflict answer. The body then carries no conflict code. |
+| `conflict_response.status` | `409`, `503` or null | `null` | Status of the answer. Null: `nowo_transaction_doctrine.conflict_response.status` when `NowoTransactionDoctrineBundle` is registered, else 409. `503` keeps the status of 1.19–1.20 (and the `ServiceUnavailableHttpException` class). |
+| `conflict_response.retry_after` | int ≥ 0 or null | `null` | `Retry-After` seconds of a `CONFLICT_001` answer. Null: `nowo_transaction_doctrine.conflict_response.retry_after` when the bundle is registered, else 1. |
+| `conflict_response.platform_answer` | bool | `false` | Answer with transaction-doctrine's platform conflict answer (JSON `{"error", "code", "message"}` or the "try again" page) instead of your application's error rendering. Implied when `NowoTransactionDoctrineBundle` is registered with its `conflict_response` enabled. |
+
+By default your application renders the answer: UserKit replaces the failure by a `ConflictHttpException` (a
+`ServiceUnavailableHttpException` at 503) with `Retry-After` and the code in the `X-Conflict-Code` header
+(`CONFLICT_001` or `CONFLICT_002`), so your error pages and JSON error format keep their shapes.
 
 ```yaml
 nowo_user_kit:
     conflict_response:
         status: 503        # keep the 1.20 status
-        error_page: true   # keep your error page and JSON error format
+        retry_after: 2
 ```
 
 ## Personal data (GDPR)

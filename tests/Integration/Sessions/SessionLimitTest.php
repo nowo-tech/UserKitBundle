@@ -124,7 +124,7 @@ final class SessionLimitTest extends SessionsKernelTestCase
         // 1.21.0 (REQ-RUNTIME-003 rule 6): the eviction was committed before the failure: 409 CONFLICT_002, no Retry-After.
         self::assertSame(409, $second->getResponse()->getStatusCode());
         self::assertNull($second->getResponse()->headers->get('Retry-After'));
-        self::assertStringContainsString('data-conflict-code="CONFLICT_002"', (string) $second->getResponse()->getContent());
+        self::assertSame('CONFLICT_002', $second->getResponse()->headers->get('X-Conflict-Code'));
         $second->request('GET', '/page');
         self::assertRedirectsTo($second, '/login');
         // The eviction before the failure stands (autocommit): no live session over the limit, none for the failed one.

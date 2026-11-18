@@ -61,17 +61,19 @@ Since **1.21.0** (REQ-RUNTIME-003 rule 6; 503 up to 1.20). The full table of wri
 
 | Exception (namespace `Nowo\UserKitBundle\Transaction`) | When | HTTP answer |
 | --- | --- | --- |
-| `UserKitStorageFailure` (a `Nowo\TransactionContract\TransientStorageFailure`) | Deadlock, lock wait timeout, serialization failure, a named lock not obtained in 5 s; nothing committed | 409 + `Retry-After: 1` + `CONFLICT_001` |
-| `UserKitStorageFailure` after `afterCommit()` | The same, after the request already committed part of its work (an eviction before a failed registration, a revocation next to a failed epoch bump) | 409 + `CONFLICT_002`, no `Retry-After` |
+| `UserKitStorageFailure` (a `Nowo\TransactionContract\TransientStorageFailure`) | Deadlock, lock wait timeout, serialization failure, a named lock not obtained in 5 s; nothing committed | 409 + `Retry-After: 1` + `X-Conflict-Code: CONFLICT_001` |
+| `UserKitStorageFailure` after `afterCommit()` | The same, after the request already committed part of its work (an eviction before a failed registration, a revocation next to a failed epoch bump) | 409 + `X-Conflict-Code: CONFLICT_002`, no `Retry-After` |
 | `UserKitConflict` | A domain conflict: an owner image subject whose key a look-alike subject holds, several rows for one subject id | 409 through your error page, no `CONFLICT_*` code |
 
 `StorageFailureSubscriber` (`kernel.exception`, priority -64) answers these exceptions on **every** route, because a
 session listener or the erasure can run on any of your pages. Your own exceptions are never touched. The messages are
-generic; the database error stays in the previous exception, for your logs. A lock conflict gets the platform conflict
-answer of nowo-tech/transaction-doctrine: JSON `{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": …}`
-for JSON, XHR and `/api/` requests, else the "try again" page with `data-conflict-code`. Set
-`nowo_user_kit.conflict_response.status: 503` to keep the 1.20 status, and `error_page: true` to keep your error page
-and JSON error format (see [CONFIGURATION](CONFIGURATION.md#conflict-answer-conflict_response)).
+generic; the database error stays in the previous exception, for your logs. By default your error pages and JSON
+error format render a lock conflict, as up to 1.20 (a `ConflictHttpException`, or a `ServiceUnavailableHttpException`
+at 503): the code is added as the `X-Conflict-Code` header only. With `conflict_response.platform_answer: true`, or
+NowoTransactionDoctrineBundle's `conflict_response` enabled, it gets the platform conflict answer instead: JSON
+`{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": …}` for JSON, XHR and `/api/` requests, else the
+"try again" page with `data-conflict-code`, plus the header. Set `nowo_user_kit.conflict_response.status: 503` to keep
+the 1.20 status (see [CONFIGURATION](CONFIGURATION.md#conflict-answer-conflict_response)).
 
 In code that calls UserKit directly (a console command, a Messenger handler, an API controller with its own error
 mapping), catch `TransientStorageFailure` (or `UserKitStorageFailure`): retry later when
