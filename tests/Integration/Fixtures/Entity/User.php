@@ -16,6 +16,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Account
 {
     use EnabledUserTrait;
 
+    /** 1.20 owner images `pointer_store: column` (kind `avatar`). */
+    #[ORM\Column(name: 'avatar_file_id', type: 'string', length: 64, nullable: true)]
+    private ?string $avatarFileId = null;
+
     public function __construct(
         #[ORM\Id]
         #[ORM\Column(type: 'string', length: 180)]
@@ -42,5 +46,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Account
 
     public function eraseCredentials(): void
     {
+    }
+
+    public function getAvatarFileId(): ?string
+    {
+        return $this->avatarFileId;
+    }
+
+    public function setAvatarFileId(?string $avatarFileId): void
+    {
+        $this->avatarFileId = $avatarFileId;
     }
 }

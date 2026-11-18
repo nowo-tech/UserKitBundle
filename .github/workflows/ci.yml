@@ -222,6 +222,7 @@ jobs:
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
       - name: MySQL
         env:
           USER_KIT_TEST_DB_URL: mysql://root:ci-placeholder@127.0.0.1:3306/user_kit?serverVersion=8.4.0&charset=utf8mb4
@@ -230,6 +231,7 @@ jobs:
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
       - name: MariaDB
         env:
           USER_KIT_TEST_DB_URL: mysql://root:ci-placeholder@127.0.0.1:3307/user_kit?serverVersion=11.4.0-MariaDB&charset=utf8mb4
@@ -238,6 +240,7 @@ jobs:
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
 
   load-readiness:
     # 1.19.0 (Beacon spec 239): the races of tests/Load on real servers, each test fails against 1.18.0.

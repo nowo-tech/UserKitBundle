@@ -175,6 +175,11 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `OwnerImage/Pointer/OwnerImagePointerStoreInterface.php` | Pointer store SPI | FR-IMG-002 | Mapped |
 | `OwnerImage/Pointer/LockingOwnerImagePointerStoreInterface.php` | Locking pointer store SPI | FR-IMG-002 | Mapped |
 | `OwnerImage/Pointer/DbalOwnerImagePointerStore.php` | Default pointer store (DBAL) | FR-IMG-002 | Mapped |
+| `OwnerImage/Pointer/ColumnOwnerImagePointerStore.php` | 1.20 `pointer_store: column` (owner's row, identity-map aware) | FR-IMG-004 | Mapped |
+| `OwnerImage/Pointer/ColumnPointer.php` | 1.20 one kind's pointer column (resolved per call) | FR-IMG-004 | Mapped |
+| `OwnerImage/Audit/OwnerImageAuditListener.php` | 1.20 AuditKit bridge (rows by ids) | FR-IMG-005 | Mapped |
+| `DependencyInjection/ColumnPointers.php` | 1.20 compile-time checks of `kinds.*.pointer` | FR-IMG-004 | Mapped |
+| `DependencyInjection/Compiler/OwnerImageAuditPass.php` | 1.20 registers the AuditKit bridge | FR-IMG-005 | Mapped |
 | `OwnerImage/Pointer/PointerCollationListener.php` | Exact collation on kind / subject_id | FR-KEY-001 | Mapped |
 | `OwnerImage/Entity/OwnerImagePointer.php` | Table `user_kit_owner_image` | FR-IMG-002 | Mapped |
 | `OwnerImage/Storage/OwnerImageStorageInterface.php` | Storage SPI | FR-IMG-002 | Mapped |
@@ -243,12 +248,12 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | PHP — UI preferences & product tour (002) | 18 | 18 |
 | PHP — personal data / GDPR (003) | 15 | 15 |
 | Sessions — session registry and limits (004, 005) | 51 | 51 |
-| Owner images (1.18) | 27 | 27 |
+| Owner images (1.18, 1.20) | 32 | 32 |
 | Ports, transactions and load readiness | 28 | 28 |
 | Translations | 7 | 7 |
-| **Total production sources** | **171** | **171** |
+| **Total production sources** | **176** | **176** |
 
-Audit command (production count): `git ls-files src | wc -l` → **171** (2026-11-16). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+Audit command (production count): `git ls-files src | wc -l` → **176** (2026-11-18). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
 
 ## Inventory refresh (2026-11-16)
 

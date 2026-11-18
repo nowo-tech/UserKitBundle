@@ -14,8 +14,10 @@ use Nowo\StorageKitBundle\Reference\FileReferencesInterface;
 use Nowo\StorageKitBundle\Reference\FileUris;
 use Nowo\StorageKitBundle\Upload\SquareImageProcessor;
 use Nowo\StorageKitBundle\Upload\SquareImageUploaderInterface;
+use Nowo\UserKitBundle\DependencyInjection\Compiler\OwnerImageAuditPass;
 use Nowo\UserKitBundle\OwnerImage\Access\DefaultOwnerImageAccess;
 use Nowo\UserKitBundle\OwnerImage\Access\OwnerImageAccessInterface;
+use Nowo\UserKitBundle\OwnerImage\Audit\OwnerImageAuditListener;
 use Nowo\UserKitBundle\OwnerImage\EventListener\OwnerImageMemoListener;
 use Nowo\UserKitBundle\OwnerImage\Form\OwnerImageType;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKind;
@@ -25,6 +27,7 @@ use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageSubjects;
 use Nowo\UserKitBundle\OwnerImage\PersonalData\OwnerImageEraser;
 use Nowo\UserKitBundle\OwnerImage\PersonalData\OwnerImageExportProvider;
+use Nowo\UserKitBundle\OwnerImage\Pointer\ColumnOwnerImagePointerStore;
 use Nowo\UserKitBundle\OwnerImage\Pointer\DbalOwnerImagePointerStore;
 use Nowo\UserKitBundle\OwnerImage\Pointer\OwnerImagePointerStoreInterface;
 use Nowo\UserKitBundle\OwnerImage\Pointer\PointerCollationListener;
@@ -44,13 +47,17 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 use Twig\Extension\AbstractExtension;
 
+use function array_keys;
 use function array_values;
 use function class_exists;
+use function in_array;
 use function interface_exists;
 use function is_array;
 use function is_string;
 use function ltrim;
+use function preg_match;
 use function sprintf;
+use function str_replace;
 
 /**
  * Registers `nowo_user_kit.owner_images` (1.18, only when `owner_images.enabled` is true) and prepends the Doctrine
@@ -89,7 +96,7 @@ final class OwnerImagesLoader
     /**
      * Registers the services of the feature.
      *
-     * @param array{enabled: bool, kinds: array<string, array{subject: string, read: string, shape: string}>, user_class: string|null, avatar_kind: string|null, access: string|null, pointer_store: string|null, storage: string|null, doctrine: array{entity_manager: string|null}, twig: array{sizes: array<string, int>}} $config
+     * @param array{enabled: bool, kinds: array<string, array{subject: string, read: string, shape: string, pointer?: array{entity: string, field: string, subject_field: string|null}}>, user_class: string|null, avatar_kind: string|null, access: string|null, pointer_store: string|null, audit?: array{enabled: bool, user_id_field: string|null, actions: array{uploaded: string, replaced: string, removed: string}, kinds: array<string, array{uploaded: string|null, replaced: string|null, removed: string|null}>}, storage: string|null, doctrine: array{entity_manager: string|null}, twig: array{sizes: array<string, int>}} $config
      * @param string|null $profileUserClass the user class of the only UserKit profile (null with several profiles):
      *                                      the default of `user_class`
      */
@@ -114,8 +121,13 @@ final class OwnerImagesLoader
         $container->setDefinition(DefaultOwnerImageAccess::class, new Definition(DefaultOwnerImageAccess::class, [new Reference(OwnerImageSubjects::class)]));
         $container->setAlias(OwnerImageAccessInterface::class, self::serviceId($config['access']) ?? DefaultOwnerImageAccess::class)->setPublic(true);
 
-        $store = self::serviceId($config['pointer_store']);
-        if ($store === null) {
+        $store   = self::serviceId($config['pointer_store']);
+        $columns = ColumnPointers::fromConfig($config['kinds'], $store === OwnerImagesConfiguration::POINTER_STORE_COLUMN);
+        if ($store === OwnerImagesConfiguration::POINTER_STORE_COLUMN) {
+            // 1.20: the pointer in a column of the owner's row (validated above: entity, field, one kind per column).
+            $container->setDefinition(ColumnOwnerImagePointerStore::class, new Definition(ColumnOwnerImagePointerStore::class, [new Reference('doctrine'), $columns, new Reference(UserKitTransactionRunner::class)]));
+            $store = ColumnOwnerImagePointerStore::class;
+        } elseif ($store === null) {
             $manager = self::serviceId($config['doctrine']['entity_manager']);
             $container->setDefinition(DbalOwnerImagePointerStore::class, new Definition(DbalOwnerImagePointerStore::class, [new Reference('doctrine'), $manager, new Reference(UserKitTransactionRunner::class)]));
             // House rule LQ: binary collation of kind / subject_id on MySQL / MariaDB.
@@ -147,6 +159,12 @@ final class OwnerImagesLoader
             new Reference(CommitQueue::class, ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]))->setPublic(true));
         $container->setAlias(OwnerImagesInterface::class, OwnerImages::class)->setPublic(true);
+
+        // 1.20: the AuditKit bridge is registered by OwnerImageAuditPass once AuditKit's services are known.
+        $audit = $config['audit'] ?? ['enabled' => false, 'user_id_field' => null, 'actions' => OwnerImagesConfiguration::DEFAULT_AUDIT_ACTIONS, 'kinds' => []];
+        if ($audit['enabled']) {
+            $container->setParameter(OwnerImageAuditPass::PARAMETER, ['actions' => self::auditActions($audit, array_keys($config['kinds'])), 'user_id_field' => $audit['user_id_field']]);
+        }
 
         $container->setDefinition(OwnerImageType::class, (new Definition(OwnerImageType::class, [new Reference(OwnerImagesInterface::class)]))->addTag('form.type'));
 
@@ -214,6 +232,38 @@ final class OwnerImagesLoader
         if (!$available) {
             throw new InvalidConfigurationException('nowo_user_kit.owner_images needs nowo-tech/storage-kit-bundle 1.6+ (composer require nowo-tech/storage-kit-bundle), or your own owner_images.storage service.');
         }
+    }
+
+    /**
+     * The actions of each kind, `{kind}` replaced, checked against AuditKit's action column.
+     *
+     * @param array{actions: array{uploaded: string, replaced: string, removed: string}, kinds: array<string, array{uploaded: string|null, replaced: string|null, removed: string|null}>} $audit
+     * @param list<int|string> $kinds
+     *
+     * @throws InvalidConfigurationException
+     *
+     * @return array<string, array{uploaded: string, replaced: string, removed: string}>
+     */
+    public static function auditActions(array $audit, array $kinds): array
+    {
+        foreach (array_keys($audit['kinds']) as $name) {
+            if (!in_array($name, $kinds, true)) {
+                throw new InvalidConfigurationException(sprintf('nowo_user_kit.owner_images.audit.kinds: "%s" is not a configured kind.', $name));
+            }
+        }
+        $actions = [];
+        foreach ($kinds as $name) {
+            $name = (string) $name;
+            foreach ($audit['actions'] as $change => $default) {
+                $action = str_replace(OwnerImageAuditListener::KIND_PLACEHOLDER, $name, $audit['kinds'][$name][$change] ?? $default);
+                if (preg_match(OwnerImagesConfiguration::ACTION_PATTERN, $action) !== 1) {
+                    throw new InvalidConfigurationException(sprintf('nowo_user_kit.owner_images.audit: the %s action of kind "%s" ("%s") must be 1-48 characters [A-Za-z0-9_.:-] once {kind} is replaced.', $change, $name, $action));
+                }
+                $actions[$name][$change] = $action;
+            }
+        }
+
+        return $actions;
     }
 
     private static function serviceId(?string $id): ?string

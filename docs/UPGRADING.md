@@ -59,6 +59,36 @@
 
 ## Unreleased
 
+Both additions are opt-in. Without them nothing changes: the default pointer store is still the table
+`user_kit_owner_image`, and no audit row is written.
+
+- **Column pointer store.** To keep the image ids on your own rows (no pointer table, and no extra query for lists
+  whose rows are already loaded), set `owner_images.pointer_store: column` and give every kind a `pointer`:
+
+  ```yaml
+  nowo_user_kit:
+      owner_images:
+          pointer_store: column
+          kinds:
+              avatar: { subject: user, pointer: { entity: App\Entity\User, field: avatarFileUuid, subject_field: uuid } }
+  ```
+
+  The entity must be the root entity of its table, and `field` a nullable string column of it (at least 64
+  characters). `subject_field` holds the subject id; it defaults to the identifier. The build fails if a class or
+  property is missing, if a property of an attribute-mapped entity is not `#[ORM\Column]`, or if two kinds share a
+  column. Before switching, copy each subject's `file_id` from `user_kit_owner_image` into the new column, for
+  example with `UPDATE … SET avatar_file_uuid = (SELECT file_id FROM user_kit_owner_image WHERE kind = 'avatar' AND
+  subject_id = …)`. Then drop the table with a migration once you no longer need it. `column` is now a reserved
+  value of `pointer_store`: a service of your own named `column` must be renamed.
+- **AuditKit bridge.** `owner_images.audit: true` records an action log row for every uploaded, replaced or removed
+  image. It needs `nowo-tech/audit-kit-bundle` 1.14+ with `nowo_audit_kit.action_log.entity_class` set, and the build
+  fails otherwise. If you audit `OwnerImageChangedEvent` yourself, remove that listener, or you get two rows. With an
+  action log of user relations (`AbstractActionLog`) and users whose subject id is not their identifier (they
+  implement `OwnerImageSubjectInterface`), set `owner_images.audit.user_id_field`; the build fails without it. If the
+  action log stores actions as a PHP enum, add the new actions to it, or set `audit.actions` / `audit.kinds` to
+  actions you already have. AuditKit's `action_log.flush_mode: isolated` is recommended: the bridge then never
+  flushes the application's pending changes.
+
 ## To 1.19.0
 
 From **1.18.0**:

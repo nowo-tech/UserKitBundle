@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Integration\OwnerImage;
 
 use Closure;
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Nowo\AuditKitBundle\NowoAuditKitBundle;
 use Nowo\DoctrineEncryptBundle\NowoDoctrineEncryptBundle;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\StorageKitBundle\NowoStorageKitBundle;
@@ -47,11 +48,13 @@ final class OwnerImagesTestKernel extends Kernel
     /**
      * @param array<string, mixed> $userKit `nowo_user_kit` configuration (merged over the defaults)
      * @param Closure(ContainerConfigurator): void|null $extra host services
+     * @param array<string, mixed>|null $auditKit 1.20: `nowo_audit_kit` configuration (null: no AuditKitBundle)
      */
     public function __construct(
         private readonly array $userKit = [],
         private readonly ?Closure $extra = null,
         private readonly string $variant = '',
+        private readonly ?array $auditKit = null,
     ) {
         parent::__construct('test', false);
     }
@@ -68,6 +71,9 @@ final class OwnerImagesTestKernel extends Kernel
         yield new NowoUiKitBundle();
         yield new NowoStorageKitBundle();
         yield new NowoUserKitBundle();
+        if ($this->auditKit !== null) {
+            yield new NowoAuditKitBundle();
+        }
     }
 
     public function getProjectDir(): string
@@ -127,6 +133,11 @@ final class OwnerImagesTestKernel extends Kernel
                 'is_bundle' => false,
                 'dir'       => __DIR__ . '/../Fixtures/Entity',
                 'prefix'    => 'Nowo\\UserKitBundle\\Tests\\Integration\\Fixtures\\Entity',
+            ], 'UserKitOwnerImageTest' => [
+                'type'      => 'attribute',
+                'is_bundle' => false,
+                'dir'       => __DIR__ . '/Fixtures/Entity',
+                'prefix'    => 'Nowo\\UserKitBundle\\Tests\\Integration\\OwnerImage\\Fixtures\\Entity',
             ], 'NowoUserKitModel' => [
                 'type'      => 'attribute',
                 'is_bundle' => false,
@@ -148,6 +159,15 @@ final class OwnerImagesTestKernel extends Kernel
             'web_ui'                  => ['enabled' => false],
             'security'                => ['allow_unauthenticated' => false],
         ]);
+        if ($this->auditKit !== null) {
+            $container->extension('doctrine', ['orm' => ['mappings' => ['UserKitOwnerImageAuditLog' => [
+                'type'      => 'attribute',
+                'is_bundle' => false,
+                'dir'       => __DIR__ . '/Fixtures/AuditLog',
+                'prefix'    => 'Nowo\\UserKitBundle\\Tests\\Integration\\OwnerImage\\Fixtures\\AuditLog',
+            ]]]]);
+            $container->extension('nowo_audit_kit', $this->auditKit);
+        }
         $container->extension('nowo_user_kit', array_replace_recursive(isset($this->userKit['profiles']) ? [] : ['user_class' => User::class], [
             'owner_images'  => ['enabled' => true],
             'personal_data' => ['enabled' => true],
@@ -171,6 +191,6 @@ final class OwnerImagesTestKernel extends Kernel
 
     private function id(): string
     {
-        return md5(serialize([$this->userKit, $this->variant]));
+        return md5(serialize([$this->userKit, $this->variant, $this->auditKit]));
     }
 }
