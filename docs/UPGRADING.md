@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
   - [To 1.18.0: owner images (opt-in)](#to-1180-owner-images-opt-in)
@@ -58,6 +59,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.20.0
+
+From **1.19.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 Both additions are opt-in. Without them nothing changes: the default pointer store is still the table
 `user_kit_owner_image`, and no audit row is written.
