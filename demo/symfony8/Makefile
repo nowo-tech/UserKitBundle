@@ -68,7 +68,7 @@ link-bundle: ensure-up
 	$(DOCKER_COMPOSE) exec php sh -c "mkdir -p var/data && rm -rf vendor/nowo-tech/user-kit-bundle && ln -sf /var/user-kit-bundle vendor/nowo-tech/user-kit-bundle && php bin/console doctrine:schema:update --force --complete && php bin/console cache:clear"
 
 update-bundle: ensure-up
-	$(DOCKER_COMPOSE) exec php composer update nowo-tech/user-kit-bundle --no-interaction
+	$(DOCKER_COMPOSE) exec php composer update nowo-tech/user-kit-bundle -w --no-interaction
 	@$(MAKE) link-bundle
 
 release-check: ensure-up update-bundle test test-coverage
