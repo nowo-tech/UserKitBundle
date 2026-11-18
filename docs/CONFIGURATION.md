@@ -287,10 +287,18 @@ nowo_user_kit:
         kinds:                       # name (1-16 chars [a-z0-9_], also the StorageKit context type) => options
             avatar: { subject: user, read: authenticated, shape: circle }   # the default when kinds is omitted
             # org_logo: { subject: other, read: public, shape: square }
+            # 1.20, with pointer_store: column:
+            # avatar: { subject: user, pointer: { entity: App\Entity\User, field: avatarFileUuid, subject_field: uuid } }
         user_class: null             # class whose identifier is the subject id (null: the user_class of the only profile)
         avatar_kind: avatar          # kind shown by user_avatar() (a "user" kind)
         access: null                 # service id of your OwnerImageAccessInterface (null: DefaultOwnerImageAccess)
-        pointer_store: null          # service id of your OwnerImagePointerStoreInterface (null: table user_kit_owner_image)
+        pointer_store: null          # service id of your OwnerImagePointerStoreInterface (null: table user_kit_owner_image;
+                                     # 1.20 "column": a column of the owner's row, set kinds.*.pointer)
+        audit:                       # 1.20: AuditKit action log rows (needs nowo-tech/audit-kit-bundle); "audit: true" enables it
+            enabled: false
+            user_id_field: null      # action log of user relations only: user field holding the subject id (e.g. uuid)
+            actions: { uploaded: owner_image.uploaded, replaced: owner_image.replaced, removed: owner_image.removed }
+            kinds: {}                # per kind, over "actions", e.g. avatar: { removed: account.avatar_removed }
         storage: null                # service id of your OwnerImageStorageInterface (null: StorageKitBundle 1.6+)
         doctrine:
             entity_manager: null     # manager that maps user_kit_owner_image (null: the default one)
@@ -304,6 +312,11 @@ nowo_user_kit:
 | `kinds.*.read` | `authenticated` | Who may see the image through the storage's download route: `public` (anonymous too), `authenticated` or `host` (your access service). |
 | `kinds.*.shape` | `square` | Crop frame of the form field (`circle` / `square`). The stored image is always a square. |
 | `user_class` | `null` | The user class (or interface) whose Doctrine identifier, else user identifier, is the subject id of its users. `null`: the `user_class` of the only profile; with several profiles, nobody, so set it. Users of any other class get no subject id unless they implement `OwnerImageSubjectInterface` (ids unique across your user classes, e.g. `admin:42`): two classes sharing an id never share an image. An unknown class fails the container build. |
+| `kinds.*.pointer` | none | 1.20, only with `pointer_store: column`, and then required for every kind. `entity`: the root Doctrine entity that holds the column. `field`: its nullable string field for the image id. `subject_field`: its field that holds the subject id; `null` means the single identifier. The class and properties are checked at build time (on an attribute-mapped entity they must be `#[ORM\Column]`), and the Doctrine mapping is checked when the store runs. Two kinds cannot share a column. |
+| `pointer_store` | `null` | A service id, or `column` (1.20) for `ColumnOwnerImagePointerStore`. |
+| `audit.enabled` | `false` | 1.20. Needs `nowo-tech/audit-kit-bundle` 1.15+ with `nowo_audit_kit.action_log.entity_class` and `nowo_audit_kit.action_log.flush_mode: isolated`, or the container does not compile. |
+| `audit.user_id_field` | `null` | For an action log of user relations (`AbstractActionLog`) whose users' subject ids are not their identifiers: the field of the action log's user class that holds them. Required when the user class implements `OwnerImageSubjectInterface`. Ignored for an id log (`AbstractIdActionLog`), which stores subject ids as they are. |
+| `audit.actions`, `audit.kinds` | see above | Actions of the rows; `{kind}` is replaced by the kind name. Each one must be 1–48 characters `[A-Za-z0-9_.:-]` (AuditKit's `action` column). |
 | `storage` | `null` | Without it, `nowo-tech/storage-kit-bundle` 1.6+ must be installed, or the container does not compile. Image limits are StorageKit's `upload.square.max_bytes` (2 MiB), `upload.square.max_pixels` (16 MP), `upload.square.size` (256 px) and `upload.max_pixels`. PHP GD must encode WebP, else uploads are refused with `off`. |
 
 ### Table
@@ -311,7 +324,8 @@ nowo_user_kit:
 With the default pointer store, the bundle prepends the attribute mapping of `Nowo\UserKitBundle\OwnerImage\Entity\OwnerImagePointer`.
 The table is `user_kit_owner_image`: `id`, `kind`, `subject_id`, `file_id`, `updated_at`, with a unique key on
 (`kind`, `subject_id`). Create it with a migration (`doctrine:migrations:diff`). On MySQL / MariaDB, `kind` and
-`subject_id` get a binary collation (house rule LQ). With your own `pointer_store`, nothing is mapped.
+`subject_id` get a binary collation (house rule LQ). With your own `pointer_store` or `pointer_store: column`, nothing is
+mapped.
 
 ## AuthKit integration
 

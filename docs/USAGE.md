@@ -1012,9 +1012,48 @@ final readonly class OrganizationImageAccess implements OwnerImageAccessInterfac
 
 ### Keeping the pointer on your own rows
 
-To avoid the bundle table (and an extra query per list), implement `OwnerImagePointerStoreInterface` on your own
-columns. Write the pointer with your own explicit transaction or DBAL statement, never by flushing someone else's unit
-of work. Then set `owner_images.pointer_store`. The bundle then maps no table.
+Since 1.20 the bundle can keep each kind's pointer in a column of the owner's own row. There is then no pointer table,
+and a list whose rows are already loaded needs no extra query. Set `pointer_store: column` and map every kind:
+
+```yaml
+nowo_user_kit:
+    owner_images:
+        enabled: true
+        pointer_store: column
+        kinds:
+            avatar:
+                subject: user
+                shape: circle
+                # The user's own column; subject_field: the field that holds the subject id (default: the identifier).
+                pointer: { entity: App\Entity\User, field: avatarFileUuid, subject_field: uuid }
+            org_logo:
+                pointer: { entity: App\Entity\Organization, field: logoFileUuid, subject_field: uuid }
+```
+
+- `entity` is the root entity of the table. `field` is a nullable string column for the image id (at least 64
+  characters). `subject_field` holds the subject id; give it a unique key. Wrong classes or properties fail the
+  container build, and the store checks the Doctrine mapping again when it runs, so XML mappings are covered too.
+- Reads: when `subject_field` holds one row per subject id (the single identifier, a `unique: true` column or the only
+  column of a unique constraint), a loaded entity (managed and initialised) answers from the identity map, as the
+  request sees it. Otherwise the database counts the rows. The other subjects are read with one query per 500 ids.
+  A lazy proxy is not loaded.
+- Writes: one DBAL `UPDATE` of the subject's own row, matched by its identifier and the exact subject id, inside a
+  transaction (a savepoint within yours) with the row locked. The image it replaced is read under that lock. The
+  application's entity manager is never flushed. The statement bypasses the ORM: no lifecycle callbacks, no entity
+  listeners, and no `#[ORM\Version]` increment.
+- Loaded entities are updated only when the row really changed, so a write that changes nothing leaves your pending
+  value of the field alone. Outside a transaction the new value is also the entity's original value, so your next
+  flush writes nothing for it. Inside your transaction the original stays the previous value, and the unit of work
+  still sees the field as changed. After a commit, your next flush writes the same value again. **After a rollback,
+  reload (`refresh()`) or clear the entity**: it still holds the rolled-back value.
+- Tenant safety: rows are compared byte for byte after they are read. On a folding collation, `ORG-1` never reads
+  or writes `org-1`'s image. A subject id that matches two rows writes nothing (`UserKitConflict`, 409). A subject
+  with no row cannot get an image: the upload is refused and the new file is removed.
+- Nothing is kept between calls (worker mode). The metadata and the entity manager are looked up again on every
+  call, so a write unit that clears its entity manager between attempts is safe.
+
+You can still implement `OwnerImagePointerStoreInterface` yourself and set `owner_images.pointer_store` to its
+service id. Write with your own explicit transaction or DBAL statement, never by flushing someone else's unit of work.
 
 ### Personal data
 
@@ -1029,6 +1068,52 @@ Outside a transaction StorageKit records `file_uploaded`, `file_removed` and `fi
 GDPR erasure, or a call you wrap in your own transaction) those events wait for the outermost commit on UserKit's
 commit queue, which exists with `sessions.enabled`, and are dropped on rollback. Without it they are not recorded for
 calls made inside a transaction; `OwnerImageChangedEvent` (upload / remove) is dispatched either way.
+
+#### AuditKit action log (1.20)
+
+`owner_images.audit: true` writes one row to AuditKit's action log for each `OwnerImageChangedEvent`. It needs
+`nowo-tech/audit-kit-bundle` 1.15+ with `nowo_audit_kit.action_log.entity_class` set, and with
+`nowo_audit_kit.action_log.flush_mode: isolated`. Otherwise the container does not compile: in AuditKit's default
+`host` mode every audit row would flush your pending changes, and would close your entity manager if the row failed.
+
+```yaml
+nowo_audit_kit:
+    action_log:
+        entity_class: App\Entity\UserAction
+        flush_mode: isolated   # required by owner_images.audit
+```
+
+```yaml
+nowo_user_kit:
+    owner_images:
+        audit:
+            enabled: true
+            # Action log of user relations (AbstractActionLog) and users whose subject id is not their identifier:
+            user_id_field: uuid
+            actions: { uploaded: 'owner_image.{kind}.uploaded', replaced: 'owner_image.{kind}.replaced', removed: 'owner_image.{kind}.removed' }
+            kinds:
+                avatar: { uploaded: account.avatar_uploaded, replaced: account.avatar_uploaded, removed: account.avatar_removed }
+```
+
+| Change | Action | Actor | Subject | Context |
+| --- | --- | --- | --- | --- |
+| A first image | `uploaded` | the actor's id | the user's id for a `user` kind, else none | `kind`, `subject_id`, `actor_id`, `file`, `previous_file` |
+| A new image over an old one | `replaced` | same | same | same |
+| The image removed | `removed` | same | same | same (`file` null) |
+
+- Rows are recorded by ids through `ActionLogIdRecorderInterface::recordIdsAndFlush()`, never with entities. A write
+  unit that clears its entity manager between attempts (transaction-doctrine 1.4) never meets a detached reference,
+  and a replayed attempt records its own row. Inside a transaction, the row commits or rolls back with the change.
+- An id log (`AbstractIdActionLog`) stores the subject ids as they are. A log of user relations (`AbstractActionLog`)
+  turns them into references to its user class, so they must be its identifiers. With `user_id_field`, the bridge
+  looks the identifier up by that field, as a scalar query with an exact match. A subject id that matches no user, or
+  several, is recorded without the link, but its id stays in the context.
+- An organization's logo (an `other` kind) has no user subject. Its id is only in the context.
+- A row that cannot be recorded (a database error, or a `user_id_field` that is not mapped) is logged as a warning
+  that names only the exception class, and is not thrown: the image change is already done. A transient failure (a
+  deadlock or lock wait timeout) is rethrown. On MySQL a deadlock has rolled back your whole transaction, the image
+  change included, so roll back and retry (a transaction-doctrine write unit replays it).
+- Erasures (`forget()`) dispatch no event and are not recorded here. The erasure has its own audit.
 
 ### Worker mode
 

@@ -46,10 +46,11 @@ abstract class OwnerImagesKernelTestCase extends TestCase
     /**
      * @param array<string, mixed> $userKit
      * @param Closure(ContainerConfigurator): void|null $extra
+     * @param array<string, mixed>|null $auditKit 1.20: `nowo_audit_kit` configuration (null: no AuditKitBundle)
      */
-    protected function boot(array $userKit = [], ?Closure $extra = null, string $variant = ''): OwnerImagesTestKernel
+    protected function boot(array $userKit = [], ?Closure $extra = null, string $variant = '', ?array $auditKit = null): OwnerImagesTestKernel
     {
-        $this->kernel = new OwnerImagesTestKernel($userKit, $extra, $variant . static::class . $this->name());
+        $this->kernel = new OwnerImagesTestKernel($userKit, $extra, $variant . static::class . $this->name(), $auditKit);
         $this->kernel->boot();
         $em   = $this->em();
         $tool = new SchemaTool($em);
