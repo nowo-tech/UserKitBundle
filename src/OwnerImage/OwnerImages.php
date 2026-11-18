@@ -66,7 +66,7 @@ final readonly class OwnerImages implements OwnerImagesInterface
             $this->logger->warning('Owner image: the {kind} pointer could not be written; the new file is removed.', ['kind' => $type->name, 'exception' => $e]);
             $this->dispose($type, $subjectId, $fileId);
             if ($e instanceof TransientStorageFailure) {
-                // 1.19.0: a deadlock, a lock wait or the subject's lock not obtained: 503 + Retry-After, not a refusal.
+                // 1.19.0: a deadlock, a lock wait or the subject's lock not obtained: 409 + Retry-After + CONFLICT_001 (503 up to 1.20), not a refusal.
                 throw $e;
             }
 
@@ -143,7 +143,7 @@ final readonly class OwnerImages implements OwnerImagesInterface
      * and subject ({@see UserKitNamedLock}) on the pointer's connection: the manager of `owner_images.doctrine.entity_manager`,
      * else the manager that maps the bundle's pointer entity, else the default one (audit QM-D-I1). Two parallel uploads of
      * one subject no longer both read the same previous image: in 1.18.0 the pointer and the reference could end on
-     * different files. A lock not obtained in 5 s is a 503; the new file, never attached, stays an orphan for StorageKit's
+     * different files. A lock not obtained in 5 s is a 409 (CONFLICT_001); the new file, never attached, stays an orphan for StorageKit's
      * purge. Without Doctrine (a host with its own stores and no registry) nothing is locked.
      *
      * @template T

@@ -73,12 +73,37 @@ final class Configuration implements ConfigurationInterface
                     ->defaultTrue()
                     ->info('Register the user_is_online and user_ui_html_attributes Twig helpers when Twig is installed.')
                 ->end()
+                ->append($this->createConflictResponseNode())
                 ->append($this->createPersonalDataNode())
                 ->append((new SessionsConfiguration())->node())
                 ->append((new OwnerImagesConfiguration())->node())
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * 1.21.0 (REQ-RUNTIME-003 rule 6): how a UserKit lock conflict (UserKitStorageFailure) is answered.
+     */
+    private function createConflictResponseNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('conflict_response'))->getRootNode();
+        $node
+            ->info('Answer to a UserKit lock conflict (deadlock, lock wait timeout, serialization failure, a lock UserKit waits for): 409 + Retry-After + CONFLICT_001, or CONFLICT_002 without Retry-After when part of the request was committed.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->enumNode('status')
+                    ->values([null, 409, 503])
+                    ->defaultNull()
+                    ->info('409 or 503 (the 1.20 status). Null: nowo_transaction_doctrine.conflict_response.status when NowoTransactionDoctrineBundle is registered, else 409.')
+                ->end()
+                ->booleanNode('error_page')
+                    ->defaultFalse()
+                    ->info('Render the answer with the application\'s error page (an HttpException with the status and Retry-After, no conflict code in the body), as up to 1.20, instead of the platform conflict answer (JSON with "code", or the "try again" page).')
+                ->end()
+            ->end();
+
+        return $node;
     }
 
     private function createPersonalDataNode(): ArrayNodeDefinition

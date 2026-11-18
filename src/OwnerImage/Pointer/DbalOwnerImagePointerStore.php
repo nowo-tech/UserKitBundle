@@ -119,7 +119,7 @@ final readonly class DbalOwnerImagePointerStore implements LockingOwnerImagePoin
         // subject's row read with a row lock, the first row inserted in its own savepoint with the id of the entity's
         // sequence where the ORM uses one (PostgreSQL with DBAL 3: a NOT NULL violation in 1.18.0). A lost first-row
         // race reads the winner's row and writes over it (1.18.0: a unique violation, which also aborted a PostgreSQL
-        // transaction of the caller). A deadlock or lock wait is retried in autocommit, else UserKitStorageFailure (503).
+        // transaction of the caller). A deadlock or lock wait is retried in autocommit, else UserKitStorageFailure (409, CONFLICT_001).
         // @igor-ignore - The closures run synchronously inside the runner; nothing is kept on the service.
         return $this->runner->statement($connection, static fn (): ?string => DoctrineTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $metadata, $forUpdate, $kind, $subjectId, $fileId): ?string {
             $row = self::row($connection, $kind, $subjectId, $forUpdate);

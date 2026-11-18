@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Load;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\DeadlockException;
+use Nowo\TransactionDoctrine\ConflictCode;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
 use Nowo\UserKitBundle\Sessions\Model\SessionClient;
@@ -21,7 +22,7 @@ use function str_starts_with;
 /**
  * 1.19.0 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: the personal data erasure is one unit of work of
  * UserKit's runner (up to 1.18 `wrapInTransaction()` with the flush nested in it). A deadlock inside the nested flush
- * (MySQL already dropped the savepoint: 1305) and a lock wait both answer UserKitStorageFailure (503), leave the
+ * (MySQL already dropped the savepoint: 1305) and a lock wait both answer UserKitStorageFailure (409 + CONFLICT_001 since 1.21.0), leave the
  * worker's connection at level 0 and erase nothing; the next erasure works. A parallel first bump of the remember-me
  * epoch no longer fails the erasure.
  */
@@ -51,6 +52,7 @@ final class ErasureLoadTest extends LoadTestCase
             $failed = true;
             self::assertTrue($this->causedBy($failure, DeadlockException::class), 'a deadlock, never the 1305 of the lost savepoint');
             self::assertSame(UserKitStorageFailure::DEFAULT_MESSAGE, $failure->getMessage(), 'no SQL in the message');
+            self::assertSame(ConflictCode::RetrySafe, $failure->conflictCode(), 'nothing committed: CONFLICT_001');
         }
         self::assertSame('OK', $peer->await(), 'the sleep');
         $peerAnswer = $peer->await();
@@ -87,6 +89,7 @@ final class ErasureLoadTest extends LoadTestCase
         } catch (UserKitStorageFailure $failure) {
             self::assertSame(UserKitStorageFailure::DEFAULT_MESSAGE, $failure->getMessage());
             self::assertSame(1, $failure->retryAfterSeconds());
+            self::assertSame(ConflictCode::RetrySafe, $failure->conflictCode(), 'nothing committed: CONFLICT_001');
         }
         $this->assertHealthy();
         self::assertSame('OK', $peer->execute('ROLLBACK'));

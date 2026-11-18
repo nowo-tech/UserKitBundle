@@ -10,6 +10,7 @@ A commented default template ships at `src/Resources/config/packages/nowo_user_k
   - [Resolving profiles at runtime](#resolving-profiles-at-runtime)
 - [Legacy flat configuration](#legacy-flat-configuration)
 - [Doctrine mapping for the kit embeddables](#doctrine-mapping-for-the-kit-embeddables)
+- [Conflict answer (conflict_response)](#conflict-answer-conflict_response)
 - [Personal data (GDPR)](#personal-data-gdpr)
 - [Session registry (sessions)](#session-registry-sessions)
   - [Keys](#keys)
@@ -125,6 +126,24 @@ doctrine:
 DDD / XML-mapped hosts (1.15): register the shipped XML mapping instead (`type: xml`, `dir: '%kernel.project_dir%/vendor/nowo-tech/user-kit-bundle/src/Resources/config/doctrine/model'`, same prefix), never both; see [USAGE](USAGE.md#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields).
 
 Not needed when you only use the traits (`UiPreferencesTrait`, `ProductTourProgressTrait`) inside your own entity or embeddable. No other configuration key is involved: the preference columns are plain entity mapping. See [USAGE](USAGE.md#ui-preferences).
+
+## Conflict answer (conflict_response)
+
+Since **1.21.0** (REQ-RUNTIME-003 rule 6). How a UserKit lock conflict (`UserKitStorageFailure`: a deadlock, a lock
+wait timeout, a serialization failure, a lock UserKit waits for) is answered on any route. See
+[CONCURRENCY](CONCURRENCY.md).
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `conflict_response.status` | `409`, `503` or null | `null` | Status of the answer. Null: `nowo_transaction_doctrine.conflict_response.status` (and its `retry_after`, template, translations and formatters) when `NowoTransactionDoctrineBundle` is registered, else 409 with `Retry-After: 1`. `503` keeps the status of 1.19–1.20. |
+| `conflict_response.error_page` | bool | `false` | Render the answer with your application's error page (an `HttpException` with the status and `Retry-After`, as up to 1.20) instead of the platform conflict answer. The body then carries no conflict code. |
+
+```yaml
+nowo_user_kit:
+    conflict_response:
+        status: 503        # keep the 1.20 status
+        error_page: true   # keep your error page and JSON error format
+```
 
 ## Personal data (GDPR)
 

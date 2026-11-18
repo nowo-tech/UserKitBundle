@@ -60,6 +60,43 @@
 
 ## Unreleased
 
+From **1.20.0** (REQ-RUNTIME-003 rule 6; the next minor):
+
+```bash
+composer update nowo-tech/user-kit-bundle nowo-tech/transaction-doctrine --with-dependencies
+```
+
+nowo-tech/transaction-doctrine ^1.5 is required (was ^1.1).
+
+- **409 instead of 503.** A UserKit lock conflict (deadlock, lock wait timeout, serialization failure, a named lock not
+  obtained in 5 s: `UserKitStorageFailure`) now answers **409** with the platform conflict answer:
+  - JSON, XHR and `/api/` requests: `{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": "…"}` with
+    `Retry-After`;
+  - HTML: the "try again" page (`data-conflict-code="CONFLICT_001"`);
+  - `CONFLICT_002` (`"error": "concurrency_conflict_partial"`, no `Retry-After`) when the request had already committed
+    part of its work (an eviction before a failed sign-in, a revocation or epoch bump before a failed statement).
+
+  With `NowoTransactionDoctrineBundle` registered, UserKit follows its `conflict_response` settings (status,
+  `retry_after`, template, translations, formatters). To keep the 1.20 answer (503 + `Retry-After`, rendered by your
+  error page and JSON error format):
+
+  ```yaml
+  nowo_user_kit:
+      conflict_response:
+          status: 503
+          error_page: true
+  ```
+
+  Clients and monitors that retried on 503 should retry on 409 when the code is `CONFLICT_001`, and read again (not
+  repeat) on `CONFLICT_002`.
+- **Unique violations of your erasers are no longer a 409.** A `UniqueConstraintViolationException` that reaches the end
+  of an erasure is rethrown as it is (it was a `UserKitConflict` in 1.19–1.20). If your erasers write values that may
+  collide (an anonymised e-mail, a placeholder username), make them unique per user (for example with the user's id) or
+  catch the violation in the eraser. `UserKitConflict` stays for the owner image domain conflicts (409, no
+  `CONFLICT_*` code).
+- Code that catches `UserKitStorageFailure` keeps working; `conflictCode()` and `committed()` tell whether a retry is
+  safe.
+
 ## To 1.20.0
 
 From **1.19.0**:

@@ -62,7 +62,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
      *
      * @throws ErasureVetoedException when a guard vetoes (nothing is erased)
      * @throws UserKitStorageFailure when the storage failed transiently (deadlock, lock wait; nothing is erased)
-     * @throws UserKitConflict when the erasure lost a unique key race (nothing is erased)
+     * @throws UserKitConflict when an eraser raised one (nothing is erased)
      *
      * @return list<string> keys of the erasers that ran, in order
      */
@@ -84,7 +84,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         // an open host transaction it nests (a savepoint): the host commits or rolls back the rest. After a failure no
         // level of the runner stays open, the manager is neither reset nor cleared (only the rows the erasure touched
         // are detached; a manager a failed flush closed is replaced at the next boundary), a deadlock or lock wait is a
-        // UserKitStorageFailure (503) and a lost unique key race a UserKitConflict (409).
+        // UserKitStorageFailure (409 + CONFLICT_001 since 1.21.0); a unique violation of your erasers is rethrown as it is.
         $connection = $entityManager->getConnection();
         try {
             // @igor-ignore - Closure runs synchronously inside the runner; it is not stored on the service.

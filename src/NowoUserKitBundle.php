@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle;
 
 use Nowo\UserKitBundle\DependencyInjection\Compiler\AccountStatusUserCheckerPass;
+use Nowo\UserKitBundle\DependencyInjection\Compiler\ConflictResponsePass;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\OwnerImageAuditPass;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\SessionsPass;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\TwigPathsPass;
@@ -29,5 +30,6 @@ final class NowoUserKitBundle extends Bundle
         $container->addCompilerPass(new SessionsPass());
         $container->addCompilerPass(new TwigPathsPass());
         $container->addCompilerPass(new OwnerImageAuditPass());
+        $container->addCompilerPass(new ConflictResponsePass());
     }
 }

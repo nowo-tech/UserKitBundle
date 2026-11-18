@@ -6,7 +6,6 @@ namespace Nowo\UserKitBundle\Transaction;
 
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\PersistentCollection;
@@ -54,8 +53,9 @@ use function usleep;
  *   fails loudly) and {@see ClosedManagerRecovery} replaces it at the next boundary.
  *
  * Failures: a transient one (deadlock, lock wait timeout, serialization failure) is rethrown as
- * {@see UserKitStorageFailure} (503 + Retry-After), a lost unique key race as {@see UserKitConflict} (409), anything
- * else unchanged. The unit is not replayed: erasers and the listeners of the revocation events may have side effects.
+ * {@see UserKitStorageFailure} (409 + Retry-After + CONFLICT_001 since 1.21.0; 503 up to 1.20), a {@see UserKitConflict}
+ * of the unit as it is, anything else unchanged (1.21.0: a unique violation too, no longer a UserKitConflict). The unit
+ * is not replayed: erasers and the listeners of the revocation events may have side effects.
  *
  * Single statements ({@see self::statement()}, the session registry and the last activity): an autocommit statement that
  * deadlocks or waits too long for a lock was rolled back on its own and is idempotent, so it is run again, up to
@@ -118,7 +118,7 @@ final readonly class UserKitTransactionRunner implements TransactionRunnerInterf
      * @param callable(): T $operation
      *
      * @throws UserKitStorageFailure When the storage failed transiently (nothing of the unit is pending)
-     * @throws UserKitConflict When the unit lost a unique key race (nothing of the unit is pending)
+     * @throws UserKitConflict When the unit raised one (nothing of the unit is pending)
      *
      * @return T
      */
@@ -198,12 +198,10 @@ final readonly class UserKitTransactionRunner implements TransactionRunnerInterf
         if ($failure instanceof TransientStorageFailure) {
             return new UserKitStorageFailure($this->retryAfterSeconds, TransientStorageFailure::DEFAULT_MESSAGE, $failure->getPrevious() ?? $failure);
         }
-        for ($current = $failure; $current instanceof Throwable; $current = $current->getPrevious()) {
-            if ($current instanceof UniqueConstraintViolationException) {
-                return new UserKitConflict($failure);
-            }
-        }
 
+        // 1.21.0 (REQ-RUNTIME-003 rule 6): a unique violation is not a lock conflict. UserKit's own "only one" writes
+        // resolve their races where they happen (UserKitRows reads the winner's row); one that reaches the end of a unit
+        // comes from the application's erasers and is a real error, rethrown unchanged (up to 1.20: UserKitConflict, 409).
         return $failure;
     }
 
