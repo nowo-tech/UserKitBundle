@@ -74,7 +74,9 @@ update-bundle: ensure-up
 release-check: ensure-up update-bundle test test-coverage
 
 # REQ-DEMO-013: Playwright e2e + README screenshots, run in the official image pinned to @playwright/test (e2e/package.json).
-PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.64.1-jammy
+# The image tag always follows the exact @playwright/test version pinned in e2e/package.json (browsers ship with the image).
+PLAYWRIGHT_VERSION := $(shell sed -n 's/.*"@playwright\/test": "\([0-9.]*\)".*/\1/p' e2e/package.json)
+PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v$(PLAYWRIGHT_VERSION)-jammy
 # Extra `docker run` flags, e.g. PLAYWRIGHT_DOCKER_ARGS="--cpus 2" on a shared machine.
 PLAYWRIGHT_DOCKER_ARGS ?=
 
