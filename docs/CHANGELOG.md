@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.21.0] - 2026-11-18](#1210---2026-11-18)
   - [Added](#added)
   - [Changed](#changed)
   - [Fixed](#fixed)
@@ -152,6 +153,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-11-18
+
 ### Added
 
 - **Conflict codes (REQ-RUNTIME-003 rule 6):** every UserKit lock conflict answer carries the `X-Conflict-Code` header,
@@ -188,6 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A sign-in, revocation or erasure that had already committed part of its work before a lock conflict was answered
   503 with `Retry-After`, inviting a blind retry; it is now `CONFLICT_002` without `Retry-After` (contention only, no
   data loss; no GHSA).
+
+[1.21.0]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.21.0
 
 ## [1.20.0] - 2026-11-18
 

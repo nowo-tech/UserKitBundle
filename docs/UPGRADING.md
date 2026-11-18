@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
@@ -59,6 +60,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.21.0
+
+From **1.20.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.20.0** (REQ-RUNTIME-003 rule 6; the next minor):
 
