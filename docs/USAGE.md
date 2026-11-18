@@ -1072,7 +1072,7 @@ calls made inside a transaction; `OwnerImageChangedEvent` (upload / remove) is d
 #### AuditKit action log (1.20)
 
 `owner_images.audit: true` writes one row to AuditKit's action log for each `OwnerImageChangedEvent`. It needs
-`nowo-tech/audit-kit-bundle` 1.14+ with `nowo_audit_kit.action_log.entity_class` set, and with
+`nowo-tech/audit-kit-bundle` 1.15+ with `nowo_audit_kit.action_log.entity_class` set, and with
 `nowo_audit_kit.action_log.flush_mode: isolated`. Otherwise the container does not compile: in AuditKit's default
 `host` mode every audit row would flush your pending changes, and would close your entity manager if the row failed.
 
@@ -1110,7 +1110,9 @@ nowo_user_kit:
   several, is recorded without the link, but its id stays in the context.
 - An organization's logo (an `other` kind) has no user subject. Its id is only in the context.
 - A row that cannot be recorded (a database error, or a `user_id_field` that is not mapped) is logged as a warning
-  that names only the exception class, and is never thrown: the image change is already done.
+  that names only the exception class, and is not thrown: the image change is already done. A transient failure (a
+  deadlock or lock wait timeout) is rethrown. On MySQL a deadlock has rolled back your whole transaction, the image
+  change included, so roll back and retry (a transaction-doctrine write unit replays it).
 - Erasures (`forget()`) dispatch no event and are not recorded here. The erasure has its own audit.
 
 ### Worker mode

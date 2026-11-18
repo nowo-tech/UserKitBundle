@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\OwnerImage;
 
+use Doctrine\DBAL\Driver\AbstractException;
+use Doctrine\DBAL\Exception\DeadlockException;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\AuditKitBundle\ActionLog\ActionLogIdRecorderInterface;
+use Nowo\TransactionContract\TransientStorageFailure;
 use Nowo\UserKitBundle\OwnerImage\Audit\OwnerImageAuditListener;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageChangedEvent;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKinds;
 use Nowo\UserKitBundle\OwnerImage\OwnerImagesInterface;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageSubjects;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\AuditedUser;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\IdActionLog;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\AuditLog\RelationActionLog;
+use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\FailingRecorder;
 use Nowo\UserKitBundle\Tests\Integration\OwnerImage\Fixtures\Organizations;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RecordingLogger;
 use RuntimeException;
@@ -23,12 +28,14 @@ use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
+use function array_filter;
 use function array_map;
 use function array_unique;
 use function array_values;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function str_contains;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
@@ -150,12 +157,58 @@ final class OwnerImageAuditBridgeTest extends OwnerImagesKernelTestCase
         $failing->method('recordIdsAndFlush')->willThrowException(new RuntimeException('SQLSTATE secret-id'));
         (new OwnerImageAuditListener($failing, $kinds, $actions, null, null, null, $logger))($event);
         (new OwnerImageAuditListener($failing, $kinds, $actions))($event); // no logger: still not thrown
+        $transient = $this->createMock(ActionLogIdRecorderInterface::class);
+        $transient->method('recordIdsAndFlush')->willThrowException(new TransientStorageFailure());
+        try {
+            (new OwnerImageAuditListener($transient, $kinds, $actions, null, null, null, $logger))($event);
+            self::fail('a transient failure was swallowed');
+        } catch (TransientStorageFailure) {
+            self::addToAssertionCount(1);
+        }
 
         $records = $logger->take();
         self::assertSame([LogicException::class, LogicException::class, RuntimeException::class], array_map(static fn (array $r): mixed => $r['context']['class'] ?? null, $records));
         self::assertSame(['warning'], array_values(array_unique(array_map(static fn (array $r): mixed => $r['level'], $records))));
         self::assertStringNotContainsString('secret-id', (string) json_encode($records), 'only the class is logged');
         self::assertSame(0, (int) $this->em()->getConnection()->fetchOne('SELECT COUNT(*) FROM user_kit_test_relation_action_log'));
+    }
+
+    /**
+     * Audit TC-L5: a deadlock while recording the row is rethrown (on MySQL it rolled back the whole transaction, the
+     * pointer write included): the caller rolls back, the replaced picture is not deleted and the pointer stays on it.
+     * Any other failure is swallowed: the change stands.
+     */
+    public function testATransientFailureIsRethrownAndTheChangeRollsBack(): void
+    {
+        $this->boot(['sessions' => ['enabled' => true], 'owner_images' => ['audit' => true]], static function (ContainerConfigurator $container): void {
+            $container->services()->set(FailingRecorder::class)->public();
+            $container->services()->alias(ActionLogIdRecorderInterface::class, FailingRecorder::class)->public();
+        }, auditKit: ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class, 'flush_mode' => 'isolated']]);
+        $images     = $this->images();
+        $recorder   = $this->service(FailingRecorder::class);
+        $commits    = $this->service(CommitQueue::class);
+        $connection = $this->em()->getConnection();
+        $first      = $images->upload($this->user('alice'), 'avatar', 'alice', self::png(), 'a.png');
+        self::assertSame(1, $recorder->recorded);
+
+        $recorder->failure = new DeadlockException(new class('deadlock', null, 1213) extends AbstractException {
+        }, null);
+        $connection->beginTransaction();
+        $thrown = null;
+        try {
+            $images->upload($this->user('alice'), 'avatar', 'alice', self::png(), 'b.png');
+        } catch (DeadlockException $e) {
+            $thrown = $e;
+        }
+        self::assertInstanceOf(DeadlockException::class, $thrown, 'the deadlock reaches the caller');
+        $connection->rollBack();
+        $commits->release();
+        self::assertSame(['alice' => $first->fileId], $images->fileIds('avatar', ['alice']));
+        self::assertNotSame([], array_filter($this->buckets()->keys(), static fn (string $key): bool => str_contains($key, $first->fileId)), 'the previous picture still exists');
+
+        $recorder->failure = new RuntimeException('not transient');
+        $third             = $images->upload($this->user('alice'), 'avatar', 'alice', self::png(), 'c.png');
+        self::assertSame(['alice' => $third->fileId], $images->fileIds('avatar', ['alice']), 'a non-transient failure is swallowed');
     }
 
     /**

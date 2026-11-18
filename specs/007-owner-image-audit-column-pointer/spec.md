@@ -45,7 +45,7 @@ them. The change is additive (BC).
   is a no-op when the image is removed.
 - **FR-005** Values are converted with the mapped DBAL types, so string, integer and UUID subject columns all work. A
   subject id the type cannot take, such as `abc` for an integer, has no row.
-- **FR-006** `owner_images.audit` (`true` or `{enabled, user_id_field, actions, kinds}`) needs AuditKit 1.14+ with its
+- **FR-006** `owner_images.audit` (`true` or `{enabled, user_id_field, actions, kinds}`) needs AuditKit 1.15+ with its
   action log enabled; without it, the build fails. Actions default to `owner_image.uploaded`, `owner_image.replaced`
   and `owner_image.removed`, can be set per kind, and `{kind}` is replaced by the kind name. Each one is checked
   against the 48-character action column at build time.
@@ -56,7 +56,7 @@ them. The change is additive (BC).
   lookup is a scalar query with an exact match; no match or several matches gives no link. If the user class
   implements `OwnerImageSubjectInterface` (or there is no user class) and `user_id_field` is missing, the build fails.
 - **FR-010** (audit TC) The bridge needs `flush_mode: isolated` and fails the build in `host` mode (M1). A row that
-  fails is logged as a warning with the exception class only, never thrown (L4). Managed entities are synced only
+  fails is logged as a warning with the exception class only and not thrown (L4); a transient failure is rethrown (L5). Managed entities are synced only
   after a real write (L1). Inside the application's transaction their original value is left unchanged, so after a
   rollback they show up as dirty; reload or clear them (L2). The identity map answers only for a unique subject
   field (L3). Malformed guid / uuid and integer / bigint subject ids never reach the query (I1). The `UPDATE`

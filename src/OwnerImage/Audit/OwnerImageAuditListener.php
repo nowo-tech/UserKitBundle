@@ -8,6 +8,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\AuditKitBundle\ActionLog\ActionLogIdRecorderInterface;
+use Nowo\TransactionContract\TransientStorageFailure;
+use Nowo\TransactionDoctrine\TransientFailureClassifier;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageChangedEvent;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKind;
 use Nowo\UserKitBundle\OwnerImage\OwnerImageKinds;
@@ -34,8 +36,10 @@ use function sprintf;
  * as a public UUID) the identifier is looked up by that field, as a scalar (no entity is loaded) and matched byte for
  * byte; a subject id that matches no user, or several, is recorded without that user link.
  *
- * A failed row (database error, a misconfigured `user_id_field`) is logged as a warning with the exception class only and
- * never rethrown: the image change it describes is already done. The bridge requires AuditKit's
+ * A failed row (a database error, a misconfigured `user_id_field`) is logged as a warning with the exception class only
+ * and not rethrown: the image change it describes is already done. A transient failure (deadlock, lock wait timeout,
+ * {@see TransientStorageFailure}) is rethrown: the database may have rolled back the whole transaction, the image change
+ * included, and the caller (or its write unit) must retry. The bridge requires AuditKit's
  * `action_log.flush_mode: isolated`, so it never flushes (or, on failure, closes) the application's entity manager.
  *
  * Stateless (worker mode, kernel reset off).
@@ -94,6 +98,12 @@ final readonly class OwnerImageAuditListener
                 ],
             );
         } catch (Throwable $e) {
+            if ($e instanceof TransientStorageFailure || (new TransientFailureClassifier())->isTransient($e)) {
+                // Audit TC-L5: a deadlock or lock wait (MySQL rolled back the whole transaction, the pointer write too)
+                // must reach the caller: swallowed, the host would commit an empty transaction while the commit queue
+                // deletes the previous file, and a transaction-doctrine write unit would not replay.
+                throw $e;
+            }
             // The change is already done (and the replaced file disposed of): a failed audit row must not turn it into
             // an error page. Only the exception class is logged (its message may hold ids or SQL).
             $this->logger?->warning('Owner image: the {kind} audit row could not be recorded ({class}).', ['kind' => $kind->name, 'class' => $e::class]);

@@ -25,7 +25,7 @@ use function is_string;
 /**
  * 1.20.0: registers {@see OwnerImageAuditListener} when `owner_images.audit` is enabled, once every extension is
  * loaded (AuditKit's action log services exist only when `nowo_audit_kit.action_log` is enabled). Fails the
- * compilation when AuditKit (1.14+, id-based recording) or its action log is missing, and when an action log of user
+ * compilation when AuditKit (1.15+: id-based recording and flush_mode) or its action log is missing, and when an action log of user
  * relations would get subject ids that are not the users' identifiers (a user class with
  * {@see OwnerImageSubjectInterface} and no `owner_images.audit.user_id_field`), and unless AuditKit's
  * `action_log.flush_mode` is `isolated` (audit TC-M1).
@@ -52,7 +52,7 @@ final class OwnerImageAuditPass implements CompilerPassInterface
         /** @var array{actions: array<string, array{uploaded: string, replaced: string, removed: string}>, user_id_field: string|null} $audit */
         $audit = $container->getParameter(self::PARAMETER);
         if (!interface_exists(ActionLogIdRecorderInterface::class) || !$container->has(ActionLogIdRecorderInterface::class)) {
-            throw new InvalidConfigurationException('nowo_user_kit.owner_images.audit needs nowo-tech/audit-kit-bundle 1.14+ (composer require nowo-tech/audit-kit-bundle) with its action log enabled (nowo_audit_kit.action_log.entity_class).');
+            throw new InvalidConfigurationException('nowo_user_kit.owner_images.audit needs nowo-tech/audit-kit-bundle 1.15+ (composer require nowo-tech/audit-kit-bundle) with its action log enabled (nowo_audit_kit.action_log.entity_class).');
         }
         $flushMode = $container->hasParameter(self::FLUSH_MODE_PARAMETER) ? $container->getParameterBag()->resolveValue($container->getParameter(self::FLUSH_MODE_PARAMETER)) : null;
         if ($flushMode !== self::FLUSH_ISOLATED) {

@@ -81,14 +81,14 @@ Both additions are opt-in. Without them nothing changes: the default pointer sto
   subject_id = …)`. Then drop the table with a migration once you no longer need it. `column` is now a reserved
   value of `pointer_store`: a service of your own named `column` must be renamed.
 - **AuditKit bridge.** `owner_images.audit: true` records an action log row for every uploaded, replaced or removed
-  image. It needs `nowo-tech/audit-kit-bundle` 1.14+ with `nowo_audit_kit.action_log.entity_class` set, and the build
+  image. It needs `nowo-tech/audit-kit-bundle` 1.15+ with `nowo_audit_kit.action_log.entity_class` set, and the build
   fails otherwise. If you audit `OwnerImageChangedEvent` yourself, remove that listener, or you get two rows. With an
   action log of user relations (`AbstractActionLog`) and users whose subject id is not their identifier (they
   implement `OwnerImageSubjectInterface`), set `owner_images.audit.user_id_field`; the build fails without it. If the
   action log stores actions as a PHP enum, add the new actions to it, or set `audit.actions` / `audit.kinds` to
   actions you already have. It also needs AuditKit's `nowo_audit_kit.action_log.flush_mode: isolated`. With the
   default `host` mode the build fails, because each row would flush the application's pending changes. A row that
-  fails is logged as a warning, never thrown.
+  fails is logged as a warning and not thrown, except a transient failure (deadlock, lock wait), which is rethrown.
 - **Column pointer store and transactions.** Write the image inside your own transaction and then roll back, and
   the managed entity still holds the new value (shown as a pending change). Reload or clear it. The `UPDATE` bypasses
   lifecycle callbacks, entity listeners and `#[ORM\Version]`.
