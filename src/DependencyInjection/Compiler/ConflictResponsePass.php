@@ -24,8 +24,11 @@ use function is_int;
  * - **Policy** (status and `Retry-After`): `nowo_user_kit.conflict_response.status` and `retry_after`; each one left
  *   out (null) comes from NowoTransactionDoctrineBundle's `conflict_response` when it is registered, else 409 and 1.
  * - **Rendering**: the application's own error rendering (an HTTP exception with the status, `Retry-After` and
- *   `X-Conflict-Code`), unless `conflict_response.platform_answer: true` or NowoTransactionDoctrineBundle's
- *   `conflict_response` is enabled. The platform answer is the bundle's own responder when UserKit's policy follows the
+ *   `X-Conflict-Code`), or transaction-doctrine's platform answer. `conflict_response.platform_answer: true | false`
+ *   always wins; null (auto) gives the platform answer only when the application already asked transaction-doctrine to
+ *   answer every transient failure (`nowo_transaction_doctrine.conflict_response.map_transient_failures: true`, which
+ *   registers {@see self::SHARED_MAPPER}). Registering the bundle alone never changes the application's rendering
+ *   (audit TH). The platform answer is the bundle's own responder when UserKit's policy follows the
  *   bundle's (template, translations, JSON error key and path prefixes, the application's formatters), else a
  *   responder with UserKit's policy (the bundle's template and translations when it is registered, plain English
  *   otherwise).
@@ -38,6 +41,7 @@ final class ConflictResponsePass implements CompilerPassInterface
     /** Services of nowo-tech/transaction-doctrine's Symfony bundle. */
     public const SHARED_POLICY    = 'nowo_transaction_doctrine.conflict_response_policy';
     public const SHARED_RESPONDER = 'nowo_transaction_doctrine.conflict_responder';
+    public const SHARED_MAPPER    = 'nowo_transaction_doctrine.transient_failure_conflict_mapper';
 
     /** UserKit's own policy, when `status` or `retry_after` is set or the bundle is not registered. */
     public const OWN_POLICY = 'nowo_user_kit.conflict_response_policy';
@@ -47,8 +51,8 @@ final class ConflictResponsePass implements CompilerPassInterface
         if (!$container->hasDefinition(StorageFailureSubscriber::class)) {
             return;
         }
-        /** @var array{status: int|null, retry_after: int|null, platform_answer: bool} $config */
-        $config = ($container->hasParameter(self::PARAMETER) ? $container->getParameter(self::PARAMETER) : []) + ['status' => null, 'retry_after' => null, 'platform_answer' => false];
+        /** @var array{status: int|null, retry_after: int|null, platform_answer: bool|null} $config */
+        $config = ($container->hasParameter(self::PARAMETER) ? $container->getParameter(self::PARAMETER) : []) + ['status' => null, 'retry_after' => null, 'platform_answer' => null];
         $shared = $container->has(self::SHARED_POLICY);
         $own    = is_int($config['status']) || is_int($config['retry_after']) || !$shared;
 
@@ -80,7 +84,7 @@ final class ConflictResponsePass implements CompilerPassInterface
         $container->getDefinition(StorageFailureSubscriber::class)
             ->setArgument('$policy', $policy)
             ->setArgument('$responder', $responder)
-            ->setArgument('$platformAnswer', $config['platform_answer'] || $sharedResponder);
+            ->setArgument('$platformAnswer', $config['platform_answer'] ?? ($sharedResponder && $container->has(self::SHARED_MAPPER)));
     }
 
     /**

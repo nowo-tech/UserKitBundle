@@ -102,9 +102,10 @@ final class Configuration implements ConfigurationInterface
                     ->defaultNull()
                     ->info('Retry-After seconds of a CONFLICT_001 answer. Null: nowo_transaction_doctrine.conflict_response.retry_after when NowoTransactionDoctrineBundle is registered, else 1.')
                 ->end()
-                ->booleanNode('platform_answer')
-                    ->defaultFalse()
-                    ->info('Answer with the platform conflict answer of nowo-tech/transaction-doctrine (JSON {"error", "code", "message"} or the "try again" page) instead of your application\'s error rendering. Implied when NowoTransactionDoctrineBundle\'s conflict_response is enabled.')
+                ->enumNode('platform_answer')
+                    ->values([null, true, false])
+                    ->defaultNull()
+                    ->info('true: answer with the platform conflict answer of nowo-tech/transaction-doctrine (JSON {"error", "code", "message"} or the "try again" page); false: your application\'s error rendering (with X-Conflict-Code). Null (auto): the platform answer only when nowo_transaction_doctrine.conflict_response.map_transient_failures is true.')
                 ->end()
             ->end();
 

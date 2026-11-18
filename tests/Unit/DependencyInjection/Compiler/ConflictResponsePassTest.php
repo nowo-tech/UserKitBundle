@@ -6,10 +6,12 @@ namespace Nowo\UserKitBundle\Tests\Unit\DependencyInjection\Compiler;
 
 use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponsePolicy;
 use Nowo\TransactionDoctrine\Symfony\EventListener\ConcurrencyConflictResponder;
+use Nowo\TransactionDoctrine\Symfony\NowoTransactionDoctrineBundle;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\ConflictResponsePass;
 use Nowo\UserKitBundle\DependencyInjection\Configuration;
 use Nowo\UserKitBundle\EventSubscriber\StorageFailureSubscriber;
 use Nowo\UserKitBundle\NowoUserKitBundle;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
@@ -19,6 +21,7 @@ use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 
 use function array_filter;
+use function sys_get_temp_dir;
 
 /**
  * 1.21.0 (REQ-RUNTIME-003 rule 6): the conflict answer of UserKit follows nowo-tech/transaction-doctrine's settings
@@ -30,7 +33,7 @@ final class ConflictResponsePassTest extends TestCase
     public function testTheConfigurationDefaultsToTheSharedPolicyAndThePlatformAnswer(): void
     {
         $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
-        self::assertSame(['status' => null, 'retry_after' => null, 'platform_answer' => false], $config['conflict_response']);
+        self::assertSame(['status' => null, 'retry_after' => null, 'platform_answer' => null], $config['conflict_response']);
 
         $config = (new Processor())->processConfiguration(new Configuration(), [['conflict_response' => ['status' => 503, 'retry_after' => 5, 'platform_answer' => true]]]);
         self::assertSame(['status' => 503, 'retry_after' => 5, 'platform_answer' => true], $config['conflict_response']);
@@ -88,7 +91,7 @@ final class ConflictResponsePassTest extends TestCase
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::SHARED_POLICY), $subscriber->getArgument('$policy'));
         self::assertEquals(new Reference(ConflictResponsePass::SHARED_RESPONDER), $subscriber->getArgument('$responder'));
-        self::assertTrue($subscriber->getArgument('$platformAnswer'), 'the bundle answers conflicts: the platform answer');
+        self::assertFalse($subscriber->getArgument('$platformAnswer'), 'registering the bundle alone keeps the application\'s rendering');
         self::assertFalse($container->hasDefinition(ConflictResponsePass::OWN_POLICY));
     }
 
@@ -126,7 +129,7 @@ final class ConflictResponsePassTest extends TestCase
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::OWN_POLICY), $subscriber->getArgument('$policy'));
         self::assertInstanceOf(Definition::class, $subscriber->getArgument('$responder'), 'a responder with UserKit\'s policy');
-        self::assertTrue($subscriber->getArgument('$platformAnswer'));
+        self::assertFalse($subscriber->getArgument('$platformAnswer'));
     }
 
     public function testASharedPolicyServiceWithoutADefinitionGivesTheDefaults(): void
@@ -148,10 +151,61 @@ final class ConflictResponsePassTest extends TestCase
         $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
         self::assertEquals(new Reference(ConflictResponsePass::OWN_POLICY), $subscriber->getArgument('$policy'));
         self::assertInstanceOf(Definition::class, $subscriber->getArgument('$responder'));
-        self::assertTrue($subscriber->getArgument('$platformAnswer'));
+        self::assertFalse($subscriber->getArgument('$platformAnswer'));
     }
 
-    private function container(?int $status, bool $policy = false, bool $responder = false, bool $platformAnswer = false, ?int $retryAfter = null): ContainerBuilder
+    /**
+     * Audit TH: the rendering for each state of NowoTransactionDoctrineBundle and each value of `platform_answer`.
+     * Explicit true / false always win; null (auto) gives the platform answer only with `map_transient_failures`.
+     *
+     * @return iterable<string, array{array<string, mixed>|null, bool|null, bool}>
+     */
+    public static function renderings(): iterable
+    {
+        $states = [
+            'no TD bundle'              => [null, false],
+            'TD bundle, no config'      => [[], false],
+            'TD conflict_response off'  => [['conflict_response' => ['enabled' => false]], false],
+            'TD map_transient_failures' => [['conflict_response' => ['map_transient_failures' => true]], true],
+        ];
+        foreach ($states as $name => [$td, $auto]) {
+            yield $name . ', platform_answer true' => [$td, true, true];
+            yield $name . ', platform_answer false' => [$td, false, false];
+            yield $name . ', platform_answer null' => [$td, null, $auto];
+        }
+    }
+
+    /**
+     * @param array<string, mixed>|null $transactionDoctrine nowo_transaction_doctrine configuration; null = not registered
+     */
+    #[DataProvider('renderings')]
+    public function testTheRenderingFollowsPlatformAnswerAndOnlyMapTransientFailuresInAutoMode(?array $transactionDoctrine, ?bool $platformAnswer, bool $expected): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.debug', false);
+        $container->setParameter('kernel.environment', 'test');
+        $container->setParameter('kernel.build_dir', sys_get_temp_dir());
+        if ($transactionDoctrine !== null) {
+            $extension = (new NowoTransactionDoctrineBundle())->getContainerExtension();
+            self::assertNotNull($extension);
+            $extension->load([$transactionDoctrine], $container);
+        }
+        $container->setParameter(ConflictResponsePass::PARAMETER, ['status' => null, 'retry_after' => null, 'platform_answer' => $platformAnswer]);
+        $container->setDefinition(StorageFailureSubscriber::class, (new Definition(StorageFailureSubscriber::class))->setPublic(true));
+        (new ConflictResponsePass())->process($container);
+
+        $subscriber = $container->getDefinition(StorageFailureSubscriber::class);
+        self::assertSame($expected, $subscriber->getArgument('$platformAnswer'));
+        $enabled = $transactionDoctrine !== null && ($transactionDoctrine['conflict_response']['enabled'] ?? true);
+        if ($enabled) {
+            self::assertEquals(new Reference(ConflictResponsePass::SHARED_RESPONDER), $subscriber->getArgument('$responder'), 'the bundle\'s own responder when it answers conflicts');
+        } else {
+            self::assertInstanceOf(Definition::class, $subscriber->getArgument('$responder'));
+        }
+        self::assertEquals(new Reference($transactionDoctrine === null ? ConflictResponsePass::OWN_POLICY : ConflictResponsePass::SHARED_POLICY), $subscriber->getArgument('$policy'));
+    }
+
+    private function container(?int $status, bool $policy = false, bool $responder = false, ?bool $platformAnswer = null, ?int $retryAfter = null): ContainerBuilder
     {
         $container = new ContainerBuilder();
         $container->setParameter(ConflictResponsePass::PARAMETER, ['status' => $status, 'retry_after' => $retryAfter, 'platform_answer' => $platformAnswer]);

@@ -86,9 +86,13 @@ nowo-tech/transaction-doctrine ^1.5 is required (was ^1.1).
   ```
 
   With `NowoTransactionDoctrineBundle` registered, UserKit follows its `conflict_response.status` and `retry_after`
-  when yours are left out, and, when its `conflict_response` is enabled, answers with its platform answer (JSON
-  `{"error", "code", "message"}` or the "try again" page). `conflict_response.platform_answer: true` asks for that
-  answer without the bundle.
+  when yours are left out. Registering the bundle does not change your rendering. UserKit switches to the platform
+  answer (JSON `{"error", "code", "message"}` or the "try again" page) only with `conflict_response.platform_answer:
+  true`, or when `platform_answer` is left null and `nowo_transaction_doctrine.conflict_response.map_transient_failures`
+  is true. `platform_answer: false` keeps your rendering in every case.
+- **Subscriber priority.** `StorageFailureSubscriber` moves from `kernel.exception` priority -64 to **-72**, so the
+  bundle that owns the route (AuthKit at -64) answers a UserKit failure first. A listener of yours between -64 and -72
+  now sees UserKit's exception before it is replaced.
 
   Clients and monitors that retried on 503 should retry on 409 when the code is `CONFLICT_001`, and read again (not
   repeat) on `CONFLICT_002`.

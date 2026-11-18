@@ -137,7 +137,7 @@ wait timeout, a serialization failure, a lock UserKit waits for) is answered on 
 | --- | --- | --- | --- |
 | `conflict_response.status` | `409`, `503` or null | `null` | Status of the answer. Null: `nowo_transaction_doctrine.conflict_response.status` when `NowoTransactionDoctrineBundle` is registered, else 409. `503` keeps the status of 1.19–1.20 (and the `ServiceUnavailableHttpException` class). |
 | `conflict_response.retry_after` | int ≥ 0 or null | `null` | `Retry-After` seconds of a `CONFLICT_001` answer. Null: `nowo_transaction_doctrine.conflict_response.retry_after` when the bundle is registered, else 1. |
-| `conflict_response.platform_answer` | bool | `false` | Answer with transaction-doctrine's platform conflict answer (JSON `{"error", "code", "message"}` or the "try again" page) instead of your application's error rendering. Implied when `NowoTransactionDoctrineBundle` is registered with its `conflict_response` enabled. |
+| `conflict_response.platform_answer` | bool or null | `null` | `true`: answer with transaction-doctrine's platform conflict answer (JSON `{"error", "code", "message"}` or the "try again" page); `false`: your application's error rendering. Both always win. Null (auto): the platform answer only when `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true; registering the bundle alone keeps your rendering. See the table in [CONCURRENCY](CONCURRENCY.md#host-options). |
 
 By default your application renders the answer: UserKit replaces the failure by a `ConflictHttpException` (a
 `ServiceUnavailableHttpException` at 503) with `Retry-After` and the code in the `X-Conflict-Code` header

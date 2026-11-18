@@ -41,7 +41,7 @@ final class SubscribersTest extends TestCase
         self::assertSame(['X-Conflict-Code' => 'CONFLICT_001', 'Retry-After' => '1'], $mapped->getHeaders(), 'the policy decides Retry-After');
         self::assertSame(UserKitStorageFailure::DEFAULT_MESSAGE, $mapped->getMessage());
         self::assertSame($failure, $mapped->getPrevious());
-        self::assertSame([KernelEvents::EXCEPTION => ['onException', -64]], StorageFailureSubscriber::getSubscribedEvents());
+        self::assertSame([KernelEvents::EXCEPTION => ['onException', -72]], StorageFailureSubscriber::getSubscribedEvents());
     }
 
     public function testAFailureAfterACommitIsConflict002WithoutRetryAfter(): void

@@ -163,9 +163,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bump committed before the next statement of `revokeAll()` / `revokeOthers()` / `forgetOwner()` failed (outside a
     transaction of the application).
 - `nowo_user_kit.conflict_response`: `status` (`409`, `503` or null: transaction-doctrine's setting when its bundle is
-  registered, else 409), `retry_after` (null: transaction-doctrine's, else 1) and `platform_answer` (transaction-doctrine's
-  JSON or "try again" page instead of the application's error rendering; implied when that bundle's
-  `conflict_response` is enabled).
+  registered, else 409), `retry_after` (null: transaction-doctrine's, else 1) and `platform_answer` (true: transaction-doctrine's
+  JSON or "try again" page; false: the application's error rendering; null: the platform answer only when
+  `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true).
 - `docs/CONCURRENCY.md`: write paths, conflict codes, host options, residual risks.
 - Load readiness on MariaDB 11.4 (DBAL 4 and DBAL 3), next to MySQL 8.4 and PostgreSQL 16; a committed-then-conflict
   test on the three servers.
@@ -179,6 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A unique violation is no longer a conflict:** one that reaches the end of an erasure (raised by the application's
   erasers) is rethrown as it is instead of a `UserKitConflict` (409). `UserKitConflict` stays for the owner image
   domain conflicts (look-alike subjects), answered 409 without a `CONFLICT_*` code.
+- `StorageFailureSubscriber` listens on `kernel.exception` at priority -72 (was -64), so the bundle that owns the route
+  (AuthKit at -64) answers a UserKit failure first.
 - Requires nowo-tech/transaction-doctrine ^1.5 (was ^1.1).
 
 ### Fixed

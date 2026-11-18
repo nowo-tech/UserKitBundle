@@ -26,20 +26,25 @@ use Symfony\Component\HttpKernel\KernelEvents;
  *   - By default the failure is replaced by a {@see ConflictHttpException} (a {@see ServiceUnavailableHttpException}
  *     at 503, as up to 1.20) carrying those headers, so the application's own error pages and JSON error format render
  *     it: their shapes are kept, the code is only added as a header.
- *   - With the platform answer (`conflict_response.platform_answer: true`, or NowoTransactionDoctrineBundle's
- *     `conflict_response` enabled) the answer is {@see ConcurrencyConflictResponder::respond()}: JSON
+ *   - With the platform answer (`conflict_response.platform_answer: true`, or left null while
+ *     `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true) the answer is {@see ConcurrencyConflictResponder::respond()}: JSON
  *     `{"error", "code", "message"}` for JSON, XHR and `/api/` requests, else the "try again" page with
  *     `data-conflict-code`, plus the same header.
  *   See {@see ConflictResponsePass} for the wiring.
  * - {@see UserKitConflict} (a domain conflict, such as a look-alike owner image subject): **409** through the
  *   application's error page, without a conflict code (it is not a lock conflict: retrying gives the same answer).
  *
- * Priority -64: after Symfony logged the original exception, before it renders the response. Stateless.
+ * Priority -72 (audit TH UK-3): after Symfony logged the original exception, before it renders the response, and after
+ * the bundle that owns the route (AuthKit's subscriber at -64 answers a UserKit failure raised on its routes in its own
+ * shape first). Stateless.
  */
 final readonly class StorageFailureSubscriber implements EventSubscriberInterface
 {
     /** The response header of the conflict code (platform convention: CONFLICT_001 or CONFLICT_002 only). */
     public const CODE_HEADER = 'X-Conflict-Code';
+
+    /** kernel.exception priority: after the route owner's mapper (AuthKit: -64), before Symfony renders (-128). */
+    public const PRIORITY = -72;
 
     private ConflictResponsePolicy $policy;
 
@@ -61,7 +66,7 @@ final readonly class StorageFailureSubscriber implements EventSubscriberInterfac
 
     public static function getSubscribedEvents(): array
     {
-        return [KernelEvents::EXCEPTION => ['onException', -64]];
+        return [KernelEvents::EXCEPTION => ['onException', self::PRIORITY]];
     }
 
     public function onException(ExceptionEvent $event): void

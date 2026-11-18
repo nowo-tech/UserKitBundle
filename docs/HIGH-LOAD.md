@@ -65,12 +65,12 @@ Since **1.21.0** (REQ-RUNTIME-003 rule 6; 503 up to 1.20). The full table of wri
 | `UserKitStorageFailure` after `afterCommit()` | The same, after the request already committed part of its work (an eviction before a failed registration, a revocation next to a failed epoch bump) | 409 + `X-Conflict-Code: CONFLICT_002`, no `Retry-After` |
 | `UserKitConflict` | A domain conflict: an owner image subject whose key a look-alike subject holds, several rows for one subject id | 409 through your error page, no `CONFLICT_*` code |
 
-`StorageFailureSubscriber` (`kernel.exception`, priority -64) answers these exceptions on **every** route, because a
+`StorageFailureSubscriber` (`kernel.exception`, priority -72 since 1.21.0, after the route owner's mapper) answers these exceptions on **every** route, because a
 session listener or the erasure can run on any of your pages. Your own exceptions are never touched. The messages are
 generic; the database error stays in the previous exception, for your logs. By default your error pages and JSON
 error format render a lock conflict, as up to 1.20 (a `ConflictHttpException`, or a `ServiceUnavailableHttpException`
-at 503): the code is added as the `X-Conflict-Code` header only. With `conflict_response.platform_answer: true`, or
-NowoTransactionDoctrineBundle's `conflict_response` enabled, it gets the platform conflict answer instead: JSON
+at 503): the code is added as the `X-Conflict-Code` header only. With `conflict_response.platform_answer: true` (or left
+null while `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true), it gets the platform conflict answer instead: JSON
 `{"error": "concurrency_conflict", "code": "CONFLICT_001", "message": …}` for JSON, XHR and `/api/` requests, else the
 "try again" page with `data-conflict-code`, plus the header. Set `nowo_user_kit.conflict_response.status: 503` to keep
 the 1.20 status (see [CONFIGURATION](CONFIGURATION.md#conflict-answer-conflict_response)).

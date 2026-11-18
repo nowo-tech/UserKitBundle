@@ -44,8 +44,8 @@ by `StorageFailureSubscriber` on any route (UserKit's session listener and erasu
 - **Default: your rendering.** The failure becomes a `ConflictHttpException` (a `ServiceUnavailableHttpException` at
   503) with `Retry-After` and `X-Conflict-Code`, so your error pages and JSON error format (problem+json, API Platform,
   your templates) keep their shapes; the code is added as a header only.
-- **Platform answer** (`conflict_response.platform_answer: true`, or NowoTransactionDoctrineBundle's `conflict_response`
-  enabled): JSON, XHR and `/api/` requests get `{"error": "…", "code": "CONFLICT_00n", "message": "…"}`, HTML the
+- **Platform answer** (`conflict_response.platform_answer: true`, or `platform_answer` left null while
+  `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true): JSON, XHR and `/api/` requests get `{"error": "…", "code": "CONFLICT_00n", "message": "…"}`, HTML the
   "try again" page with `data-testid="concurrency-conflict"` and `data-conflict-code="CONFLICT_00n"`
   (transaction-doctrine's template, extending UiKit's error page, when its bundle is registered; a plain English page
   otherwise). The `X-Conflict-Code` header is set too.
@@ -72,8 +72,20 @@ by `StorageFailureSubscriber` on any route (UserKit's session listener and erasu
 | --- | --- | --- |
 | `nowo_user_kit.conflict_response.status` | null | `409` or `503` (503 keeps the 1.20 `ServiceUnavailableHttpException`). Null: transaction-doctrine's `conflict_response.status` when its bundle is registered, else 409. |
 | `nowo_user_kit.conflict_response.retry_after` | null | Seconds of `Retry-After` on `CONFLICT_001`. Null: transaction-doctrine's `conflict_response.retry_after` when its bundle is registered, else 1. |
-| `nowo_user_kit.conflict_response.platform_answer` | `false` | `true`: transaction-doctrine's platform answer instead of your error rendering. |
-| `nowo_transaction_doctrine.conflict_response.*` | — | With the bundle registered: `status` and `retry_after` apply when UserKit's are null; with its `conflict_response` enabled UserKit gives the platform answer, shaped by `template`, `json_error`, `json_path_prefixes` and your `ConflictResponseFormatterInterface` services (when UserKit's `status` and `retry_after` are null). |
+| `nowo_user_kit.conflict_response.platform_answer` | null | `true`: transaction-doctrine's platform answer; `false`: your error rendering; both always win. Null (auto): the platform answer only when `nowo_transaction_doctrine.conflict_response.map_transient_failures` is true (you already asked transaction-doctrine to answer every transient failure), else your rendering. Registering the bundle alone never changes your rendering. |
+| `nowo_transaction_doctrine.conflict_response.*` | — | With the bundle registered: `status` and `retry_after` apply when UserKit's are null. When UserKit gives the platform answer with the bundle's `conflict_response` enabled and its own `status` / `retry_after` null, the bundle's responder shapes it (`template`, `json_error`, `json_path_prefixes`, your `ConflictResponseFormatterInterface` services). |
+
+| transaction-doctrine | `platform_answer: true` | `false` | null (auto) |
+| --- | --- | --- | --- |
+| not registered | platform (plain English) | your rendering | your rendering |
+| registered, default config | platform | your rendering | your rendering |
+| registered, `conflict_response.enabled: false` | platform (bundle's template) | your rendering | your rendering |
+| registered, `map_transient_failures: true` | platform | your rendering | platform |
+
+**Priority.** `StorageFailureSubscriber` listens on `kernel.exception` at **-72** (audit TH UK-3): the bundle that owns
+the route answers first in its own shape (AuthKit's subscriber at -64 answers a UserKit failure raised on its sign-in
+routes), and Symfony renders at -128. With `map_transient_failures: true`, transaction-doctrine's responder (+64)
+answers before both.
 | `sessions.limit` | none | The named lock is taken only with a limit. |
 | `doctrine.dbal.use_savepoints: true` | — | Required with DBAL 3 (DBAL 4 always uses savepoints). |
 
