@@ -17,6 +17,10 @@ services:
             $erasers: !tagged_iterator nowo_user_kit.personal_data.eraser
             $guards: !tagged_iterator nowo_user_kit.personal_data.erasure_guard
             $commits: '@?Nowo\UserKitBundle\Sessions\Transaction\CommitQueue'
+            # 1.22.0: AccountErasedEvent after the erasure commits (failing listeners are logged).
+            $dispatcher: '@?event_dispatcher'
+            $logger: '@?logger'
+            $clock: '@?Psr\Clock\ClockInterface'
 
     # Ports for application services (aliases of the classes above).
     Nowo\UserKitBundle\PersonalData\PersonalDataExporterInterface:

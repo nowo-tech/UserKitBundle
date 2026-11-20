@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [Moving an eraser off `CommitQueue`](#moving-an-eraser-off-commitqueue)
 - [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
@@ -60,6 +61,82 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+From **1.21.0** (minor):
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
+
+No configuration change. What changes:
+
+- **`AccountErasedEvent` (new).** `PersonalDataErasureInterface::erase()` dispatches
+  `Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent` once per committed erasure, after the commit (see
+  [USAGE](USAGE.md#after-the-erasure-commits-accounterasedevent-1220)). Listeners that throw are logged and do not undo
+  or mask the erasure.
+- **`CommitQueue` is `@internal`.** `Nowo\UserKitBundle\Sessions\Transaction\CommitQueue` was never documented as a
+  public API; it is now marked `@internal` and may change in any release. It still works in this release.
+- **Commit queue with `personal_data` alone.** With `personal_data.enabled`, the commit queue and its Doctrine driver
+  middleware are registered also when the session registry and the owner images are off.
+- **Hand-built `PersonalDataEraser`.** New optional trailing constructor arguments (`$dispatcher`, `$logger`, `$clock`).
+  If you pass a dispatcher, also pass the commit queue: inside an open transaction the eraser refuses
+  (`LogicException`, nothing erased) when it cannot follow that transaction to its commit.
+
+### Moving an eraser off `CommitQueue`
+
+An eraser that held work in the queue until the erasure commits (because what it calls refuses to run inside a
+foreign transaction) becomes a listener:
+
+Before (1.21, internal API):
+
+```php
+final readonly class ActorReferencesEraser implements PersonalDataEraserInterface
+{
+    public function __construct(private ActorReferences $references, private Connection $connection, private CommitQueue $commits)
+    {
+    }
+
+    public function getKey(): string { return 'actor_references'; }
+
+    public function supports(object $user): bool { return $user instanceof User; }
+
+    public function erase(ErasureRequest $request): void
+    {
+        $uuid = $request->user->getUuid();
+        if (!$this->commits->hold($this->connection, fn () => $this->references->anonymise($uuid))) {
+            $this->references->anonymise($uuid);
+        }
+    }
+}
+```
+
+After (1.22, public API):
+
+```php
+#[AsEventListener]
+final readonly class AnonymiseActorReferencesAfterErasure
+{
+    public function __construct(private ActorReferences $references)
+    {
+    }
+
+    public function __invoke(AccountErasedEvent $event): void
+    {
+        if ($event->user instanceof User) {
+            $this->references->anonymise($event->user->getUuid());
+        }
+    }
+}
+```
+
+Differences to keep in mind:
+
+- The key no longer appears in the list `erase()` returns (`AccountErasedEvent::$erasers` neither): the listener is not
+  an eraser. Record it in your own audit trail if you reported it.
+- A failure of the listener is logged and no longer surfaces from `erase()` or from the boundary that released it.
+  Make the listener idempotent and retry through a durable message if it must not be lost.
+- The listener runs after every erasure that committed, also for users your eraser's `supports()` would have skipped:
+  filter on `$event->user` (or `$event->userType`) yourself.
 
 ## To 1.21.0
 

@@ -4,22 +4,37 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\PersonalData;
 
+use DateTimeImmutable;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
+use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
+use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Transaction\UserKitConflict;
 use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
 use Nowo\UserKitBundle\Transaction\UserKitTransactionRunner;
+use Psr\Clock\ClockInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface as SymfonyEventDispatcherInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Throwable;
 
+use function assert;
+use function is_callable;
 use function sprintf;
 
 /**
  * Runs the erasure guards, then every supporting eraser in one Doctrine transaction (flushed once), through UserKit's
  * own transaction runner ({@see UserKitTransactionRunner}, 1.19.0): its own transaction, or a savepoint of the host's
  * when one is already open on the user's entity manager.
+ *
+ * 1.22.0: dispatches {@see AccountErasedEvent} once the erasure is committed (when `erase()` returns, or after the
+ * outermost commit of the application's transaction), never on a rollback; a listener that throws is logged and the
+ * others still run. Stateless (worker safe): an erasure waiting for the application's commit is held by UserKit's
+ * internal commit queue, which drops it at `kernel.reset` when that transaction never committed.
  */
 final readonly class PersonalDataEraser implements PersonalDataErasureInterface
 {
@@ -37,6 +52,9 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         private ManagerRegistry $doctrine,
         private ?CommitQueue $commits = null,
         ?UserKitTransactionRunner $runner = null,
+        private ?EventDispatcherInterface $dispatcher = null,
+        private ?LoggerInterface $logger = null,
+        private ?ClockInterface $clock = null,
     ) {
         $this->runner = $runner ?? new UserKitTransactionRunner($doctrine);
     }
@@ -63,6 +81,9 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
      * @throws ErasureVetoedException when a guard vetoes (nothing is erased)
      * @throws UserKitStorageFailure when the storage failed transiently (deadlock, lock wait; nothing is erased)
      * @throws UserKitConflict when an eraser raised one (nothing is erased)
+     * @throws LogicException when the user class has no ORM entity manager, or (1.22.0) when an event dispatcher is set
+     *                        and a transaction is open on its connection that UserKit cannot follow to its commit (nothing
+     *                        is erased)
      *
      * @return list<string> keys of the erasers that ran, in order
      */
@@ -86,6 +107,13 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         // are detached; a manager a failed flush closed is replaced at the next boundary), a deadlock or lock wait is a
         // UserKitStorageFailure (409 + CONFLICT_001 since 1.21.0); a unique violation of your erasers is rethrown as it is.
         $connection = $entityManager->getConnection();
+        if ($this->dispatcher instanceof EventDispatcherInterface && $connection->isTransactionActive() && $this->commits?->watches($connection) !== true) {
+            // 1.22.0: AccountErasedEvent promises "after the commit"; a transaction UserKit cannot see commit would leave
+            // it nothing to wait for. Refused before anything changes.
+            throw new LogicException('NowoUserKitBundle: the personal data erasure runs inside a transaction whose commit UserKit cannot follow (no commit queue, or the connection is not in the Doctrine registry): AccountErasedEvent could not be dispatched after the commit.');
+        }
+        // The owner reference is read before any eraser runs: a removed entity loses its generated id at the flush.
+        $owner = $this->dispatcher instanceof EventDispatcherInterface ? (new SessionUserResolver($this->doctrine))->resolve($user) : null;
         try {
             // @igor-ignore - Closure runs synchronously inside the runner; it is not stored on the service.
             $ran = $this->runner->runFor($entityManager, fn (): array => $this->runErasers($request));
@@ -101,10 +129,63 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
 
             throw $exception;
         }
-        // Marks in the revocation cache of the session eraser: what was erased is committed now, not at the end of the request.
+        $event = $this->dispatcher instanceof EventDispatcherInterface ? new AccountErasedEvent(
+            $request->user,
+            $owner?->type,
+            $owner?->id,
+            $request->originalIdentifier,
+            $ran,
+            $this->clock?->now() ?? new DateTimeImmutable(),
+            $request->isSelfService(),
+            $request->context,
+        ) : null;
+        if ($event instanceof AccountErasedEvent && $connection->isTransactionActive()) {
+            // 1.22.0: inside the application's transaction (watched, checked above) the event waits for its outermost
+            // commit and is dropped on a rollback, a failed commit or kernel.reset.
+            // @igor-ignore - the queue holds the closure until that commit; nothing is kept on this service
+            $this->commits?->hold($connection, fn () => $this->dispatchErased($event));
+            $event = null;
+        }
+        // Marks in the revocation cache of the session eraser: what was erased is committed now, not at the end of the
+        // request. Then, when the erasure ran in UserKit's own transaction, AccountErasedEvent (committed by now).
         $this->commits?->release();
+        if ($event instanceof AccountErasedEvent) {
+            $this->dispatchErased($event);
+        }
 
         return $ran;
+    }
+
+    /**
+     * Runs every listener of {@see AccountErasedEvent}: the erasure is committed, so a listener that throws is logged
+     * and the next one still runs (nothing is rethrown). With a dispatcher that cannot list its listeners, one dispatch
+     * whose failure is logged.
+     */
+    private function dispatchErased(AccountErasedEvent $event): void
+    {
+        if (!$this->dispatcher instanceof SymfonyEventDispatcherInterface) {
+            try {
+                $this->dispatcher?->dispatch($event);
+            } catch (Throwable $exception) {
+                $this->logFailure($exception);
+            }
+
+            return;
+        }
+        foreach ($this->dispatcher->getListeners(AccountErasedEvent::class) as $listener) {
+            // getListeners() of one event name is a flat list of callables.
+            assert(is_callable($listener));
+            try {
+                $listener($event, AccountErasedEvent::class, $this->dispatcher);
+            } catch (Throwable $exception) {
+                $this->logFailure($exception);
+            }
+        }
+    }
+
+    private function logFailure(Throwable $exception): void
+    {
+        $this->logger?->error('NowoUserKitBundle: a listener of AccountErasedEvent failed after the erasure committed; the erasure stays committed.', ['exception' => $exception]);
     }
 
     /**

@@ -15,6 +15,7 @@
 - [Personal data export and erasure (GDPR)](#personal-data-export-and-erasure-gdpr)
   - [Export](#export)
   - [Erasure](#erasure)
+  - [After the erasure commits (`AccountErasedEvent`, 1.22.0)](#after-the-erasure-commits-accounterasedevent-1220)
 - [Session registry and limits](#session-registry-and-limits)
   - [How it works](#how-it-works)
   - [Pages](#pages)
@@ -385,6 +386,79 @@ try {
 `ErasureRequest` carries `user`, `actor` (nullable) and `context` (free array); `isSelfService()` is true without an actor or when the actor is the user. Since **1.12** it also carries `originalIdentifier`: `getUserIdentifier()` captured before the first eraser runs, so an eraser that anonymises the e-mail does not hide the person from later erasers keyed by it; use `$request->identifier()` (the original identifier, else the current one). The `sessions` eraser passes it on as `context['original_identifier']` of its `UserSessionsRevokedEvent` (AuthKit's account switcher uses it). `ErasureVeto` has `reason` (stable code), `message` and `details` (e.g. the blocking projects).
 
 Built-in erasers: `last_activity` (`clearLastActivityAt()`, provided by `LastActivityTrait` since 1.5.0), `ui_preferences` (`resetUiPreferences()` from `UiPreferencesTrait`), `product_tour` (`clearProductTourSeen()`). Account status is not changed by the kit: disabling / anonymising the account itself is a host eraser.
+
+### After the erasure commits (`AccountErasedEvent`, 1.22.0)
+
+Some work must not run inside the erasure transaction: another bundle that writes in transactions of its own and
+refuses to run inside a foreign one, a remote API, a message to another service. Listen to
+`Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent` instead of writing an eraser for it. UserKit dispatches it
+**once per committed erasure, after the commit**:
+
+| Where `erase()` runs | When the event fires |
+| --- | --- |
+| No transaction open (UserKit opens and commits its own) | Before `erase()` returns, after the commit |
+| Inside your transaction (the erasure is a savepoint of it) | After your outermost commit, at the next boundary: Doctrine `postFlush`, `kernel.response`, `kernel.terminate`, `console.terminate`, the end of a Messenger message, `kernel.reset` |
+| Your transaction rolls back, its commit fails, the connection is lost | Never |
+| Your unit of work is replayed after a transient failure (transaction-doctrine runner, deadlock retry) | Once, for the attempt that committed |
+| An eraser or a guard fails | Never (nothing was erased) |
+
+Payload (personal data kept to what correlation needs):
+
+| Property | Content |
+| --- | --- |
+| `user` | The erased entity as the erasers left it (anonymised, possibly removed). Read your own correlation id from it (a UUID), never personal fields. |
+| `userType`, `userId` | Doctrine root class and identifier, read **before** the erasers ran (the session registry's owner reference; the security identifier for a user that is not a mapped entity; null when neither is usable). |
+| `originalIdentifier` | `getUserIdentifier()` before any eraser ran, often an e-mail: personal data, for data keyed by it only. Do not log or store it. |
+| `erasers` | Keys of the erasers that ran, in order (what `erase()` returned). |
+| `erasedAt` | When the erasers' unit of work succeeded (the bundle clock). |
+| `selfService` | True without an actor or when the actor is the user. |
+| `context` | The free array passed to `erase()`: put the tenant or a reason code there (e.g. `['tenant' => 'acme', 'reason' => 'user_request']`). Never stored nor logged by the bundle; keep secrets out of it. |
+
+Example: a host listener that anonymises another bundle's references to the person once the erasure is committed. The
+other bundle runs its own transaction, which is allowed here: no transaction is open when the listener runs.
+
+```php
+use App\Entity\User;
+use App\Privacy\ActorReferences; // your service, or another bundle's port
+use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+
+#[AsEventListener]
+final readonly class AnonymiseActorReferencesAfterErasure
+{
+    public function __construct(private ActorReferences $references)
+    {
+    }
+
+    public function __invoke(AccountErasedEvent $event): void
+    {
+        if (!$event->user instanceof User) {
+            return;
+        }
+
+        // Idempotent: run again, it replaces nothing.
+        $this->references->anonymise($event->user->getUuid(), tenant: $event->context['tenant'] ?? null);
+    }
+}
+```
+
+Failures: a listener that throws is **logged** (error level, with the exception) and the **next listener still runs**.
+The erasure stays committed and `erase()` neither throws nor returns anything else because of a listener (a listener
+that runs at a later boundary cannot break that boundary either). So make listeners idempotent, and hand off to a
+durable message (Messenger) what you cannot afford to lose if the process dies right after the commit or the listener
+fails. Every listener runs: stopping propagation is not supported.
+
+Worker mode (FrankenPHP, kernel reset off): nothing is kept on a service. An event waiting for your commit is held by
+UserKit's internal commit queue, which drops it at `kernel.reset` when that transaction never committed and dispatches
+it there when it committed but no boundary ran yet; nothing leaks into the next request. UserKit never clears, resets
+or closes your entity manager for it, and the 409 answers of lock conflicts are unchanged.
+
+`erase()` refuses (`LogicException`, before anything is erased) to run inside a transaction whose commit UserKit cannot
+follow: a connection outside the Doctrine registry, or a `PersonalDataEraser` you built by hand with an event
+dispatcher but without the commit queue. With the bundle's wiring every Doctrine connection is followed.
+
+Standard and DDD hosts: the event is a plain readonly class with no framework type in it; a DDD host maps it to its own
+application event in an adapter listener (see [DDD host](#using-it-from-a-ddd--hexagonal-application)).
 
 ## Session registry and limits
 

@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Sessions\Transaction;
 use Closure;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Service\ResetInterface;
@@ -30,6 +31,10 @@ use function array_shift;
  * on at once as before: a revocation is never left waiting for a signal that cannot come.
  *
  * Holds the current transaction's effects only (`kernel.reset`, worker mode).
+ *
+ * @internal Not a public API (1.22.0): applications and other bundles listen to
+ *           {@see AccountErasedEvent} (after an erasure commits) or to the
+ *           bundle's other events instead; this class, its methods and its service may change in any release.
  */
 final class CommitQueue implements ResetInterface
 {
@@ -57,16 +62,22 @@ final class CommitQueue implements ResetInterface
      */
     public function hold(Connection $connection, Closure $effect): bool
     {
-        if (!$connection->isTransactionActive()) {
-            return false;
-        }
-        $name = $this->nameOf($connection);
-        if ($name === null || !isset($this->open[$name])) {
+        $name = $this->watchedName($connection);
+        if ($name === null) {
             return false;
         }
         $this->held[$name][] = $effect;
 
         return true;
+    }
+
+    /**
+     * Whether {@see self::hold()} would hold an effect on `$connection` now (1.22.0): a transaction is open on it and its
+     * outermost begin was seen.
+     */
+    public function watches(Connection $connection): bool
+    {
+        return $this->watchedName($connection) !== null;
     }
 
     /**
@@ -175,6 +186,16 @@ final class CommitQueue implements ResetInterface
         }
 
         return false;
+    }
+
+    private function watchedName(Connection $connection): ?string
+    {
+        if (!$connection->isTransactionActive()) {
+            return null;
+        }
+        $name = $this->nameOf($connection);
+
+        return $name !== null && isset($this->open[$name]) ? $name : null;
     }
 
     private function nameOf(Connection $connection): ?string

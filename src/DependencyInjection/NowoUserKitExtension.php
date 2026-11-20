@@ -20,6 +20,7 @@ use Nowo\UserKitBundle\PersonalData\Provider\ProductTourExportProvider;
 use Nowo\UserKitBundle\PersonalData\Provider\UiPreferencesExportProvider;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Twig\UiPreferencesExtension;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use Symfony\Component\Config\FileLocator;
@@ -27,6 +28,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\DependencyInjection\Reference;
 use Twig\Extension\AbstractExtension;
 
 use function count;
@@ -124,6 +126,11 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         // Audit QJ-M1: the bare identifier is a subject id for one user class only; with several profiles, configure it.
         $profileUserClass = count($profiles) === 1 ? (string) $defaultProfile['user_class'] : null;
         OwnerImagesLoader::load($container, $config['owner_images'], $config['twig'], $config['personal_data']['enabled'], $profileUserClass);
+        if ($config['personal_data']['enabled'] && !$container->hasDefinition(CommitQueue::class)) {
+            // 1.22.0: AccountErasedEvent waits for the outermost commit of the application's transaction, also without the
+            // session registry and the owner images.
+            SessionsLoader::registerCommitQueue($container, new Reference('doctrine'));
+        }
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);
