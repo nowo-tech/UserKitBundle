@@ -8,21 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.22.1] - 2026-11-21](#1221---2026-11-21)
+  - [Fixed](#fixed)
 - [[1.22.0] - 2026-11-20](#1220---2026-11-20)
   - [Added](#added)
   - [Changed](#changed)
-  - [Fixed](#fixed)
+  - [Fixed](#fixed-1)
 - [[1.21.0] - 2026-11-18](#1210---2026-11-18)
   - [Added](#added-1)
   - [Changed](#changed-1)
-  - [Fixed](#fixed-1)
+  - [Fixed](#fixed-2)
 - [[1.20.0] - 2026-11-18](#1200---2026-11-18)
   - [Added](#added-2)
   - [Demo](#demo)
   - [Documentation](#documentation)
 - [[1.19.0] - 2026-11-15](#1190---2026-11-15)
   - [Added](#added-3)
-  - [Fixed](#fixed-2)
+  - [Fixed](#fixed-3)
   - [Changed](#changed-2)
 - [[1.18.0] - 2026-11-15](#1180---2026-11-15)
   - [Added](#added-4)
@@ -30,9 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.17.0] - 2026-11-13](#1170---2026-11-13)
   - [Added](#added-5)
 - [[1.16.3] - 2026-11-13](#1163---2026-11-13)
-  - [Fixed](#fixed-3)
-- [[1.16.2] - 2026-11-13](#1162---2026-11-13)
   - [Fixed](#fixed-4)
+- [[1.16.2] - 2026-11-13](#1162---2026-11-13)
+  - [Fixed](#fixed-5)
 - [[1.16.1] - 2026-11-13](#1161---2026-11-13)
   - [Security](#security)
   - [Tests](#tests)
@@ -47,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [Security](#security-2)
 - [[1.14.1] - 2026-11-10](#1141---2026-11-10)
   - [Security](#security-3)
-  - [Fixed](#fixed-5)
+  - [Fixed](#fixed-6)
 - [[1.14.0] - 2026-11-09](#1140---2026-11-09)
   - [Added](#added-8)
   - [Changed](#changed-5)
@@ -55,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.13.2] - 2026-11-09](#1132---2026-11-09)
   - [Security](#security-4)
 - [[1.13.1] - 2026-11-09](#1131---2026-11-09)
-  - [Fixed](#fixed-6)
+  - [Fixed](#fixed-7)
 - [[1.13.0] - 2026-11-07](#1130---2026-11-07)
   - [Added](#added-9)
   - [Changed](#changed-6)
@@ -63,10 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.12.0] - 2026-11-05](#1120---2026-11-05)
   - [Added](#added-10)
 - [[1.11.1] - 2026-11-03](#1111---2026-11-03)
-  - [Fixed](#fixed-7)
+  - [Fixed](#fixed-8)
 - [[1.11.0] - 2026-11-03](#1110---2026-11-03)
   - [Added](#added-11)
-  - [Fixed](#fixed-8)
+  - [Fixed](#fixed-9)
 - [[1.10.1] - 2026-11-02](#1101---2026-11-02)
   - [Security](#security-6)
 - [[1.10.0] - 2026-11-02](#1100---2026-11-02)
@@ -75,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.9.1] - 2026-11-01](#191---2026-11-01)
   - [Changed](#changed-7)
   - [Added](#added-13)
-  - [Fixed](#fixed-9)
+  - [Fixed](#fixed-10)
   - [Documentation](#documentation-2)
 - [[1.9.0] - 2026-11-01](#190---2026-11-01)
   - [Added](#added-14)
@@ -90,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.7.0] - 2026-10-28](#170---2026-10-28)
   - [Added](#added-16)
 - [[1.6.0] - 2026-10-28](#160---2026-10-28)
-  - [Fixed](#fixed-10)
+  - [Fixed](#fixed-11)
   - [Added](#added-17)
   - [Changed](#changed-11)
 - [[1.5.0] - 2026-10-13](#150---2026-10-13)
@@ -99,11 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [Added](#added-19)
   - [Changed](#changed-12)
 - [[1.3.0] - 2026-10-13](#130---2026-10-13)
-  - [Fixed](#fixed-11)
+  - [Fixed](#fixed-12)
   - [Changed](#changed-13)
 - [[1.2.0] - 2026-10-13](#120---2026-10-13)
   - [Security](#security-9)
-  - [Fixed](#fixed-12)
+  - [Fixed](#fixed-13)
   - [Changed](#changed-14)
 - [[1.1.13] - 2026-10-13](#1113---2026-10-13)
   - [Changed](#changed-15)
@@ -114,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [Added](#added-20)
   - [Changed](#changed-17)
 - [[1.1.10] - 2026-09-25](#1110---2026-09-25)
-  - [Fixed](#fixed-13)
+  - [Fixed](#fixed-14)
   - [Changed](#changed-18)
 - [[1.1.9] - 2026-08-24](#119---2026-08-24)
   - [Changed](#changed-19)
@@ -124,7 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.1.7] - 2026-08-18](#117---2026-08-18)
   - [Changed](#changed-20)
 - [[1.1.6] - 2026-08-12](#116---2026-08-12)
-  - [Fixed](#fixed-14)
+  - [Fixed](#fixed-15)
   - [Changed](#changed-21)
 - [[1.1.5] - 2026-07-29](#115---2026-07-29)
   - [Added](#added-21)
@@ -139,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.1.2] - 2026-07-15](#112---2026-07-15)
   - [Changed](#changed-25)
 - [[1.1.1] - 2026-07-14](#111---2026-07-14)
-  - [Fixed](#fixed-15)
+  - [Fixed](#fixed-16)
 - [[1.1.0] - 2026-07-14](#110---2026-07-14)
   - [Added](#added-24)
   - [Changed](#changed-26)
@@ -148,10 +150,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.2] - 2026-07-14](#102---2026-07-14)
   - [Added](#added-25)
   - [Changed](#changed-28)
-  - [Fixed](#fixed-16)
+  - [Fixed](#fixed-17)
 - [[1.0.1] - 2026-07-14](#101---2026-07-14)
   - [Changed](#changed-29)
-  - [Fixed](#fixed-17)
+  - [Fixed](#fixed-18)
 - [[1.0.0] - 2026-07-14](#100---2026-07-14)
   - [Added](#added-26)
 
@@ -160,6 +162,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Demo: runs in UiKit's demo platform shell (`@NowoUiKit/demo_platform/layout.html.twig`, UiKit ^2.60): the demo declares itself in `templates/base.html.twig` (sections, sign-in and user menu from the shell), the pages use the page header and section cards, the demo's own masthead is gone, a demo-platform e2e spec checks the layout rules, the drawer and axe, and the README screenshots no longer show the Symfony toolbar.
+
+## [1.22.1] - 2026-11-21
+
+### Fixed
+
+- **Foreign keys kept when collating the owner columns (audit XI, latent).** `OwnerCollationListener` (1.16.1, session
+  and epoch tables) and `PointerCollationListener` (1.18.0, owner image pointers) replaced their table on
+  `postGenerateSchemaTable` (`setClassTable()`, DBAL 4.5+ with ORM 3.7+); ORM 3.7–3.8 then added the table's foreign
+  keys to the object it had replaced, so any foreign key starting on a collated table, and its index, would have been
+  missing from the generated schema on MySQL / MariaDB. None of these tables has one today, so no schema was affected.
+  Both listeners now run on `postGenerateSchema`, once every foreign key exists: with DBAL 4.5+ and ORM 3.7+ the table is
+  rebuilt with its editor (foreign keys and indexes included) and swapped in with `GenerateSchemaEventArgs::setSchema()`;
+  with anything older (ORM 2.x, ORM 3.0–3.6, DBAL 3.x–4.4) the column options are set in place. The platform is the one
+  of the schema tool's entity manager, and a manager that does not map the bundle entities is left alone. Same
+  collations as before. `postGenerateSchemaTable()` stays as a deprecated no-op; the constructor arguments are unused
+  (optional). Tests: foreign keys and indexes of every table with and without the listeners on MariaDB, MySQL 8.4,
+  MySQL 5.7, PostgreSQL and SQLite platforms (also in the DBAL 4.3 + ORM 3.6 and DBAL 3.8 jobs), and the created tables on
+  MySQL 8.4 / MariaDB 11.4 / PostgreSQL in the `real-databases` job.
+
+[1.22.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.22.1
 
 ## [1.22.0] - 2026-11-20
 

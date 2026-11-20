@@ -193,7 +193,7 @@ final class SessionsLoader
             ->addTag('doctrine.event_listener', ['event' => 'loadClassMetadata']));
         // House rule LQ: binary NO PAD collation of the owner columns on MySQL / MariaDB (look-alike owners).
         $container->setDefinition(OwnerCollationListener::class, (new Definition(OwnerCollationListener::class, [$doctrine, $sessions['doctrine']['entity_manager']]))
-            ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
+            ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema']));
         $container->setDefinition(UserSessionStore::class, (new Definition(UserSessionStore::class, [$doctrine, $sessions['doctrine']['entity_manager'], $sessions['doctrine']['exact_owner_collation'], new Reference(UserKitTransactionRunner::class)]))->setPublic(true));
         $container->setDefinition(SessionUserResolver::class, new Definition(SessionUserResolver::class, [$doctrine]));
         $ownerResolver = $sessions['owner']['resolver'];

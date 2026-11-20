@@ -12,12 +12,12 @@ use Doctrine\DBAL\Schema\ColumnEditor;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Epoch\Entity\UserSessionEpoch;
 
-use function in_array;
 use function method_exists;
 
 /**
@@ -32,7 +32,17 @@ use function method_exists;
  * compare exactly and are untouched (they reject MySQL collation names, so it cannot live in the mapping). Applied to
  * the generated schema (schema tool, `doctrine:migrations:diff`); existing tables need the `ALTER` of UPGRADING.
  *
- * Stateless (REQ-RUNTIME-002): the platform is read from the registry on each event.
+ * 1.22.1 (audit XI): applied on `postGenerateSchema`, once the schema tool has added every foreign key, by table name.
+ * Earlier releases replaced the table on `postGenerateSchemaTable` (`setClassTable()`, DBAL 4.5+ with ORM 3.7+), and
+ * ORM 3.7–3.8 then added the table's foreign keys to the object it had replaced, so any foreign key starting on it (and
+ * its index) was lost on MySQL / MariaDB (none exist today: latent). Now:
+ *
+ * - DBAL 4.5+ with ORM 3.7+: the table is rebuilt with its table editor (foreign keys and indexes included) and swapped
+ *   into a new schema given back with `GenerateSchemaEventArgs::setSchema()`;
+ * - anything older (ORM 2.x, ORM 3.0–3.6, DBAL 3.x–4.4): the column's platform options are set in place.
+ *
+ * Stateless (REQ-RUNTIME-002): the platform is the one of the schema tool's entity manager, read on each event; a
+ * manager that does not map the entities is left alone.
  */
 final readonly class OwnerCollationListener
 {
@@ -43,12 +53,15 @@ final readonly class OwnerCollationListener
     public const ENTITIES = [UserSession::class, UserSessionEpoch::class];
 
     /**
-     * @param string|null $entityManagerName `sessions.doctrine.entity_manager` (null = the manager of the entity)
+     * @param ManagerRegistry|null $doctrine unused since 1.22.1 (the schema tool's entity manager decides); kept
+     *                                       for BC
+     * @param string|null $entityManagerName unused since 1.22.1; kept for BC
      */
-    public function __construct(
-        private ManagerRegistry $doctrine,
-        private ?string $entityManagerName = null,
+    public function __construct(// @phpstan-ignore constructor.unusedParameter (both arguments kept for BC)
+        ?ManagerRegistry $doctrine = null,
+        ?string $entityManagerName = null,
     ) {
+        unset($doctrine, $entityManagerName);
     }
 
     /**
@@ -66,39 +79,104 @@ final readonly class OwnerCollationListener
         };
     }
 
-    public function postGenerateSchemaTable(GenerateSchemaTableEventArgs $args): void
+    /**
+     * Gives the owner columns their exact-match collation in the generated schema, keeping every foreign key and index.
+     */
+    public function postGenerateSchema(GenerateSchemaEventArgs $args): void
     {
-        $class = $args->getClassMetadata()->getName();
-        if (!in_array($class, self::ENTITIES, true)) {
+        $manager = $args->getEntityManager();
+        $tables  = self::mappedTables($manager, $args->getSchema(), self::ENTITIES);
+        if ($tables === []) {
             return;
         }
-        $manager   = $this->entityManagerName !== null ? $this->doctrine->getManager($this->entityManagerName) : $this->doctrine->getManagerForClass($class);
-        $collation = $manager instanceof EntityManagerInterface ? self::collationFor($manager->getConnection()->getDatabasePlatform()) : null;
-        if ($collation === null) {
-            return;
-        }
-
-        $table = $args->getClassTable();
-        foreach (self::COLUMNS as $column) {
-            // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType, function.alreadyNarrowedType (API availability depends on the installed DBAL / ORM)
-            $edited = self::collate($table, $column, $collation, self::editorSupported(method_exists(Table::class, 'edit'), method_exists(Schema::class, 'edit'), method_exists(GenerateSchemaTableEventArgs::class, 'setClassTable')));
-            if ($edited instanceof Table) {
-                $table = $edited;
-            }
-        }
-        if ($table !== $args->getClassTable()) {
-            $args->setClassTable($table);
+        $collation = self::collationFor($manager->getConnection()->getDatabasePlatform());
+        if ($collation !== null) {
+            self::collateSchema($args, $tables, self::COLUMNS, $collation);
         }
     }
 
     /**
-     * Whether the table-editor path is usable: it replaces the table, which needs `Table::edit()` (DBAL 4.3+), and
-     * `GenerateSchemaTableEventArgs::setClassTable()` (ORM 3.7+) to accept it, and that method throws unless
-     * `Schema::edit()` (DBAL 4.5+) exists. Anything less uses the in-place path.
+     * No longer subscribed (1.22.1, audit XI): replacing the table there lost its foreign keys. Kept for BC; does nothing.
+     *
+     * @deprecated since 1.22.1, the collation is applied on postGenerateSchema ({@see self::postGenerateSchema()})
      */
-    public static function editorSupported(bool $tableEdit, bool $schemaEdit, bool $setClassTable): bool
+    public function postGenerateSchemaTable(GenerateSchemaTableEventArgs $args): void
     {
-        return $tableEdit && $schemaEdit && $setClassTable;
+        unset($args);
+    }
+
+    /**
+     * The tables of `$schema` that hold the entities of `$classes` `$manager` maps (other classes are skipped).
+     *
+     * @param list<class-string> $classes
+     *
+     * @return list<string>
+     *
+     * @internal
+     */
+    public static function mappedTables(EntityManagerInterface $manager, Schema $schema, array $classes): array
+    {
+        $tables = [];
+        foreach ($classes as $class) {
+            if ($manager->getMetadataFactory()->isTransient($class)) {
+                continue;
+            }
+            $table = $manager->getClassMetadata($class)->getTableName();
+            if ($schema->hasTable($table)) {
+                $tables[] = $table;
+            }
+        }
+
+        return $tables;
+    }
+
+    /**
+     * Gives `$columns` of `$tables` `$collation` in the schema of `$args`, keeping every foreign key and index: rebuilt
+     * with the table editor and swapped into a new schema when {@see editorSupported()}, changed in place otherwise.
+     *
+     * @param list<string> $tables
+     * @param list<non-empty-string> $columns
+     * @param non-empty-string $collation
+     *
+     * @internal
+     */
+    public static function collateSchema(GenerateSchemaEventArgs $args, array $tables, array $columns, string $collation): void
+    {
+        $schema = $args->getSchema();
+        // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType, function.alreadyNarrowedType (API availability depends on the installed DBAL / ORM)
+        $editor = self::editorSupported(method_exists(Table::class, 'edit'), method_exists(Schema::class, 'edit'), method_exists(GenerateSchemaEventArgs::class, 'setSchema'));
+        $edited = [];
+        foreach ($tables as $name) {
+            $original = $table = $schema->getTable($name);
+            foreach ($columns as $column) {
+                if ($table->hasColumn($column)) {
+                    $table = self::collate($table, $column, $collation, $editor) ?? $table;
+                }
+            }
+            if ($table !== $original) {
+                $edited[] = [$original, $table];
+            }
+        }
+        if ($edited === []) {
+            return;
+        }
+        $schemaEditor = $schema->edit();
+        foreach ($edited as [$original, $table]) {
+            $schemaEditor->dropTable($original->getObjectName())->addTable($table);
+        }
+        $args->setSchema($schemaEditor->create());
+    }
+
+    /**
+     * Whether the table-editor path is usable: it rebuilds the table, which needs `Table::edit()` (DBAL 4.3+), and swaps
+     * it into a new schema, which needs `Schema::edit()` (DBAL 4.5+) and `GenerateSchemaEventArgs::setSchema()` (ORM
+     * 3.7+; it throws unless `Schema::edit()` exists). Anything less uses the in-place path.
+     *
+     * @param bool $setSchema since 1.22.1 `GenerateSchemaEventArgs::setSchema()` (before: `setClassTable()`, same ORM 3.7)
+     */
+    public static function editorSupported(bool $tableEdit, bool $schemaEdit, bool $setSchema): bool
+    {
+        return $tableEdit && $schemaEdit && $setSchema;
     }
 
     /**
