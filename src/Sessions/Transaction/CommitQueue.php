@@ -7,13 +7,20 @@ namespace Nowo\UserKitBundle\Sessions\Transaction;
 use Closure;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
-use function array_push;
+use function array_filter;
+use function array_keys;
 use function array_shift;
+use function array_slice;
+use function array_values;
+use function count;
+use function min;
+use function strtolower;
 
 /**
  * Effects that must only happen if the open transaction commits (HP-L2): a marker in a cache pool and the event of a
@@ -29,15 +36,28 @@ use function array_shift;
  * A connection this queue cannot see (no middleware, not in the registry) is reported as not held, and the caller goes
  * on at once as before: a revocation is never left waiting for a signal that cannot come.
  *
+ * Savepoints (1.22.0, audit VT-M1): {@see TransactionBoundaryConnection} also reports the savepoint statements DBAL sends
+ * through the driver connection (`SAVEPOINT`, `RELEASE SAVEPOINT`, `ROLLBACK TO SAVEPOINT`, and SQL Server's
+ * `SAVE TRANSACTION` / `ROLLBACK TRANSACTION`). Each held effect remembers how many savepoints were open when it was held;
+ * rolling back to a savepoint drops the effects held after it, releasing one hands its effects to the enclosing level.
+ * A rollback to a savepoint this queue never saw drops every effect of that transaction (it cannot tell which survived).
+ *
  * Holds the current transaction's effects only (`kernel.reset`, worker mode).
+ *
+ * @internal Not a public API (1.22.0): applications and other bundles listen to
+ *           {@see AccountErasedEvent} (after an erasure commits) or to the
+ *           bundle's other events instead; this class, its methods and its service may change in any release.
  */
 final class CommitQueue implements ResetInterface
 {
     /** @var array<string, true> connection name => its outermost transaction was seen starting */
     private array $open = [];
 
-    /** @var array<string, list<Closure(): void>> connection name => effects of its open transaction */
+    /** @var array<string, list<array{int, Closure(): void}>> connection name => [savepoint depth, effect] of its open transaction */
     private array $held = [];
+
+    /** @var array<string, list<string>> connection name => savepoints open in its transaction, oldest first (lowercase) */
+    private array $savepoints = [];
 
     /** @var list<Closure(): void> effects whose transaction committed */
     private array $committed = [];
@@ -57,16 +77,22 @@ final class CommitQueue implements ResetInterface
      */
     public function hold(Connection $connection, Closure $effect): bool
     {
-        if (!$connection->isTransactionActive()) {
+        $name = $this->watchedName($connection);
+        if ($name === null) {
             return false;
         }
-        $name = $this->nameOf($connection);
-        if ($name === null || !isset($this->open[$name])) {
-            return false;
-        }
-        $this->held[$name][] = $effect;
+        $this->held[$name][] = [count($this->savepoints[$name] ?? []), $effect];
 
         return true;
+    }
+
+    /**
+     * Whether {@see self::hold()} would hold an effect on `$connection` now (1.22.0): a transaction is open on it and its
+     * outermost begin was seen.
+     */
+    public function watches(Connection $connection): bool
+    {
+        return $this->watchedName($connection) !== null;
     }
 
     /**
@@ -76,7 +102,57 @@ final class CommitQueue implements ResetInterface
     public function begun(string $connectionName): void
     {
         $this->open[$connectionName] = true;
-        unset($this->held[$connectionName]);
+        unset($this->held[$connectionName], $this->savepoints[$connectionName]);
+    }
+
+    /**
+     * A savepoint was set in the open transaction (1.22.0).
+     */
+    public function savepointCreated(string $connectionName, string $savepoint): void
+    {
+        if (isset($this->open[$connectionName])) {
+            $this->savepoints[$connectionName][] = strtolower($savepoint);
+        }
+    }
+
+    /**
+     * A savepoint was released (1.22.0): it and the later ones are gone, their effects belong to the enclosing level.
+     */
+    public function savepointReleased(string $connectionName, string $savepoint): void
+    {
+        $index = $this->indexOf($connectionName, $savepoint);
+        if ($index === null) {
+            return;
+        }
+        $this->savepoints[$connectionName] = array_slice($this->savepoints[$connectionName], 0, $index);
+        foreach ($this->held[$connectionName] ?? [] as $i => [$depth, $effect]) {
+            $this->held[$connectionName][$i] = [min($depth, $index), $effect];
+        }
+    }
+
+    /**
+     * The transaction was rolled back to a savepoint (1.22.0), or that rollback failed: what was held after the savepoint
+     * was set is dropped; the savepoint itself stays. An unknown savepoint drops everything the transaction held.
+     */
+    public function savepointRolledBack(string $connectionName, string $savepoint): void
+    {
+        if (!isset($this->open[$connectionName])) {
+            return;
+        }
+        $index = $this->indexOf($connectionName, $savepoint);
+        if ($index === null) {
+            if (($this->held[$connectionName] ?? []) !== []) {
+                $this->logger?->warning('NowoUserKitBundle: a rollback to a savepoint the commit queue did not see dropped the effects held in the transaction.', ['savepoint' => $savepoint]);
+            }
+            unset($this->held[$connectionName]);
+
+            return;
+        }
+        $this->savepoints[$connectionName] = array_slice($this->savepoints[$connectionName], 0, $index + 1);
+        $this->held[$connectionName]       = array_values(array_filter(
+            $this->held[$connectionName] ?? [],
+            static fn (array $held): bool => $held[0] <= $index,
+        ));
     }
 
     /**
@@ -84,8 +160,10 @@ final class CommitQueue implements ResetInterface
      */
     public function committed(string $connectionName): void
     {
-        array_push($this->committed, ...($this->held[$connectionName] ?? []));
-        unset($this->open[$connectionName], $this->held[$connectionName]);
+        foreach ($this->held[$connectionName] ?? [] as [, $effect]) {
+            $this->committed[] = $effect;
+        }
+        unset($this->open[$connectionName], $this->held[$connectionName], $this->savepoints[$connectionName]);
     }
 
     /**
@@ -93,7 +171,7 @@ final class CommitQueue implements ResetInterface
      */
     public function rolledBack(string $connectionName): void
     {
-        unset($this->open[$connectionName], $this->held[$connectionName]);
+        unset($this->open[$connectionName], $this->held[$connectionName], $this->savepoints[$connectionName]);
     }
 
     /**
@@ -130,8 +208,9 @@ final class CommitQueue implements ResetInterface
      */
     public function reset(): void
     {
-        $this->open = [];
-        $this->held = [];
+        $this->open       = [];
+        $this->held       = [];
+        $this->savepoints = [];
 
         try {
             $this->run();
@@ -175,6 +254,26 @@ final class CommitQueue implements ResetInterface
         }
 
         return false;
+    }
+
+    /**
+     * Position of the newest savepoint called `$savepoint`, or null when it is not open.
+     */
+    private function indexOf(string $connectionName, string $savepoint): ?int
+    {
+        $found = array_keys($this->savepoints[$connectionName] ?? [], strtolower($savepoint), true);
+
+        return $found === [] ? null : $found[count($found) - 1];
+    }
+
+    private function watchedName(Connection $connection): ?string
+    {
+        if (!$connection->isTransactionActive()) {
+            return null;
+        }
+        $name = $this->nameOf($connection);
+
+        return $name !== null && isset($this->open[$name]) ? $name : null;
     }
 
     private function nameOf(Connection $connection): ?string

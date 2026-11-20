@@ -15,6 +15,7 @@ use Doctrine\DBAL\DriverManager;
 use Doctrine\Persistence\ManagerRegistry;
 use Exception;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
+use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryConnection;
 use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -75,6 +76,106 @@ final class CommitQueueTest extends TestCase
         self::assertSame(1, $this->ran);
         $this->queue->release();
         self::assertSame(1, $this->ran, 'Once.');
+    }
+
+    public function testARolledBackSavepointDropsWhatItHeldAndKeepsTheRest(): void
+    {
+        $this->connection->beginTransaction();
+        self::assertTrue($this->hold());
+        $this->connection->executeStatement('SAVEPOINT outer_sp');
+        self::assertTrue($this->hold());
+        $this->connection->executeStatement('ROLLBACK TO SAVEPOINT outer_sp');
+        self::assertTrue($this->hold(), 'Held after the rollback, inside the savepoint that stays.');
+        $this->connection->executeStatement('ROLLBACK TO SAVEPOINT outer_sp');
+        $this->connection->commit();
+        $this->queue->release();
+
+        self::assertSame(1, $this->ran, 'Only the effect held before the savepoint.');
+    }
+
+    public function testAReleasedSavepointHandsItsEffectsToTheEnclosingOne(): void
+    {
+        $this->connection->beginTransaction();
+        $this->connection->executeStatement('SAVEPOINT a');
+        $this->connection->executeStatement('SAVEPOINT b');
+        self::assertTrue($this->hold());
+        $this->connection->executeStatement('RELEASE SAVEPOINT b');
+        $this->connection->executeStatement('SAVEPOINT b');
+        $this->connection->executeStatement('ROLLBACK TO SAVEPOINT b');
+        $this->connection->commit();
+        $this->queue->release();
+        self::assertSame(1, $this->ran, 'Held before the new savepoint b: kept.');
+
+        $this->connection->beginTransaction();
+        $this->connection->executeStatement('SAVEPOINT a');
+        $this->connection->executeStatement('SAVEPOINT b');
+        self::assertTrue($this->hold());
+        $this->connection->executeStatement('RELEASE SAVEPOINT b');
+        $this->connection->executeStatement('ROLLBACK TO SAVEPOINT a');
+        $this->connection->commit();
+        $this->queue->release();
+        self::assertSame(1, $this->ran, 'Released into a, then a rolled back: dropped.');
+    }
+
+    public function testAFailedRollbackToASavepointStillDrops(): void
+    {
+        $this->connection->beginTransaction();
+        $this->connection->executeStatement('SAVEPOINT a');
+        $this->queue->savepointCreated('main', 'ghost');
+        self::assertTrue($this->hold());
+        try {
+            $this->connection->executeStatement('ROLLBACK TO SAVEPOINT ghost');
+            self::fail('SQLite knows no such savepoint.');
+        } catch (Throwable) {
+        }
+        $this->connection->commit();
+        $this->queue->release();
+
+        self::assertSame(0, $this->ran);
+    }
+
+    public function testARollbackToAnUnknownSavepointDropsEverythingAndWarns(): void
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('warning');
+        $registry = $this->createStub(ManagerRegistry::class);
+        $queue    = new CommitQueue($registry, $logger);
+        $registry->method('getConnectionNames')->willReturn(['main' => 'main.service']);
+        $connection = $this->connect($queue, 'main');
+        $registry->method('getConnection')->willReturn($connection);
+        $ran = 0;
+
+        $connection->beginTransaction();
+        self::assertTrue($queue->hold($connection, static function () use (&$ran): void {
+            ++$ran;
+        }));
+        $queue->savepointRolledBack('main', 'unseen');
+        $queue->savepointRolledBack('main', 'unseen');
+        $queue->savepointReleased('main', 'unseen');
+        $queue->savepointRolledBack('elsewhere', 'unseen');
+        $queue->savepointCreated('elsewhere', 'sp');
+        $connection->commit();
+        $queue->release();
+
+        self::assertSame(0, $ran);
+    }
+
+    public function testSavepointStatementsAreRecognised(): void
+    {
+        self::assertSame(['create', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('SAVEPOINT DOCTRINE_2'));
+        self::assertSame(['create', 'sp'], TransactionBoundaryConnection::savepointStatement(' save transaction [sp];'));
+        self::assertSame(['release', 'DOCTRINE2_SAVEPOINT_2'], TransactionBoundaryConnection::savepointStatement('RELEASE SAVEPOINT DOCTRINE2_SAVEPOINT_2'));
+        self::assertSame(['release', 'x'], TransactionBoundaryConnection::savepointStatement('release "x"'));
+        self::assertSame(['rollback', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO SAVEPOINT DOCTRINE_2'));
+        self::assertSame(['rollback', 'y'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO `y`'));
+        self::assertSame(['rollback', 'z'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TRANSACTION z'));
+        self::assertSame(['create', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('/* app:checkout */ SAVEPOINT DOCTRINE_2'));
+        self::assertSame(['release', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement("-- traced\n  RELEASE SAVEPOINT DOCTRINE_2 /* span=1 */"));
+        self::assertSame(['rollback', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO SAVEPOINT DOCTRINE_2 -- request 42'));
+        self::assertNull(TransactionBoundaryConnection::savepointStatement('/* SAVEPOINT a */ SELECT 1'));
+        self::assertNull(TransactionBoundaryConnection::savepointStatement('ROLLBACK'));
+        self::assertNull(TransactionBoundaryConnection::savepointStatement('SELECT 1'));
+        self::assertNull(TransactionBoundaryConnection::savepointStatement('SAVEPOINT a; DELETE FROM t'));
     }
 
     public function testARollbackDrops(): void

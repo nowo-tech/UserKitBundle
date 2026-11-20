@@ -695,7 +695,8 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         $passwordChange = $reason === RevocationReason::PasswordChanged;
         // @igor-ignore - Held until the transaction ends, and the queue is reset between requests.
         $held = $this->commits instanceof CommitQueue && $this->commits->hold($this->store->connection(), function () use ($owner, $user, $actor, $reason, $audit, $customReason, $context, $bumped, $code, $except, $keepCurrent, $rows, $hashes, $passwordChange): void {
-            // A driver sees no savepoint: a revocation undone by one rolled back shows as a live row by now.
+            // The queue drops what a savepoint rollback DBAL sent undid (1.22.0); one it did not see (a savepoint statement
+            // sent through executeQuery()) shows as a live row by now.
             $live = $hashes !== [] ? $this->store->liveAmong($hashes) : [];
             $kept = array_values(array_filter($rows, static fn (array $row): bool => !in_array($row['hash'], $live, true)));
             if ($rows !== [] && $kept === []) {

@@ -12,6 +12,7 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
 use Nowo\UserKitBundle\PersonalData\PersonalDataExporter;
 use Nowo\UserKitBundle\PersonalData\PersonalDataExportProviderInterface;
 use Nowo\UserKitBundle\PersonalData\Provider\UiPreferencesExportProvider;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
@@ -43,6 +44,12 @@ final class NowoUserKitExtensionPersonalDataTest extends TestCase
         $this->assertTrue($instanceof[PersonalDataExportProviderInterface::class]->hasTag(NowoUserKitExtension::TAG_EXPORT_PROVIDER));
         $this->assertTrue($instanceof[PersonalDataEraserInterface::class]->hasTag(NowoUserKitExtension::TAG_ERASER));
         $this->assertTrue($instanceof[ErasureGuardInterface::class]->hasTag(NowoUserKitExtension::TAG_ERASURE_GUARD));
+    }
+
+    public function testTheCommitQueueIsRegisteredForTheErasureEventWithoutSessionsOrOwnerImages(): void
+    {
+        $this->assertTrue($this->load(['enabled' => true])->hasDefinition(CommitQueue::class));
+        $this->assertFalse($this->load(['enabled' => false])->hasDefinition(CommitQueue::class));
     }
 
     public function testBuiltinsCanBeTurnedOff(): void

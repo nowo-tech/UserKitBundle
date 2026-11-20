@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Unit\PersonalData;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -12,11 +13,17 @@ use Nowo\UserKitBundle\PersonalData\ErasureGuardInterface;
 use Nowo\UserKitBundle\PersonalData\ErasureRequest;
 use Nowo\UserKitBundle\PersonalData\ErasureVeto;
 use Nowo\UserKitBundle\PersonalData\ErasureVetoedException;
+use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use PHPUnit\Framework\TestCase;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use stdClass;
+use Symfony\Component\Clock\MockClock;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -228,6 +235,91 @@ final class PersonalDataEraserTest extends TestCase
         }
     }
 
+    public function testThePsrDispatcherGetsTheEventAfterTheCommitAndItsFailureIsLogged(): void
+    {
+        $doctrine   = $this->doctrineWithoutTransaction();
+        $at         = new DateTimeImmutable('2026-11-20 10:00:00');
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->once())->method('dispatch')->willReturnCallback(static function (object $event) use ($at): never {
+            self::assertInstanceOf(AccountErasedEvent::class, $event);
+            self::assertSame($at, $event->erasedAt);
+            self::assertSame(['host'], $event->erasers);
+            self::assertNull($event->userType);
+            self::assertNull($event->userId);
+            self::assertSame(['tenant' => 't1'], $event->context);
+            self::assertFalse($event->selfService);
+
+            throw new RuntimeException('listener failed');
+        });
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error')->with(self::stringContains('AccountErasedEvent'));
+
+        $eraser = new PersonalDataEraser([$this->hostEraser()], [], $doctrine, null, null, $dispatcher, $logger, new MockClock($at));
+
+        self::assertSame(['host'], $eraser->erase(new stdClass(), new stdClass(), ['tenant' => 't1']));
+    }
+
+    public function testEverySymfonyListenerRunsWhenOneThrows(): void
+    {
+        $dispatcher = new EventDispatcher();
+        $seen       = new Recorder();
+        $dispatcher->addListener(AccountErasedEvent::class, static function (): never {
+            throw new RuntimeException('first failed');
+        }, 10);
+        $dispatcher->addListener(AccountErasedEvent::class, static function (AccountErasedEvent $event, string $name) use ($seen): void {
+            $seen->items[] = $name;
+        });
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error');
+
+        (new PersonalDataEraser([$this->hostEraser()], [], $this->doctrineWithoutTransaction(), null, null, $dispatcher, $logger))->erase(new stdClass());
+
+        self::assertSame([AccountErasedEvent::class], $seen->items);
+    }
+
+    public function testAnOpenTransactionUserKitCannotFollowIsRefusedBeforeAnythingIsErased(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+        $eraser = $this->createMock(PersonalDataEraserInterface::class);
+        $eraser->expects($this->never())->method('erase');
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('AccountErasedEvent');
+        (new PersonalDataEraser([$eraser], [], $doctrine, null, null, new EventDispatcher()))->erase(new stdClass());
+    }
+
+    public function testAnEventWhoseTransactionCanNoLongerBeFollowedIsLoggedNotDispatched(): void
+    {
+        // Audit VT-L1: the queue stopped following the transaction while the erasers ran (it ended unseen).
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+        $doctrine->method('getConnectionNames')->willReturn(['default' => 'doctrine.dbal.default_connection']);
+        $doctrine->method('getConnection')->willReturn($connection);
+        $queue = new CommitQueue($doctrine);
+        $queue->begun('default');
+        $eraser = $this->createMock(PersonalDataEraserInterface::class);
+        $eraser->method('supports')->willReturn(true);
+        $eraser->method('getKey')->willReturn('host');
+        $eraser->method('erase')->willReturnCallback(static function () use ($queue): void {
+            $queue->rolledBack('default');
+        });
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error')->with(self::stringContains('not dispatched'), self::logicalNot(self::arrayHasKey('user_id')));
+
+        self::assertSame(['host'], (new PersonalDataEraser([$eraser], [], $doctrine, $queue, null, $dispatcher, $logger))->erase(new stdClass()));
+    }
+
     public function testRequestSelfService(): void
     {
         $user  = new stdClass();
@@ -236,6 +328,27 @@ final class PersonalDataEraserTest extends TestCase
         $this->assertTrue((new ErasureRequest($user))->isSelfService());
         $this->assertTrue((new ErasureRequest($user, $user))->isSelfService());
         $this->assertFalse((new ErasureRequest($user, $admin, ['scope' => 'admin']))->isSelfService());
+    }
+
+    private function doctrineWithoutTransaction(): ManagerRegistry
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(false);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+
+        return $doctrine;
+    }
+
+    private function hostEraser(): PersonalDataEraserInterface
+    {
+        $eraser = $this->createMock(PersonalDataEraserInterface::class);
+        $eraser->method('supports')->willReturn(true);
+        $eraser->method('getKey')->willReturn('host');
+
+        return $eraser;
     }
 }
 

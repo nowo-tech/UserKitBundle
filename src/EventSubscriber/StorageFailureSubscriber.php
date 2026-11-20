@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\EventSubscriber;
 
+use Nowo\TransactionDoctrine\ConflictCode;
 use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponsePolicy;
 use Nowo\TransactionDoctrine\Symfony\EventListener\ConcurrencyConflictResponder;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\ConflictResponsePass;
@@ -80,7 +81,9 @@ final readonly class StorageFailureSubscriber implements EventSubscriberInterfac
         if (!$failure instanceof UserKitStorageFailure) {
             return;
         }
-        $code = $failure->conflictCode();
+        // 1.22.0 (residual UK-2): the request's commit mark (transaction-doctrine >= 1.8) also turns a conflict met after
+        // an earlier commit of the same request into CONFLICT_002; without a mark the failure alone decides, as before.
+        $code = ConflictCode::forRequest($event->getRequest(), $failure);
         if ($this->platformAnswer) {
             $response = $this->responder->respond($event->getRequest(), $failure);
             // @igor-ignore - The response is built for this event by respond(), not a shared service.

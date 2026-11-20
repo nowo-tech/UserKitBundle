@@ -63,11 +63,13 @@ Opt-in: `nowo_user_kit.personal_data.enabled: false` by default; nothing is regi
 - **FR-004**: Eraser uses the entity manager of the user class (`ManagerRegistry::getManagerForClass()`; `LogicException` when none) and `wrapInTransaction()`; erasers must not flush.
 - **FR-005**: Built-in sections — `account_status` `{enabled}`, `last_activity` `{last_activity_at}`, `ui_preferences` (nine `preferred_*` keys), `product_tour` `{seen_at, seen_pages}`; priorities `-100` … `-130`.
 - **FR-006**: Built-in erasers — `last_activity` (`clearLastActivityAt()`, new on `LastActivityTrait`), `ui_preferences` (`resetUiPreferences()`), `product_tour` (`clearProductTourSeen()`); priorities `-100` … `-120`. The kit never disables or anonymises the account itself.
+- **FR-007** (1.22.0): `AccountErasedEvent` is dispatched once per committed erasure, after the commit (UserKit's own transaction: before `erase()` returns; inside the host's transaction: after its outermost commit, at the next boundary), never on a rollback (of the transaction or of a savepoint enclosing the erasure, followed through the savepoint statements DBAL sends) or failed commit, once for the committed attempt of a replayed unit (also a nested unit retried inside an open transaction). It carries the user as the erasers left it, `userType` / `userId` (read before the erasers ran), `originalIdentifier` (correlation only), the eraser keys, `erasedAt`, `selfService` and the host `context`. A listener that throws is logged and the next listener runs; the erasure is neither undone nor masked; a failing earlier committed effect of the queue does not cost the event (rethrown after it). Worker safe: what waits for a commit is dropped at `kernel.reset` when that transaction did not commit. `CommitQueue` stays internal.
 
 ## Tests
 
 - `tests/Integration/PersonalDataKernelTest.php` — kernel with SQLite: document shape and order, priority order of erasers, persisted erasure, guard veto, rollback after a failing eraser.
 - `tests/Unit/PersonalData/*` — exporter normalisation / duplicates / JSON, eraser vetoes / skipping / missing entity manager, built-in providers (profile field and interface paths).
+- `tests/Integration/Sessions/AccountErasedEventTest.php` (1.22.0) — FR-007 on SQLite and, in the `real-databases` job, PostgreSQL and MySQL: once after the commit, held until the host's outermost commit, nothing on rollback, once on a replayed unit, a throwing listener neither undoes nor masks the erasure, worker reset drops what did not commit.
 - `tests/Unit/DependencyInjection/NowoUserKitExtensionPersonalDataTest.php` — disabled by default, autoconfiguration, built-in toggles.
 
 ## Host adoption (Beacon)
