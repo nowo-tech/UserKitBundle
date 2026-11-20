@@ -3,13 +3,20 @@
 {% block title %}User Kit Demo{% endblock %}
 
 {% block nowo_ui_page_header %}
-    {{ include(nowo_ui_partial('page_header'), {title: 'Account status & presence'}) }}
+    {% set _toolbar %}
+        {% if app.user %}<a class="nowo-ui-btn nowo-ui-btn--primary" href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-sessions-link">My sessions</a>{% endif %}
+    {% endset %}
+    {{ include(nowo_ui_partial('page_header'), {
+        title: 'Account status & presence',
+        intro: 'The account status checker, the presence resolver and the session registry of the demo user.',
+        toolbar: _toolbar,
+    }) }}
 {% endblock %}
 
 {% block body %}
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__body">
-            {% if app.user %}
+    {% if app.user %}
+        {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Account', kind: 'detail', user: user, profile: profile, online: online} %}
+            {% block section_body %}
                 <ul class="nowo-ui-list">
                     <li><strong>Email:</strong> {{ user.email }}</li>
                     {% if profile %}
@@ -20,21 +27,25 @@
                     <li><strong>Online (UserPresenceResolver):</strong> {{ online ? 'yes' : 'no' }}</li>
                     <li><strong>Online (Twig):</strong> {{ user_is_online(user) ? 'yes' : 'no' }}</li>
                 </ul>
-                <p class="nowo-ui-muted">
+            {% endblock %}
+        {% endembed %}
+        {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'How it works', kind: 'content'} %}
+            {% block section_body %}
+                <p>
                     Configuration uses <code>nowo_user_kit.profiles.app_user</code> — see
                     <code>config/packages/nowo_user_kit.yaml</code>.
                     Reload this page to see throttled <code>lastActivityAt</code> updates.
                     Disable the user in SQLite to verify <code>AccountStatusUserChecker</code> blocks login.
                 </p>
-                <h2>Sessions</h2>
                 <p>
-                    <a class="nowo-ui-link" href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-sessions-link">My sessions</a>
-                    — sign in from another browser, sign that session out here, and it is signed out on its next request
-                    (<code>nowo_user_kit.sessions</code>, limit 3 sessions).
+                    Sign in from another browser, sign that session out in "My sessions", and it is signed out on its
+                    next request (<code>nowo_user_kit.sessions</code>, limit 3 sessions).
                 </p>
-            {% else %}
-                <p>Not authenticated. <a class="nowo-ui-link" href="{{ path('demo_login') }}">Login</a> with the demo user.</p>
-            {% endif %}
-        </div>
-    </section>
+            {% endblock %}
+        {% endembed %}
+    {% else %}
+        {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Account', kind: 'detail', state: 'empty', state_title: 'Not authenticated', state_message: 'Sign in with the demo user to see the account status and presence.'} %}
+            {% block section_empty_action %}<a class="nowo-ui-btn nowo-ui-btn--outline" href="{{ path('demo_login') }}">Login</a>{% endblock %}
+        {% endembed %}
+    {% endif %}
 {% endblock %}

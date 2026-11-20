@@ -8,7 +8,7 @@ import { login, loginFromOtherBrowser, openDialog, openMySessions, signOutOtherS
 test.describe('User Kit demo — sessions', () => {
   test('home page shows the account status and presence after login', async ({ page }) => {
     await login(page);
-    await expect(page.getByText('demo@user-kit.test').first()).toBeVisible();
+    await expect(page.locator('main').getByText('demo@user-kit.test').first()).toBeVisible();
     await expect(page.getByText('Online (UserPresenceResolver): yes')).toBeVisible();
   });
 
