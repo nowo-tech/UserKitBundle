@@ -65,10 +65,10 @@
 From **1.21.0** (minor):
 
 ```bash
-composer update nowo-tech/user-kit-bundle
+composer update nowo-tech/user-kit-bundle nowo-tech/transaction-doctrine --with-dependencies
 ```
 
-No configuration change. What changes:
+nowo-tech/transaction-doctrine ^1.8 is required (was ^1.5; security fixes). No configuration change. What changes:
 
 - **`AccountErasedEvent` (new).** `PersonalDataErasureInterface::erase()` dispatches
   `Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent` once per committed erasure, after the commit (see

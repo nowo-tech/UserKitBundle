@@ -13,6 +13,8 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\TransactionDoctrine\ConflictCode;
 use Nowo\TransactionDoctrine\TransientFailureKind;
+use Nowo\TransactionDoctrine\WriteUnit\CommitLedger;
+use Nowo\TransactionDoctrine\WriteUnit\CommitMark;
 use Nowo\TransactionDoctrine\WriteUnit\ConcurrencyConflict;
 use Nowo\UserKitBundle\EventSubscriber\StorageFailureSubscriber;
 use Nowo\UserKitBundle\Transaction\UserKitStorageFailure;
@@ -21,6 +23,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Throwable;
 
@@ -70,6 +73,25 @@ final class ConflictCodeTest extends TestCase
         self::assertSame(409, $response['status']);
         self::assertNull($response['retryAfter']);
         self::assertSame('CONFLICT_002', $response['code']);
+    }
+
+    public function testAConflictAfterAnEarlierCommitOfTheRequestIsConflict002(): void
+    {
+        // Residual UK-2: the failure itself committed nothing, but the request did before it (transaction-doctrine's
+        // commit mark on the request).
+        $failure = $this->statementFailure(new DeadlockException(self::driver('deadlock', '40P01', 7), null));
+        $ledger  = new CommitLedger();
+        $request = Request::create('/account', 'POST');
+        $request->attributes->set(CommitMark::REQUEST_ATTRIBUTE, new CommitMark($ledger));
+        $ledger->record();
+
+        $event = new ExceptionEvent($this->createMock(HttpKernelInterface::class), $request, HttpKernelInterface::MAIN_REQUEST, $failure);
+        (new StorageFailureSubscriber())->onException($event);
+
+        $answer = $event->getThrowable();
+        self::assertInstanceOf(ConflictHttpException::class, $answer);
+        self::assertSame('CONFLICT_002', $answer->getHeaders()['X-Conflict-Code'] ?? null);
+        self::assertArrayNotHasKey('Retry-After', $answer->getHeaders());
     }
 
     public function testAfterCommitIsIdempotentAndKeepsAFailureWithoutStorageError(): void

@@ -1124,16 +1124,16 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.6.0",
+            "version": "v1.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "707309320afbe69add2450ed31f67d32f888fe93"
+                "reference": "887fc325ef20787bc108cbfea6a267dfd4e938fe"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/707309320afbe69add2450ed31f67d32f888fe93",
-                "reference": "707309320afbe69add2450ed31f67d32f888fe93",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/887fc325ef20787bc108cbfea6a267dfd4e938fe",
+                "reference": "887fc325ef20787bc108cbfea6a267dfd4e938fe",
                 "shasum": ""
             },
             "require": {
@@ -1191,7 +1191,8 @@
             },
             "autoload": {
                 "psr-4": {
-                    "Nowo\\TransactionDoctrine\\": "src/"
+                    "Nowo\\TransactionDoctrine\\": "src/",
+                    "Nowo\\TransactionDoctrine\\WriteUnit\\Dbal\\Dbal3\\": "compat/dbal3/"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -1229,8 +1230,8 @@
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-18T15:30:13+00:00",
-            "published-time": "2026-11-18T15:33:30+00:00"
+            "time": "2026-11-20T06:09:11+00:00",
+            "published-time": "2026-11-20T06:14:34+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
@@ -1341,7 +1342,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/user-kit-bundle",
-                "reference": "a234065d0f5bea2b3c18e66fd99be492238248c9"
+                "reference": "ffa9012c4cf3268d268147d525902c53c225351e"
             },
             "require": {
                 "doctrine/dbal": "^3.8.2 || ^4.0",
@@ -1349,7 +1350,7 @@
                 "doctrine/orm": "^2.16 || ^3.0",
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
-                "nowo-tech/transaction-doctrine": "^1.5",
+                "nowo-tech/transaction-doctrine": "^1.8",
                 "nowo-tech/ui-kit-bundle": "^2.20",
                 "php": ">=8.2 <8.6",
                 "psr/cache": "^2.0 || ^3.0",
