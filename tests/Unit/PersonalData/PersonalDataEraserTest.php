@@ -315,7 +315,7 @@ final class PersonalDataEraserTest extends TestCase
         $dispatcher = $this->createMock(EventDispatcherInterface::class);
         $dispatcher->expects($this->never())->method('dispatch');
         $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects($this->once())->method('error')->with(self::stringContains('not dispatched'));
+        $logger->expects($this->once())->method('error')->with(self::stringContains('not dispatched'), self::logicalNot(self::arrayHasKey('user_id')));
 
         self::assertSame(['host'], (new PersonalDataEraser([$eraser], [], $doctrine, $queue, null, $dispatcher, $logger))->erase(new stdClass()));
     }

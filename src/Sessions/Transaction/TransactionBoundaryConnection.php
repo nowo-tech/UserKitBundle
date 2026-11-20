@@ -16,7 +16,8 @@ use function preg_match;
  *
  * 1.22.0 (audit VT-M1): DBAL sends its savepoint statements as plain SQL through {@see self::exec()}; they are reported
  * to the queue, so an effect held inside a savepoint that is rolled back is dropped. A savepoint statement a host sends
- * through `executeQuery()` or a prepared statement is not seen.
+ * through `executeQuery()` or a prepared statement is not seen. Leading and trailing SQL comments are ignored; a
+ * middleware that rewrites the statement otherwise must sit outside this one (this one closer to the driver).
  */
 final class TransactionBoundaryConnection extends AbstractConnectionMiddleware
 {
@@ -66,6 +67,8 @@ final class TransactionBoundaryConnection extends AbstractConnectionMiddleware
      */
     public static function savepointStatement(string $sql): ?array
     {
+        // Audit VT2-L1: a query-comment middleware outside this one may tag the statement (`/* app:… */ SAVEPOINT x`).
+        $sql = (string) preg_replace(['~\A(?:\s+|/\*.*?\*/|--[^\n]*(?:\n|\z))+~s', '~(?:\s+|/\*.*?\*/|--[^\n]*)+\z~s'], '', $sql);
         if (preg_match('/^\s*(?:SAVE|RELEASE|ROLLBACK)/i', $sql) !== 1) {
             return null;
         }

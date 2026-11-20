@@ -146,8 +146,9 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
             // @igor-ignore - the queue holds the closure until that commit; nothing is kept on this service
             if ($this->commits?->hold($connection, fn () => $this->dispatchErased($event)) !== true) {
                 // Audit VT-L1: the queue stopped following the transaction during the erasure (it ended unseen and a new
-                // one began): no commit can be awaited, so the event is not dispatched, loudly.
-                $this->logger?->error('NowoUserKitBundle: AccountErasedEvent was not dispatched: the transaction of the erasure can no longer be followed to its commit.', ['user_type' => $event->userType, 'user_id' => $event->userId]);
+                // one began): no commit can be awaited, so the event is not dispatched, loudly. Audit VT2-I1: the user type only, the
+                // id may be personal data (an e-mail primary key).
+                $this->logger?->error('NowoUserKitBundle: AccountErasedEvent was not dispatched: the transaction of the erasure can no longer be followed to its commit.', ['user_type' => $event->userType]);
             }
             $event = null;
         }

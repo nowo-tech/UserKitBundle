@@ -169,6 +169,10 @@ final class CommitQueueTest extends TestCase
         self::assertSame(['rollback', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO SAVEPOINT DOCTRINE_2'));
         self::assertSame(['rollback', 'y'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO `y`'));
         self::assertSame(['rollback', 'z'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TRANSACTION z'));
+        self::assertSame(['create', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('/* app:checkout */ SAVEPOINT DOCTRINE_2'));
+        self::assertSame(['release', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement("-- traced\n  RELEASE SAVEPOINT DOCTRINE_2 /* span=1 */"));
+        self::assertSame(['rollback', 'DOCTRINE_2'], TransactionBoundaryConnection::savepointStatement('ROLLBACK TO SAVEPOINT DOCTRINE_2 -- request 42'));
+        self::assertNull(TransactionBoundaryConnection::savepointStatement('/* SAVEPOINT a */ SELECT 1'));
         self::assertNull(TransactionBoundaryConnection::savepointStatement('ROLLBACK'));
         self::assertNull(TransactionBoundaryConnection::savepointStatement('SELECT 1'));
         self::assertNull(TransactionBoundaryConnection::savepointStatement('SAVEPOINT a; DELETE FROM t'));

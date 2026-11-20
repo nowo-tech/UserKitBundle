@@ -458,7 +458,9 @@ Savepoints: UserKit follows the savepoint statements DBAL sends (`SAVEPOINT`, `R
 `ROLLBACK TO SAVEPOINT`, and SQL Server's `SAVE` / `ROLLBACK TRANSACTION`), so an erasure undone by the rollback of an
 enclosing savepoint fires nothing. A savepoint statement you send yourself through `executeQuery()` or a prepared
 statement is not seen: send it with `executeStatement()` (as DBAL does), or roll back the whole transaction. A rollback
-to a savepoint UserKit did not see drops every held effect of that transaction (logged as a warning).
+to a savepoint UserKit did not see drops every held effect of that transaction (logged as a warning). Leading and
+trailing SQL comments (a query-comment middleware's tags) are ignored; a Doctrine middleware that rewrites SQL otherwise
+must sit outside UserKit's (UserKit's closer to the driver), or UserKit does not recognise the savepoints.
 
 Several connections: the event follows the connection of the user's entity manager only. When the erasure runs in
 UserKit's own transaction it is dispatched as soon as that commits, even if your code holds a transaction open on
@@ -467,7 +469,7 @@ another connection at that moment.
 If an earlier committed effect of UserKit's queue (a session revocation mark) fails while `erase()` releases it, the
 event of the committed erasure is still dispatched and that failure is rethrown afterwards, as before. If the queue
 stops following the erasure's transaction while the erasers run (it ended unseen), the event is not dispatched and an
-error is logged with `userType` / `userId`.
+error is logged with `userType` (not the id, which may be personal data).
 
 Worker mode (FrankenPHP, kernel reset off): nothing is kept on a service. An event waiting for your commit is held by
 UserKit's internal commit queue, which drops it at `kernel.reset` when that transaction never committed and dispatches
