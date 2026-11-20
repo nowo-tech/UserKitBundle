@@ -162,8 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent` once per committed erasure, **after** the commit: when
   `erase()` returns (UserKit's own transaction), or after the outermost commit of the application's transaction at the
   next boundary (`postFlush`, `kernel.response`, `kernel.terminate`, `console.terminate`, end of a Messenger message,
-  `kernel.reset`). Never on a rollback, a failed commit or a lost connection; once for the committed attempt of a unit
-  the application replays. It carries the erased `user` (as the erasers left it), `userType` / `userId` (Doctrine root
+  `kernel.reset`). Never on a rollback (of the transaction, or of a savepoint enclosing the erasure), a failed commit or a
+  lost connection; once for the committed attempt of a unit the application replays, also a nested unit retried inside
+  an open transaction. It carries the erased `user` (as the erasers left it), `userType` / `userId` (Doctrine root
   class and identifier, read before the erasers ran), `originalIdentifier`, the keys of the `erasers` that ran,
   `erasedAt`, `selfService` and the host `context` (e.g. a tenant or a reason code). A listener that throws is logged
   (error) and the next listener still runs: the erasure is neither undone nor masked, `erase()` returns normally. Act
@@ -180,7 +181,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry), instead of dispatching `AccountErasedEvent` before that commit. The bundle's wiring always follows it.
 - `Sessions\Transaction\CommitQueue` is marked `@internal`: it is not a public API and may change in any release.
   Applications that held effects in it until the erasure commits move to `AccountErasedEvent` (see UPGRADING).
-
+- The commit queue follows savepoints (audit VT-M1): the driver middleware reports the savepoint statements DBAL sends
+  (`SAVEPOINT`, `RELEASE SAVEPOINT`, `ROLLBACK TO SAVEPOINT`, SQL Server's `SAVE` / `ROLLBACK TRANSACTION`), and what was
+  held inside a savepoint that is rolled back is dropped at once (`AccountErasedEvent`, the cache marks and events of a
+  `password_changed` revocation, the deletion of a replaced owner image), instead of waiting for the outermost commit.
+  A rollback to a savepoint the queue did not see drops everything the transaction held (warning logged).
+- `PersonalDataEraser::erase()` dispatches the event of an erasure committed in its own transaction even when an earlier
+  committed effect of the queue fails during the release; that failure is rethrown afterwards (audit VT-M2).
 - CI: new `deps-floor` job (as in BreadcrumbKit). It checks that the demo lock installs every nowo-tech requirement of the bundle (`.scripts/check-demo-lock.py`), then downgrades nowo-tech/transaction-* to the lowest versions composer.json allows (`composer update 'nowo-tech/transaction-*' --prefer-lowest`) and runs PHPStan and the tests there, so a call to a newer API than the constraint allows fails the pull request.
 - Demo: `make update-bundle` runs `composer update nowo-tech/user-kit-bundle -w`, so the bundle's new or raised requirements reach the demo lock too.
 

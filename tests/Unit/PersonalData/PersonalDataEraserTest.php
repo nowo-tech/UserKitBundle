@@ -16,6 +16,7 @@ use Nowo\UserKitBundle\PersonalData\ErasureVetoedException;
 use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
+use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -290,6 +291,33 @@ final class PersonalDataEraserTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('AccountErasedEvent');
         (new PersonalDataEraser([$eraser], [], $doctrine, null, null, new EventDispatcher()))->erase(new stdClass());
+    }
+
+    public function testAnEventWhoseTransactionCanNoLongerBeFollowedIsLoggedNotDispatched(): void
+    {
+        // Audit VT-L1: the queue stopped following the transaction while the erasers ran (it ended unseen).
+        $connection = $this->createMock(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $doctrine = $this->createMock(ManagerRegistry::class);
+        $doctrine->method('getManagerForClass')->willReturn($entityManager);
+        $doctrine->method('getConnectionNames')->willReturn(['default' => 'doctrine.dbal.default_connection']);
+        $doctrine->method('getConnection')->willReturn($connection);
+        $queue = new CommitQueue($doctrine);
+        $queue->begun('default');
+        $eraser = $this->createMock(PersonalDataEraserInterface::class);
+        $eraser->method('supports')->willReturn(true);
+        $eraser->method('getKey')->willReturn('host');
+        $eraser->method('erase')->willReturnCallback(static function () use ($queue): void {
+            $queue->rolledBack('default');
+        });
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error')->with(self::stringContains('not dispatched'));
+
+        self::assertSame(['host'], (new PersonalDataEraser([$eraser], [], $doctrine, $queue, null, $dispatcher, $logger))->erase(new stdClass()));
     }
 
     public function testRequestSelfService(): void

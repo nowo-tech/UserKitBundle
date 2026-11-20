@@ -87,6 +87,77 @@ final class AccountErasedEventTest extends TransactionalSessionsTestCase
         self::assertSame(1, $this->allRows(), 'The erasure was rolled back.');
     }
 
+    public function testAnErasureUndoneByASavepointRollbackFiresNothing(): void
+    {
+        // Audit VT-M1: the erasure ran in a nested unit of the application (a savepoint) that was rolled back, and the
+        // application committed the rest.
+        $alice = $this->bootErasure();
+        $this->signIn('alice@example.com');
+        $this->connection()->setNestTransactionsWithSavepoints(true); // Off by default on DBAL 3.
+
+        $this->connection()->beginTransaction();
+        $this->connection()->beginTransaction();
+        $this->eraser()->erase($this->fresh($alice));
+        $this->connection()->rollBack();
+        $this->connection()->commit();
+        $this->queue()->release();
+        $this->queue()->finish();
+
+        self::assertSame(1, $this->allRows(), 'The savepoint rollback undid the erasure.');
+        self::assertCount(0, $this->erased());
+    }
+
+    public function testANestedUnitRetriedInsideAnOpenTransactionFiresOnce(): void
+    {
+        // Audit VT-M1: the application retries a nested unit (a savepoint) inside its open transaction.
+        $alice = $this->bootErasure();
+        $this->signIn('alice@example.com');
+        $this->connection()->setNestTransactionsWithSavepoints(true);
+
+        $this->connection()->beginTransaction();
+        foreach ([1, 2] as $attempt) {
+            $this->connection()->beginTransaction();
+            $this->eraser()->erase($this->fresh($alice), null, ['attempt' => $attempt]);
+            if ($attempt === 1) {
+                $this->connection()->rollBack();
+
+                continue;
+            }
+            $this->connection()->commit();
+        }
+        $this->queue()->release();
+        self::assertCount(0, $this->erased(), 'Held until the outermost commit.');
+        $this->connection()->commit();
+        $this->queue()->release();
+        $this->queue()->finish();
+
+        self::assertCount(1, $this->erased());
+        self::assertSame(['attempt' => 2], $this->erased()[0]['event']->context);
+        self::assertSame(0, $this->allRows());
+    }
+
+    public function testAThrowingCommittedEffectDoesNotCostTheEventOfACommittedErasure(): void
+    {
+        // Audit VT-M2: an effect of an earlier committed transaction fails when the erasure releases the queue.
+        $alice = $this->bootErasure();
+        $this->signIn('alice@example.com');
+        $this->connection()->beginTransaction();
+        $this->queue()->hold($this->connection(), static function (): never {
+            throw new RuntimeException('An earlier committed effect failed.');
+        });
+        $this->connection()->commit();
+
+        try {
+            $this->eraser()->erase($this->fresh($alice));
+            self::fail('The failure of the earlier effect goes on, as before.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('An earlier committed effect failed.', $exception->getMessage());
+        }
+
+        self::assertSame(0, $this->allRows(), 'The erasure is committed.');
+        self::assertCount(1, $this->erased(), 'Its event is not lost.');
+    }
+
     public function testAReplayedUnitFiresOnceForTheAttemptThatCommitted(): void
     {
         $alice = $this->bootErasure();

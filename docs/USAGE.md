@@ -399,6 +399,8 @@ refuses to run inside a foreign one, a remote API, a message to another service.
 | No transaction open (UserKit opens and commits its own) | Before `erase()` returns, after the commit |
 | Inside your transaction (the erasure is a savepoint of it) | After your outermost commit, at the next boundary: Doctrine `postFlush`, `kernel.response`, `kernel.terminate`, `console.terminate`, the end of a Messenger message, `kernel.reset` |
 | Your transaction rolls back, its commit fails, the connection is lost | Never |
+| A savepoint enclosing the erasure is rolled back (a nested unit of yours fails) and your transaction commits the rest | Never |
+| A nested unit (savepoint) is retried inside your open transaction | Once, for the attempt that survived, after your outermost commit |
 | Your unit of work is replayed after a transient failure (transaction-doctrine runner, deadlock retry) | Once, for the attempt that committed |
 | An eraser or a guard fails | Never (nothing was erased) |
 
@@ -407,7 +409,7 @@ Payload (personal data kept to what correlation needs):
 | Property | Content |
 | --- | --- |
 | `user` | The erased entity as the erasers left it (anonymised, possibly removed). Read your own correlation id from it (a UUID), never personal fields. |
-| `userType`, `userId` | Doctrine root class and identifier, read **before** the erasers ran (the session registry's owner reference; the security identifier for a user that is not a mapped entity; null when neither is usable). |
+| `userType`, `userId` | Doctrine root class and identifier, read **before** the erasers ran (the session registry's owner reference; the security identifier for a user that is not a mapped entity; null when neither is usable). The id is personal data too when it is the e-mail or another personal value (e.g. the e-mail as primary key): treat it like `originalIdentifier` then. |
 | `originalIdentifier` | `getUserIdentifier()` before any eraser ran, often an e-mail: personal data, for data keyed by it only. Do not log or store it. |
 | `erasers` | Keys of the erasers that ran, in order (what `erase()` returned). |
 | `erasedAt` | When the erasers' unit of work succeeded (the bundle clock). |
@@ -447,6 +449,25 @@ The erasure stays committed and `erase()` neither throws nor returns anything el
 that runs at a later boundary cannot break that boundary either). So make listeners idempotent, and hand off to a
 durable message (Messenger) what you cannot afford to lose if the process dies right after the commit or the listener
 fails. Every listener runs: stopping propagation is not supported.
+
+Do not flush the user's entity manager from a listener: a held event may be dispatched from Doctrine's `postFlush` of
+that manager (flushing there is not supported by Doctrine). Write through your own entity manager or connection in a
+transaction of its own, or dispatch a message.
+
+Savepoints: UserKit follows the savepoint statements DBAL sends (`SAVEPOINT`, `RELEASE SAVEPOINT`,
+`ROLLBACK TO SAVEPOINT`, and SQL Server's `SAVE` / `ROLLBACK TRANSACTION`), so an erasure undone by the rollback of an
+enclosing savepoint fires nothing. A savepoint statement you send yourself through `executeQuery()` or a prepared
+statement is not seen: send it with `executeStatement()` (as DBAL does), or roll back the whole transaction. A rollback
+to a savepoint UserKit did not see drops every held effect of that transaction (logged as a warning).
+
+Several connections: the event follows the connection of the user's entity manager only. When the erasure runs in
+UserKit's own transaction it is dispatched as soon as that commits, even if your code holds a transaction open on
+another connection at that moment.
+
+If an earlier committed effect of UserKit's queue (a session revocation mark) fails while `erase()` releases it, the
+event of the committed erasure is still dispatched and that failure is rethrown afterwards, as before. If the queue
+stops following the erasure's transaction while the erasers run (it ended unseen), the event is not dispatched and an
+error is logged with `userType` / `userId`.
 
 Worker mode (FrankenPHP, kernel reset off): nothing is kept on a service. An event waiting for your commit is held by
 UserKit's internal commit queue, which drops it at `kernel.reset` when that transaction never committed and dispatches

@@ -79,8 +79,11 @@ No configuration change. What changes:
 - **Commit queue with `personal_data` alone.** With `personal_data.enabled`, the commit queue and its Doctrine driver
   middleware are registered also when the session registry and the owner images are off.
 - **Hand-built `PersonalDataEraser`.** New optional trailing constructor arguments (`$dispatcher`, `$logger`, `$clock`).
-  If you pass a dispatcher, also pass the commit queue: inside an open transaction the eraser refuses
-  (`LogicException`, nothing erased) when it cannot follow that transaction to its commit.
+  Prefer the bundle's `PersonalDataEraser` service (or `PersonalDataErasureInterface`) to building one: the commit queue
+  it needs is internal. A hand-built eraser given a dispatcher refuses inside an open transaction (`LogicException`,
+  nothing erased), since it cannot follow that transaction to its commit.
+- **Savepoints.** Effects held by UserKit inside a savepoint that is rolled back are now dropped at once (they were kept
+  until the outermost commit and, for the session revocations, re-checked there).
 
 ### Moving an eraser off `CommitQueue`
 

@@ -328,6 +328,26 @@ final class SessionCommitBoundaryTest extends TransactionalSessionsTestCase
         self::assertStringStartsWith('alice@example.com', $this->body($phone));
     }
 
+    public function testARevocationUndoneByASavepointTheQueueDoesNotSeeIsStillDroppedAtTheOuterCommit(): void
+    {
+        $this->setUpDatabase('cache');
+        $alice = $this->member('alice@example.com');
+        $phone = $this->signIn('alice@example.com');
+        $this->log()->clear();
+
+        $this->connection()->beginTransaction();
+        // Sent through executeQuery(), not as DBAL sends its own: the commit queue does not see these savepoints.
+        $this->connection()->executeQuery('SAVEPOINT host_unseen')->free();
+        $this->manager()->revokeAll($this->fresh($alice), null, RevocationReason::PasswordChanged);
+        $this->connection()->executeQuery('ROLLBACK TO SAVEPOINT host_unseen')->free();
+        $this->connection()->commit();
+        $this->manager()->releaseHeldRevocations();
+
+        self::assertSame([], $this->log()->revoked, 'The rows are live again: re-checked before the effect runs.');
+        $phone->request('GET', '/page');
+        self::assertStringStartsWith('alice@example.com', $this->body($phone));
+    }
+
     public function testARevocationKeptAtTheOuterCommitWithOneSessionUndoneOnlyCountsTheOther(): void
     {
         $this->setUpDatabase('cache');

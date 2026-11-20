@@ -141,16 +141,25 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         ) : null;
         if ($event instanceof AccountErasedEvent && $connection->isTransactionActive()) {
             // 1.22.0: inside the application's transaction (watched, checked above) the event waits for its outermost
-            // commit and is dropped on a rollback, a failed commit or kernel.reset.
+            // commit; it is dropped on a rollback (of that transaction, or of a savepoint enclosing the erasure), a failed
+            // commit or kernel.reset.
             // @igor-ignore - the queue holds the closure until that commit; nothing is kept on this service
-            $this->commits?->hold($connection, fn () => $this->dispatchErased($event));
+            if ($this->commits?->hold($connection, fn () => $this->dispatchErased($event)) !== true) {
+                // Audit VT-L1: the queue stopped following the transaction during the erasure (it ended unseen and a new
+                // one began): no commit can be awaited, so the event is not dispatched, loudly.
+                $this->logger?->error('NowoUserKitBundle: AccountErasedEvent was not dispatched: the transaction of the erasure can no longer be followed to its commit.', ['user_type' => $event->userType, 'user_id' => $event->userId]);
+            }
             $event = null;
         }
         // Marks in the revocation cache of the session eraser: what was erased is committed now, not at the end of the
-        // request. Then, when the erasure ran in UserKit's own transaction, AccountErasedEvent (committed by now).
-        $this->commits?->release();
-        if ($event instanceof AccountErasedEvent) {
-            $this->dispatchErased($event);
+        // request. Then, when the erasure ran in UserKit's own transaction, AccountErasedEvent (committed by now). Audit
+        // VT-M2: an earlier committed effect that throws from the release does not cost the event; it goes on afterwards.
+        try {
+            $this->commits?->release();
+        } finally {
+            if ($event instanceof AccountErasedEvent) {
+                $this->dispatchErased($event);
+            }
         }
 
         return $ran;
