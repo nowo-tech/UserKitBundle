@@ -190,7 +190,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outside UserKit's.
 - `PersonalDataEraser::erase()` dispatches the event of an erasure committed in its own transaction even when an earlier
   committed effect of the queue fails during the release; that failure is rethrown afterwards (audit VT-M2).
-- nowo-tech/transaction-doctrine **^1.8** is required (was ^1.5): 1.8.0 carries the fixes of the advisories
+- nowo-tech/transaction-doctrine **^1.8.1** is required (was ^1.5): 1.8.1 carries the fixes of the advisories
   GHSA-9wh3-m3m5-jffx and GHSA-65w2-9r4h-848g.
 - The `X-Conflict-Code` of a UserKit lock conflict answered over HTTP is computed with transaction-doctrine's
   `ConflictCode::forRequest()` (residual UK-2): when the request already committed earlier work (its commit mark, with
