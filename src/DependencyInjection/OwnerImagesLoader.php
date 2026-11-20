@@ -132,7 +132,7 @@ final class OwnerImagesLoader
             $container->setDefinition(DbalOwnerImagePointerStore::class, new Definition(DbalOwnerImagePointerStore::class, [new Reference('doctrine'), $manager, new Reference(UserKitTransactionRunner::class)]));
             // House rule LQ: binary collation of kind / subject_id on MySQL / MariaDB.
             $container->setDefinition(PointerCollationListener::class, (new Definition(PointerCollationListener::class, [new Reference('doctrine'), $manager]))
-                ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchemaTable']));
+                ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema']));
         }
         $container->setAlias(OwnerImagePointerStoreInterface::class, $store ?? DbalOwnerImagePointerStore::class)->setPublic(true);
 

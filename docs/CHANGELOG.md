@@ -157,6 +157,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Foreign keys kept when collating the owner columns (audit XI, latent).** `OwnerCollationListener` (1.16.1, session
+  and epoch tables) and `PointerCollationListener` (1.18.0, owner image pointers) replaced their table on
+  `postGenerateSchemaTable` (`setClassTable()`, DBAL 4.5+ with ORM 3.7+); ORM 3.7–3.8 then added the table's foreign
+  keys to the object it had replaced, so any foreign key starting on a collated table, and its index, would have been
+  missing from the generated schema on MySQL / MariaDB. None of these tables has one today, so no schema was affected.
+  Both listeners now run on `postGenerateSchema`, once every foreign key exists: with DBAL 4.5+ and ORM 3.7+ the table is
+  rebuilt with its editor (foreign keys and indexes included) and swapped in with `GenerateSchemaEventArgs::setSchema()`;
+  with anything older (ORM 2.x, ORM 3.0–3.6, DBAL 3.x–4.4) the column options are set in place. The platform is the one
+  of the schema tool's entity manager, and a manager that does not map the bundle entities is left alone. Same
+  collations as before. `postGenerateSchemaTable()` stays as a deprecated no-op; the constructor arguments are unused
+  (optional). Tests: foreign keys and indexes of every table with and without the listeners on MariaDB, MySQL 8.4,
+  MySQL 5.7, PostgreSQL and SQLite platforms (also in the DBAL 4.3 + ORM 3.6 and DBAL 3.8 jobs), and the created tables on
+  MySQL 8.4 / MariaDB 11.4 / PostgreSQL in the `real-databases` job.
+
 ## [1.22.0] - 2026-11-20
 
 ### Added

@@ -13,19 +13,26 @@ use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\DBAL\Types\Types;
-use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
-use Doctrine\Persistence\ManagerRegistry;
+use Nowo\UserKitBundle\OwnerImage\Entity\OwnerImagePointer;
+use Nowo\UserKitBundle\OwnerImage\Pointer\PointerCollationListener;
 use Nowo\UserKitBundle\Sessions\Doctrine\OwnerCollationListener;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Epoch\Entity\UserSessionEpoch;
+use Nowo\UserKitBundle\Tests\Support\SchemaShape;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use stdClass;
+use ReflectionMethod;
+
+use function array_map;
+use function dirname;
 
 /**
- * House rule LQ: the owner columns get a binary NO PAD collation on MySQL / MariaDB, nothing elsewhere.
+ * House rule LQ: the owner columns (and the owner image pointer's kind / subject_id) get a binary NO PAD collation on
+ * MySQL / MariaDB, nothing elsewhere. Audit XI (1.22.1): applied on postGenerateSchema, keeping every foreign key and
+ * index of every table, on every DBAL / ORM (this test also runs on DBAL 4.3 + ORM 3.6 and on DBAL 3.8 in CI).
  */
 final class OwnerCollationListenerTest extends TestCase
 {
@@ -47,37 +54,76 @@ final class OwnerCollationListenerTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{class-string, bool, string|null}>
+     * @return iterable<string, array{array<string, mixed>, string|null}>
      */
-    public static function cases(): iterable
+    public static function connections(): iterable
     {
-        yield 'session table, editor' => [UserSession::class, true, 'default'];
-        yield 'session table, in place' => [UserSession::class, false, null];
-        yield 'epoch table, editor, named manager' => [UserSessionEpoch::class, true, 'sessions'];
+        yield 'MariaDB 11.4' => [['driver' => 'pdo_mysql', 'serverVersion' => '11.4.0-MariaDB'], 'utf8mb4_nopad_bin'];
+        yield 'MySQL 8.4' => [['driver' => 'pdo_mysql', 'serverVersion' => '8.4.0'], 'utf8mb4_0900_bin'];
+        yield 'MySQL 5.7' => [['driver' => 'pdo_mysql', 'serverVersion' => '5.7.44'], 'utf8mb4_bin'];
+        yield 'SQLite' => [['driver' => 'pdo_sqlite', 'memory' => true], null];
     }
 
     /**
-     * @param class-string $class
+     * @param array<string, mixed> $params
      */
-    #[DataProvider('cases')]
-    public function testTheOwnerColumnsAreCollated(string $class, bool $editor, ?string $managerName): void
+    #[DataProvider('connections')]
+    public function testTheColumnsAreCollatedAndEveryForeignKeyAndIndexIsKept(array $params, ?string $collation): void
     {
-        $table = $this->table();
-        $args  = $this->args($class, $table);
-        if (!$editor) {
-            // Older DBAL: the column is changed in place.
-            self::assertNull(OwnerCollationListener::collate($table, 'user_id', 'utf8mb4_0900_bin', false));
-            self::assertSame('utf8mb4_0900_bin', $table->getColumn('user_id')->getPlatformOption('collation'));
+        if ($params['driver'] !== 'pdo_sqlite' && !(new ReflectionMethod(Connection::class, 'getServerVersion'))->isPublic()) {
+            self::markTestSkipped('doctrine/dbal 3 reads the server while it generates a MySQL / PostgreSQL schema.');
+        }
+        $with    = SchemaShape::entityManager($params, [new OwnerCollationListener(), new PointerCollationListener()]);
+        $without = SchemaShape::entityManager($params);
+        $schema  = SchemaShape::generate($with);
 
-            return;
+        self::assertSame(SchemaShape::of(SchemaShape::generate($without)), SchemaShape::of($schema));
+        foreach ([UserSession::class => OwnerCollationListener::COLUMNS, UserSessionEpoch::class => OwnerCollationListener::COLUMNS, OwnerImagePointer::class => PointerCollationListener::COLUMNS] as $class => $columns) {
+            $table = $schema->getTable($with->getClassMetadata($class)->getTableName());
+            foreach ($columns as $column) {
+                self::assertSame($collation, $table->getColumn($column)->getPlatformOptions()['collation'] ?? null, $class . ' ' . $column);
+                self::assertSame($collation === null ? null : 'utf8mb4', $table->getColumn($column)->getPlatformOptions()['charset'] ?? null);
+            }
         }
-        (new OwnerCollationListener($this->registry(new MySQL80Platform(), $managerName), $managerName))->postGenerateSchemaTable($args);
-        $result = $args->getClassTable();
-        foreach (['user_type', 'user_id'] as $column) {
-            self::assertSame('utf8mb4_0900_bin', $result->getColumn($column)->getPlatformOption('collation'));
-            self::assertSame('utf8mb4', $result->getColumn($column)->getPlatformOption('charset'));
-        }
-        self::assertFalse($result->getColumn('session_hash')->hasPlatformOption('collation'));
+        self::assertArrayNotHasKey('collation', $schema->getTable($with->getClassMetadata(UserSession::class)->getTableName())->getColumn('session_hash')->getPlatformOptions());
+    }
+
+    public function testAManagerWithoutTheBundleEntitiesIsLeftAlone(): void
+    {
+        $em     = SchemaShape::entityManager(['driver' => 'pdo_sqlite', 'memory' => true], [new OwnerCollationListener(), new PointerCollationListener()], [dirname(__DIR__, 3) . '/Unit/Transaction/Fixtures']);
+        $schema = SchemaShape::generate($em);
+
+        self::assertNotSame([], $schema->getTables());
+        self::assertNotContains('user_kit_session', array_map(static fn (Table $table): string => $table->getName(), $schema->getTables()));
+    }
+
+    /**
+     * The helper keeps a foreign key and an index starting on the collated table (none of the bundle tables has one;
+     * a table replaced on postGenerateSchemaTable lost them on ORM 3.7–3.8 with DBAL 4.5+), and skips unknown columns.
+     */
+    public function testCollatingKeepsTheForeignKeysAndIndexesOfTheTable(): void
+    {
+        $schema = new Schema();
+        $parent = $schema->createTable('parent');
+        $parent->addColumn('id', Types::INTEGER);
+        $parent->setPrimaryKey(['id']);
+        $child = $schema->createTable('child');
+        $child->addColumn('id', Types::INTEGER);
+        $child->addColumn('parent_id', Types::INTEGER);
+        $child->addColumn('user_id', Types::STRING, ['length' => 191]);
+        $child->setPrimaryKey(['id']);
+        $child->addIndex(['user_id'], 'idx_owner');
+        $child->addForeignKeyConstraint('parent', ['parent_id'], ['id'], ['onDelete' => 'CASCADE'], 'fk_parent');
+        $before = SchemaShape::of($schema);
+        $args   = new GenerateSchemaEventArgs(SchemaShape::entityManager(['driver' => 'pdo_mysql', 'serverVersion' => '8.4.0']), $schema);
+
+        OwnerCollationListener::collateSchema($args, ['child'], ['missing'], 'utf8mb4_bin');
+        self::assertSame($schema, $args->getSchema(), 'Nothing to collate: the schema is kept.');
+
+        OwnerCollationListener::collateSchema($args, ['child'], ['user_id', 'missing'], 'utf8mb4_bin');
+        self::assertSame($before, SchemaShape::of($args->getSchema()));
+        self::assertContains('parent_id->parent(id) CASCADE', SchemaShape::of($args->getSchema())['child']['fks']);
+        self::assertSame('utf8mb4_bin', $args->getSchema()->getTable('child')->getColumn('user_id')->getPlatformOptions()['collation'] ?? null);
     }
 
     /**
@@ -87,7 +133,7 @@ final class OwnerCollationListenerTest extends TestCase
     {
         yield 'DBAL 4.5, ORM 3.7' => [true, true, true, true];
         yield 'DBAL 4.3/4.4 (no Schema::edit), ORM 3.7' => [true, false, true, false];
-        yield 'DBAL 4.5, ORM 3.0-3.6 (no setClassTable)' => [true, true, false, false];
+        yield 'DBAL 4.5, ORM 3.0-3.6 (no setSchema)' => [true, true, false, false];
         yield 'DBAL 4.3/4.4, ORM 3.0-3.6' => [true, false, false, false];
         yield 'DBAL 3.x / 4.0-4.2, ORM 3.7' => [false, false, true, false];
         yield 'DBAL 3.x / 4.0-4.2, ORM 2.x' => [false, false, false, false];
@@ -95,9 +141,9 @@ final class OwnerCollationListenerTest extends TestCase
     }
 
     #[DataProvider('apiCombinations')]
-    public function testTheEditorPathNeedsEveryApi(bool $tableEdit, bool $schemaEdit, bool $setClassTable, bool $expected): void
+    public function testTheEditorPathNeedsEveryApi(bool $tableEdit, bool $schemaEdit, bool $setSchema, bool $expected): void
     {
-        self::assertSame($expected, OwnerCollationListener::editorSupported($tableEdit, $schemaEdit, $setClassTable));
+        self::assertSame($expected, OwnerCollationListener::editorSupported($tableEdit, $schemaEdit, $setSchema));
     }
 
     public function testTheInPlacePathKeepsTheSameTable(): void
@@ -108,25 +154,15 @@ final class OwnerCollationListenerTest extends TestCase
         self::assertSame('utf8mb4_bin', $table->getColumn('user_type')->getPlatformOption('collation'));
     }
 
-    public function testOtherEntitiesAndExactPlatformsAreUntouched(): void
+    public function testTheFormerTableEventDoesNothing(): void
     {
-        foreach ([[stdClass::class, new MySQL80Platform()], [UserSession::class, new PostgreSQLPlatform()]] as [$class, $platform]) {
-            $table = $this->table();
-            $args  = $this->args($class, $table);
-            (new OwnerCollationListener($this->registry($platform, null)))->postGenerateSchemaTable($args);
-            self::assertSame($table, $args->getClassTable());
-            self::assertFalse($table->getColumn('user_id')->hasPlatformOption('collation'));
-        }
-    }
+        $table = $this->table();
+        $args  = new GenerateSchemaTableEventArgs(new ClassMetadata(UserSession::class), new Schema(), $table);
+        (new OwnerCollationListener())->postGenerateSchemaTable($args);
+        (new PointerCollationListener())->postGenerateSchemaTable($args);
 
-    public function testNoOrmManagerIsANoOp(): void
-    {
-        $table    = $this->table();
-        $args     = $this->args(UserSession::class, $table);
-        $registry = $this->createStub(ManagerRegistry::class);
-        $registry->method('getManagerForClass')->willReturn(null);
-        (new OwnerCollationListener($registry))->postGenerateSchemaTable($args);
-        self::assertFalse($args->getClassTable()->getColumn('user_id')->hasPlatformOption('collation'));
+        self::assertSame($table, $args->getClassTable());
+        self::assertFalse($table->getColumn('user_id')->hasPlatformOption('collation'));
     }
 
     private function table(): Table
@@ -137,26 +173,5 @@ final class OwnerCollationListenerTest extends TestCase
         }
 
         return $table;
-    }
-
-    /**
-     * @param class-string $class
-     */
-    private function args(string $class, Table $table): GenerateSchemaTableEventArgs
-    {
-        return new GenerateSchemaTableEventArgs(new ClassMetadata($class), new Schema(), $table);
-    }
-
-    private function registry(AbstractPlatform $platform, ?string $managerName): ManagerRegistry
-    {
-        $connection = $this->createStub(Connection::class);
-        $connection->method('getDatabasePlatform')->willReturn($platform);
-        $manager = $this->createStub(EntityManagerInterface::class);
-        $manager->method('getConnection')->willReturn($connection);
-        $registry = $this->createStub(ManagerRegistry::class);
-        $registry->method('getManagerForClass')->willReturn($managerName === null ? $manager : null);
-        $registry->method('getManager')->willReturn($manager);
-
-        return $registry;
     }
 }
