@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.22.0](#to-1220)
   - [Moving an eraser off `CommitQueue`](#moving-an-eraser-off-commitqueue)
 - [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
@@ -61,6 +62,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.22.0
+
+From **1.21.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 From **1.21.0** (minor):
 
