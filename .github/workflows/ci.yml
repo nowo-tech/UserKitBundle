@@ -260,6 +260,27 @@ jobs:
       - name: Owner collation listener
         run: vendor/bin/phpunit tests/Unit/Sessions/Doctrine/OwnerCollationListenerTest.php
 
+  storage-kit-1:
+    name: Owner images on StorageKit 1.6.1
+    runs-on: ubuntu-latest
+    # Light mode: skipped (a skipped non-matrix job reports its own name as skipped, accepted by branch protection).
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.mode != 'light' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, gd, sodium
+          tools: composer:v2
+      - name: Install StorageKit 1.6.1 (the main jobs resolve 2.x)
+        run: |
+          composer require --dev nowo-tech/storage-kit-bundle:1.6.1 --no-interaction --no-update --with-all-dependencies
+          composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
+          composer show nowo-tech/storage-kit-bundle | grep -E '^versions'
+      - name: Owner image tests
+        run: vendor/bin/phpunit --no-coverage tests/Unit/OwnerImage tests/Integration/OwnerImage
+
   real-databases:
     name: Session transactions on PostgreSQL, MySQL and MariaDB
     runs-on: ubuntu-latest

@@ -74,7 +74,7 @@
         "league/flysystem-memory": "^3.29",
         "nowo-tech/audit-kit-bundle": "^1.16 || ^2.0",
         "nowo-tech/phpstan-frankenphp": "^1.4",
-        "nowo-tech/storage-kit-bundle": "^1.6.1",
+        "nowo-tech/storage-kit-bundle": "^1.6.1 || ^2.0",
         "phpstan/extension-installer": "^1.0",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
@@ -135,6 +135,6 @@
         "igor": "Run Igor FrankenPHP worker-state audit (REQ-CS-008)"
     },
     "suggest": {
-        "nowo-tech/storage-kit-bundle": "^1.6.1: default storage of owner_images (profile pictures, organization logos)"
+        "nowo-tech/storage-kit-bundle": "^1.6.1 || ^2.0: default storage of owner_images (profile pictures, organization logos)"
     }
 }

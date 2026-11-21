@@ -161,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- StorageKit 2.0 is accepted: `nowo-tech/storage-kit-bundle` (dev dependency, the default owner image storage) is now `^1.6.1 || ^2.0`. The owner image adapter uses only ports and services that 2.0 keeps (no code change); the owner image tests run on both majors, and a new CI job runs them on StorageKit 1.6.1. StorageKit 2.0 writes its entities through a private entity manager, so owner image changes no longer flush the host's pending changes; a host on 2.0 that uses the Instance Settings bucket requires `nowo-tech/instance-settings-bundle` itself.
 - AuditKit 2.0 is accepted: `nowo-tech/audit-kit-bundle` (dev dependency) is now `^1.16 || ^2.0`. AuditKit 2.0 changed the `flush_mode` default from `host` to `isolated`; the owner image audit bridge needs `isolated`, so hosts on 2.0 get the right mode without configuring it, and the test of the `host` build error now sets `flush_mode: host` explicitly.
 - Demo: runs in UiKit's demo platform shell (`@NowoUiKit/demo_platform/layout.html.twig`, UiKit ^2.60): the demo declares itself in `templates/base.html.twig` (sections, sign-in and user menu from the shell), the pages use the page header and section cards, the demo's own masthead is gone, a demo-platform e2e spec checks the layout rules, the drawer and axe, and the README screenshots no longer show the Symfony toolbar.
 
