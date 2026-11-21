@@ -7,7 +7,7 @@
         "doctrine/doctrine-bundle": "^3.0",
         "doctrine/orm": "^3.0",
         "nowo-tech/form-kit-bundle": "^2.22",
-        "nowo-tech/ui-kit-bundle": "^2.49",
+        "nowo-tech/ui-kit-bundle": "^2.60",
         "nowo-tech/user-kit-bundle": "@dev",
         "php": ">=8.2",
         "symfony/console": "^8.0",

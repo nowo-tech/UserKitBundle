@@ -3,19 +3,20 @@
 {% block title %}Login{% endblock %}
 
 {% block nowo_ui_page_header %}
-    {{ include(nowo_ui_partial('page_header'), {title: 'Demo login'}) }}
+    {{ include(nowo_ui_partial('page_header'), {title: 'Demo login', intro: 'Sign in with the demo user to see the account status, presence and the session registry.'}) }}
+{% endblock %}
+
+{#- A failed sign-in is the shell's error flash, under the page header. -#}
+{% block nowo_ui_flashes %}
+    {{ include('@NowoUiKit/demo_platform/_flashes.html.twig', {flash_messages: error ? {error: [error.messageKey|trans(error.messageData, 'security')]} : null}) }}
 {% endblock %}
 
 {% block body %}
-    {% if error %}
-        <div class="nowo-ui-flash nowo-ui-flash--error" role="alert">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-    {% endif %}
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__body">
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Credentials', kind: 'form', intro: 'Demo credentials: demo@user-kit.test / demo', form: form} %}
+        {% block section_body %}
             {{ form_start(form) }}
                 {{ form_rest(form) }}
             {{ form_end(form, {render_rest: false}) }}
-            <p class="nowo-ui-muted">Demo credentials: <code>demo@user-kit.test</code> / <code>demo</code></p>
-        </div>
-    </section>
+        {% endblock %}
+    {% endembed %}
 {% endblock %}

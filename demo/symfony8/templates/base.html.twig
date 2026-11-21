@@ -1,32 +1,19 @@
-{#- REQ-DEMO-014: the demo shell is UiKit's admin layout with UiKit's default theme (nowo-ui.css from the bundle's own
-    asset package, no CSS framework, no CDN, no inline styles). nowo_ui_kit.layouts.admin points here, so "My sessions"
-    and the session administration (UiKit page contract, REQ-UI-003) render inside the same shell. -#}
-{% extends '@NowoUiKit/layout/admin.html.twig' %}
-
-{% block nowo_ui_document_title %}{% block title %}User Kit Demo{% endblock %}{% endblock %}
-
-{% block nowo_ui_navigation %}
-    {% set _route = app.request.attributes.get('_route') %}
-    <header class="nowo-ui-header" data-testid="demo-masthead">
-        <a class="nowo-ui-brand" href="{{ path('demo_home') }}">User Kit Bundle · Symfony 8</a>
-        <nav class="nowo-ui-menu" aria-label="User Kit Bundle">
-            <a class="nowo-ui-link" href="{{ path('demo_home') }}"{% if _route == 'demo_home' %} aria-current="page"{% endif %}>Home</a>
-            {% if app.user %}
-                <a class="nowo-ui-link" href="{{ path('nowo_user_kit_sessions') }}" data-testid="demo-nav-sessions"{% if _route == 'nowo_user_kit_sessions' %} aria-current="page"{% endif %}>My sessions</a>
-            {% endif %}
-        </nav>
-        <div class="nowo-ui-header__end">
-            {% if app.user %}
-                <a class="nowo-ui-link" href="{{ path('demo_logout') }}">Logout</a>
-            {% else %}
-                <a class="nowo-ui-link" href="{{ path('demo_login') }}"{% if _route == 'demo_login' %} aria-current="page"{% endif %}>Login</a>
-            {% endif %}
-            {{ include('@NowoUiKitBundle/partials/_theme_toggle.html.twig', { compact: true }, false) }}
-        </div>
-    </header>
-{% endblock %}
-
-{% block nowo_ui_content %}{% block body %}{% endblock %}{% endblock %}
+{#- REQ-DEMO-014: the demo runs inside UiKit's shared demo platform shell (@NowoUiKit/demo_platform/layout.html.twig).
+    This file only declares the demo (nowo_ui_demo_platform); nowo_ui_kit.layouts.admin / guest point here, so "My
+    sessions" and the session administration (UiKit page contract, REQ-UI-003) render inside the same shell. -#}
+{% extends '@NowoUiKit/demo_platform/layout.html.twig' %}
+{% set _demo_nav = app.user
+    ? [{label: 'Home', route: 'demo_home'}, {label: 'My sessions', route: 'nowo_user_kit_sessions', section: 'Account', testid: 'demo-nav-sessions'}]
+    : [{label: 'Home', route: 'demo_home'}] %}
+{% set nowo_ui_demo_platform = {
+    bundle: 'User Kit',
+    home_route: 'demo_home',
+    repository: 'https://github.com/nowo-tech/UserKitBundle',
+    translation_domain: false,
+    auth: {login_route: 'demo_login', logout_route: 'demo_logout'},
+    nav: _demo_nav,
+} %}
+{% block nowo_ui_document_title %}{% block title %}User Kit Demo{% endblock %} — Symfony 8{% endblock %}
 
 {% block nowo_ui_scripts %}
     {{ parent() }}
