@@ -225,12 +225,12 @@ final class OwnerImageAuditBridgeTest extends OwnerImagesKernelTestCase
     }
 
     /**
-     * Audit TC-M1: AuditKit's default flush mode "host" fails the container build.
+     * Audit TC-M1: AuditKit's flush mode "host" (explicit: the default is isolated since AuditKit 2.0) fails the container build.
      */
     public function testTheHostFlushModeFailsTheBuild(): void
     {
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage('flush_mode: isolated');
-        $this->bootAudit(['enabled' => true], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class]]);
+        $this->bootAudit(['enabled' => true], ['user_class' => AuditedUser::class, 'action_log' => ['entity_class' => IdActionLog::class, 'flush_mode' => 'host']]);
     }
 }

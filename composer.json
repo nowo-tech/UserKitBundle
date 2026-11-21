@@ -72,7 +72,7 @@
         "friendsofphp/php-cs-fixer": "^3.0",
         "igor-php/igor-php": "^0.10.0",
         "league/flysystem-memory": "^3.29",
-        "nowo-tech/audit-kit-bundle": "^1.16",
+        "nowo-tech/audit-kit-bundle": "^1.16 || ^2.0",
         "nowo-tech/phpstan-frankenphp": "^1.4",
         "nowo-tech/storage-kit-bundle": "^1.6.1",
         "phpstan/extension-installer": "^1.0",
