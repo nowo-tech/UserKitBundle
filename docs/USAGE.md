@@ -955,11 +955,11 @@ signing out one device does not void its remember-me cookie (see [Remember-me ep
 
 Since 1.18, opt-in (`owner_images.enabled`). Each subject gets one square image per **kind**: a user's profile picture
 (`avatar`), an organization's logo (`org_logo`), its dark-theme logo (`org_logo_dark`), a project icon, and so on. The
-bundle owns the port, the Twig helpers, the form field and the GDPR hooks. **StorageKitBundle 1.6+** stores the files
+bundle owns the port, the Twig helpers, the form field and the GDPR hooks. **StorageKitBundle 1.6.1+ (1.x or 2.x)** stores the files
 by default, or you plug in your own storage.
 
 ```bash
-composer require nowo-tech/storage-kit-bundle   # 1.6+, the default storage
+composer require nowo-tech/storage-kit-bundle   # 1.6.1+ or 2.x, the default storage
 ```
 
 ```yaml
