@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-11-16  
+**Last audited**: 2026-11-22  
 **Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
@@ -224,6 +224,23 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `EventSubscriber/StorageFailureSubscriber.php` | Maps UserKit failures to responses | FR-TX-001 | Mapped |
 | `EventSubscriber/UnitOfWorkBoundarySubscriber.php` | Replaces a closed manager at boundaries | FR-TX-001, FR-RUNTIME-001 | Mapped |
 
+## Id-based access ports and conflict wiring (1.21–1.23)
+
+| Source file | Spec section | Requirement IDs | Status |
+| --- | --- | --- | --- |
+| `DependencyInjection/Compiler/ConflictResponsePass.php` | Wires the conflict answer policy and code once every extension is loaded | FR-TX-002 | Mapped |
+| `Sessions/Access/SessionAccessInterface.php` | Session access by ids (port) | FR-ACC-001 | Mapped |
+| `Sessions/Access/SessionAccess.php` | Default session access by ids | FR-ACC-001 | Mapped |
+| `Sessions/Access/SessionActor.php` | Actor by ids: owner reference plus role names | FR-ACC-001 | Mapped |
+| `Sessions/Security/SessionsIdAccessCheckerInterface.php` | Ids-only twin of the sessions access checker | FR-ACC-001 | Mapped |
+| `Sessions/Security/UnavailableSessionsAccessChecker.php` | Fail-closed stand-in for a missing checker while pages are off | FR-ACC-001 | Mapped |
+| `Sessions/Event/SessionIdAccessCheckEvent.php` | Narrow-only event after a session access grant | FR-ACC-001 | Mapped |
+| `OwnerImage/Access/OwnerImageAccessCheckerInterface.php` | Owner image access by subject ids (port) | FR-ACC-002 | Mapped |
+| `OwnerImage/Access/OwnerImageAccessChecker.php` | Default owner image access by ids | FR-ACC-002 | Mapped |
+| `OwnerImage/Access/OwnerImageIdAccessInterface.php` | Ids-only twin of the owner image access SPI | FR-ACC-002 | Mapped |
+| `OwnerImage/Event/OwnerImageIdAccessCheckEvent.php` | Narrow-only event with the granted subject ids | FR-ACC-002 | Mapped |
+| `PersonalData/Event/AccountErasedEvent.php` | Dispatched once per committed erasure, after the commit (1.22.0) | 003 FR-007 | Mapped |
+
 ## Translations
 
 | Source file | Spec section | Requirement IDs | Status |
@@ -247,13 +264,18 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | PHP — Twig | 1 | 1 |
 | PHP — UI preferences & product tour (002) | 18 | 18 |
 | PHP — personal data / GDPR (003) | 15 | 15 |
-| Sessions — session registry and limits (004, 005) | 51 | 51 |
+| Sessions — session registry and limits (004, 005) | 53 | 53 |
 | Owner images (1.18, 1.20) | 32 | 32 |
 | Ports, transactions and load readiness | 28 | 28 |
+| Id-based access ports and conflict wiring (1.21–1.23) | 12 | 12 |
 | Translations | 7 | 7 |
-| **Total production sources** | **176** | **176** |
+| **Total production sources** | **188** | **188** |
 
-Audit command (production count): `git ls-files src | wc -l` → **176** (2026-11-18). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+Audit command (production count): `git ls-files src | wc -l` → **188** (2026-11-22). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+
+## Inventory refresh (2026-11-22)
+
+- 1.21–1.23 sources (conflict response pass, id-based session and owner image access ports with their events, `AccountErasedEvent`): 12 files mapped under one new category (`FR-TX-002`, `FR-ACC-001`, `FR-ACC-002`, `003 FR-007`).
 
 ## Inventory refresh (2026-11-16)
 

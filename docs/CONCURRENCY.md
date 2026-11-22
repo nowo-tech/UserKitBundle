@@ -116,11 +116,14 @@ replayed.
 
 ## Residual risks
 
-- **Commits made outside UserKit's own steps (audit TH UK-2).** UserKit marks `CONFLICT_002` only around its own
-  multi-step autocommit paths. When your controller commits and then a UserKit call meets a lock conflict (for example
-  a password change, then the session revocation), the answer is `CONFLICT_001` with `Retry-After`, as 1.20 answered 503
-  with `Retry-After`. Request-level commit detection is covered from nowo-tech/transaction-doctrine 1.6 (UserKit adopts it
-  with that version); until then, make such controllers idempotent or run them as one write unit.
+- **Commits made outside UserKit's own steps (audit TH UK-2).** UserKit marks `CONFLICT_002` itself only around its own
+  multi-step autocommit paths. Since 1.22.0 (nowo-tech/transaction-doctrine ^1.8.1, which UserKit requires)
+  `StorageFailureSubscriber` also asks `ConflictCode::forRequest()`: when your controller commits and then a UserKit
+  call meets a lock conflict (for example a password change, then the session revocation), the request's commit mark
+  turns the answer into `CONFLICT_002` (409, no `Retry-After`), as for a commit made inside UserKit. What is left: a
+  failure with no commit mark (a request whose connection the commit tracking does not follow, or a conflict outside a
+  request, such as a console command or a message) is decided by the failure alone and answers `CONFLICT_001` with
+  `Retry-After`, so make such code idempotent or run it as one write unit.
 
 - **The session limit's lock inside your transaction (audit QM-L3).** The named lock is a session lock released right
   after the registration. When UserKit's connection is inside a transaction your application opened at sign-in, the
