@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Sessions;
 use Closure;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception as DBALException;
 use InvalidArgumentException;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Doctrine\UserSessionStore;
@@ -759,7 +760,31 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
     private function tellRevoked(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, array $ids, bool $audit, ?string $customReason, array $context, bool $invalidated): void
     {
         if ($ids !== [] || $audit) {
-            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated, $actor !== null ? $this->owner($actor) : null, $this->now()));
+            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated, $actor !== null ? $this->actorReference($actor) : null, $this->now()));
+        }
+    }
+
+    /**
+     * Audit YQ-L2 (1.23.1): the actor's reference on {@see UserSessionsRevokedEvent} comes from the host's owner
+     * resolver once the revocation is written (after UserKit's own commit, or still inside the caller's transaction); a
+     * resolver that throws for an actor it does not map leaves the reference null instead of failing the revocation.
+     * Only the exception class is logged (its message may hold personal data).
+     *
+     * Audit YR-U-L1: a database failure is rethrown, never swallowed. Inside the caller's transaction it may have rolled
+     * the revocation back (a deadlock on MySQL) or aborted the transaction (PostgreSQL); the caller must see it.
+     *
+     * @throws DBALException
+     */
+    private function actorReference(object $actor): ?SessionUser
+    {
+        try {
+            return $this->owner($actor);
+        } catch (DBALException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->logger?->warning('NowoUserKitBundle: the session owner resolver failed for the actor of a session revocation; the event carries no actor reference.', ['exception' => $exception::class]);
+
+            return null;
         }
     }
 }

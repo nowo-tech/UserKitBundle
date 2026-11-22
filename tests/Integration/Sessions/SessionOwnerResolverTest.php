@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
+use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\Model\RevocationReason;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
@@ -16,10 +17,15 @@ use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\MemberOwnerResolver;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\NoOwnerResolver;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RecordingLogger;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\SecurityMember;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\SessionEventLog;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\ThrowingActorOwnerResolver;
+use RuntimeException;
 use stdClass;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 
+use function array_filter;
 use function array_map;
+use function array_values;
 
 /**
  * DDD ports: `sessions.owner.resolver` (one owner for the security user and the entity), `sessions.owner.on_unresolved`
@@ -118,6 +124,35 @@ final class SessionOwnerResolverTest extends SessionsKernelTestCase
 
         $this->expectException(UnresolvedSessionOwnerException::class);
         $this->em()->flush();
+    }
+
+    public function testAResolverThatThrowsForTheActorLeavesTheRevocationCommittedWithoutActorReference(): void
+    {
+        // Audit YQ-L2 (1.23.1): the actor's reference is resolved after the revocation committed.
+        $this->boot(['owner' => ['resolver' => 'test.owners']], services: static function (ContainerConfigurator $c): void {
+            $c->services()->set('test.owners', ThrowingActorOwnerResolver::class);
+            $c->services()->set('logger', RecordingLogger::class)->public();
+            $c->services()->set(SessionEventLog::class)->public()
+                ->tag('kernel.event_listener', ['event' => UserSessionsRevokedEvent::class, 'method' => 'onRevoked']);
+        });
+        $logger = $this->container()->get('logger');
+        self::assertInstanceOf(RecordingLogger::class, $logger);
+        $events = $this->container()->get(SessionEventLog::class);
+        self::assertInstanceOf(SessionEventLog::class, $events);
+        $alice = $this->member('alice@example.com');
+        $this->signIn('alice@example.com');
+        $this->signIn('alice@example.com');
+        $logger->take();
+
+        self::assertSame(2, $this->manager()->revokeOthers($alice, null, new stdClass()), 'The revocation is not undone by the resolver.');
+        self::assertCount(0, $this->rowsOf($alice), 'Committed.');
+        self::assertCount(1, $events->revoked, 'The event is dispatched.');
+        self::assertNull($events->revoked[0]->actorRef, 'With no actor reference.');
+        self::assertInstanceOf(stdClass::class, $events->revoked[0]->actor);
+        $warnings = array_values(array_filter($logger->take(), static fn (array $record): bool => $record['level'] === 'warning'));
+        self::assertCount(1, $warnings);
+        self::assertSame(['exception' => RuntimeException::class], $warnings[0]['context'], 'Only the exception class is logged.');
+        self::assertStringNotContainsString('alice@example.com', $warnings[0]['message']);
     }
 
     private function bootWithHostResolver(): RecordingLogger

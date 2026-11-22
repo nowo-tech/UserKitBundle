@@ -16,6 +16,7 @@ use function array_filter;
 use function array_unique;
 use function array_values;
 use function in_array;
+use function is_string;
 
 /**
  * Since 1.23.0: {@see OwnerImageAccessCheckerInterface} on the configured kinds and access service. Stateless.
@@ -37,13 +38,20 @@ final readonly class OwnerImageAccessChecker implements OwnerImageAccessCheckerI
         return $this->visibleOwners($viewerId, $kind, [$ownerId]) === [$ownerId];
     }
 
+    /**
+     * Audit YQ-I3 (1.23.1): an element that is not a string is refused like a malformed id, not a TypeError.
+     *
+     * @param array<mixed> $ownerIds
+     *
+     * @return list<string>
+     */
     public function visibleOwners(?string $viewerId, string $kind, array $ownerIds): array
     {
         $type = $this->kind($kind);
         if (!$type instanceof OwnerImageKind || ($viewerId !== null && !OwnerImageKinds::isSubjectId($viewerId))) {
             return [];
         }
-        $asked = array_values(array_unique(array_filter($ownerIds, OwnerImageKinds::isSubjectId(...))));
+        $asked = array_values(array_unique(array_filter($ownerIds, static fn (mixed $id): bool => is_string($id) && OwnerImageKinds::isSubjectId($id))));
         if ($asked === []) {
             return [];
         }
