@@ -16,6 +16,7 @@ use Nowo\UserKitBundle\OwnerImage\OwnerImageTarget;
 use Nowo\UserKitBundle\Tests\Support\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use stdClass;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 
 /**
@@ -51,6 +52,17 @@ final class OwnerImageIdAccessTest extends TestCase
         self::assertFalse($checker->canChange('alice ', 'avatar', 'alice'));
         self::assertFalse($checker->canChange('alice', 'avatar', "alice\u{200B}"));
         self::assertFalse($checker->canChange('alice', 'nope', 'alice'));
+    }
+
+    public function testNonStringOwnerIdsAreRefusedNotATypeError(): void
+    {
+        // Audit YQ-I3 (1.23.1): a mixed-type array from a host that ignores the list<string> contract.
+        $checker = $this->checker(); // the class accepts array<mixed> since 1.23.1
+        $mixed   = ['alice', 42, null, ['bob'], new stdClass(), 1.5, true, 'bob'];
+
+        self::assertSame(['alice', 'bob'], $checker->visibleOwners('carol', 'avatar', $mixed), 'Non-string elements are left out like malformed ids.');
+        $onlyOthers = [7, false];
+        self::assertSame([], $checker->visibleOwners('carol', 'avatar', $onlyOthers));
     }
 
     public function testListenersNarrowButNeverWiden(): void

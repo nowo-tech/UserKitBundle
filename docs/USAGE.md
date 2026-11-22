@@ -1476,6 +1476,10 @@ $checker->canChange($actorSubjectId, 'org_logo', $orgId);
 Both services are stateless: every call reads the registry and asks the checker again (FrankenPHP worker mode, kernel
 reset false).
 
+`SessionIdAccessCheckEvent` and `OwnerImageIdAccessCheckEvent` fire only on these id ports: the sessions pages, the
+`AccessGuard` and the owner-image uploads have no equivalent event, so a listener that denies here does not restrict them
+(use your access checker or access service for that).
+
 ## AuthKit coexistence
 
 ```

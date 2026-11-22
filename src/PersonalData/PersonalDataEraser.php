@@ -10,6 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\SessionUserResolver;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Transaction\UserKitConflict;
@@ -115,7 +116,7 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         // The owner reference is read before any eraser runs: a removed entity loses its generated id at the flush.
         $owner = $this->dispatcher instanceof EventDispatcherInterface ? (new SessionUserResolver($this->doctrine))->resolve($user) : null;
         // 1.23.0 (DDD-host checklist B4): the actor's reference too, for hosts that keep no user object.
-        $actorRef = $this->dispatcher instanceof EventDispatcherInterface && $actor !== null ? (new SessionUserResolver($this->doctrine))->resolve($actor) : null;
+        $actorRef = $this->dispatcher instanceof EventDispatcherInterface && $actor !== null ? $this->actorReference($actor) : null;
         try {
             // @igor-ignore - Closure runs synchronously inside the runner; it is not stored on the service.
             $ran = $this->runner->runFor($entityManager, fn (): array => $this->runErasers($request));
@@ -194,6 +195,21 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
             } catch (Throwable $exception) {
                 $this->logFailure($exception);
             }
+        }
+    }
+
+    /**
+     * Audit YQ-L2 (1.23.1): the actor's reference is informative; an actor the resolver cannot read (a throwing metadata
+     * lookup) leaves it null instead of refusing the erasure. Only the exception class is logged.
+     */
+    private function actorReference(object $actor): ?SessionUser
+    {
+        try {
+            return (new SessionUserResolver($this->doctrine))->resolve($actor);
+        } catch (Throwable $exception) {
+            $this->logger?->warning('NowoUserKitBundle: the reference of the actor of a personal data erasure could not be resolved; AccountErasedEvent carries no actor reference.', ['exception' => $exception::class]);
+
+            return null;
         }
     }
 

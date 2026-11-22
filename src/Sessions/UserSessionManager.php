@@ -759,7 +759,24 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
     private function tellRevoked(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, array $ids, bool $audit, ?string $customReason, array $context, bool $invalidated): void
     {
         if ($ids !== [] || $audit) {
-            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated, $actor !== null ? $this->owner($actor) : null, $this->now()));
+            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated, $actor !== null ? $this->actorReference($actor) : null, $this->now()));
+        }
+    }
+
+    /**
+     * Audit YQ-L2 (1.23.1): the actor's reference on {@see UserSessionsRevokedEvent} comes from the host's owner
+     * resolver after the revocation committed; a resolver that throws for an actor it does not map leaves the reference
+     * null instead of failing a committed revocation. Only the exception class is logged (its message may hold personal
+     * data).
+     */
+    private function actorReference(object $actor): ?SessionUser
+    {
+        try {
+            return $this->owner($actor);
+        } catch (Throwable $exception) {
+            $this->logger?->warning('NowoUserKitBundle: the session owner resolver failed for the actor of a session revocation; the event carries no actor reference.', ['exception' => $exception::class]);
+
+            return null;
         }
     }
 }

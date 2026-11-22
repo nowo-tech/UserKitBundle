@@ -6,13 +6,20 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\RetryableException;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Nowo\TransactionContract\TransientStorageFailure;
 use Nowo\TransactionDoctrine\DoctrineTransactionRunner;
+use Nowo\UserKitBundle\PersonalData\ErasureRequest;
 use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
+use Nowo\UserKitBundle\PersonalData\PersonalDataEraserInterface;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\RecordingLogger;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\ThrowingForClassRegistry;
 use RuntimeException;
+use stdClass;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -71,6 +78,54 @@ final class AccountErasedEventTest extends TransactionalSessionsTestCase
         self::assertSame((string) $admin->getId(), $event->actorId);
         self::assertSame((string) $alice->getId(), $event->userId);
         self::assertEquals($this->clock()->now(), $event->occurredAt);
+    }
+
+    /**
+     * Audit YQ-L2 (1.23.1): an actor whose reference cannot be read does not refuse the erasure; the event carries no
+     * actor ids and only the exception class is logged.
+     */
+    public function testAnActorWhoseReferenceThrowsIsErasedWithoutActorIds(): void
+    {
+        $alice    = $this->bootErasure();
+        $doctrine = $this->container()->get('doctrine');
+        self::assertInstanceOf(ManagerRegistry::class, $doctrine);
+        $logger  = new RecordingLogger();
+        $remover = new class implements PersonalDataEraserInterface {
+            public ?EntityManagerInterface $em = null;
+
+            public function getKey(): string
+            {
+                return 'remove';
+            }
+
+            public function supports(object $user): bool
+            {
+                return $user instanceof Member;
+            }
+
+            public function erase(ErasureRequest $request): void
+            {
+                $this->em?->remove($request->user);
+            }
+        };
+        $remover->em = $this->em();
+        $eraser      = new PersonalDataEraser([$remover], [], new ThrowingForClassRegistry($doctrine, stdClass::class), $this->queue(), null, $this->dispatcher(), $logger, $this->clock());
+        $aliceId     = $alice->getId();
+
+        self::assertSame(['remove'], $eraser->erase($this->fresh($alice), new stdClass()));
+
+        self::assertCount(1, $this->erased(), 'The event is dispatched.');
+        $event = $this->erased()[0]['event'];
+        self::assertFalse($event->selfService);
+        self::assertNull($event->actorType);
+        self::assertNull($event->actorId);
+        self::assertSame((string) $aliceId, $event->userId);
+        $this->em()->clear();
+        self::assertNull($this->em()->find(Member::class, $aliceId), 'The erasure is committed.');
+        self::assertCount(1, $logger->records);
+        self::assertSame('warning', $logger->records[0]['level']);
+        self::assertSame(['exception' => RuntimeException::class], $logger->records[0]['context'], 'Only the exception class is logged.');
+        self::assertStringNotContainsString('alice@example.com', $logger->records[0]['message']);
     }
 
     public function testInsideAnApplicationTransactionItWaitsForTheOutermostCommit(): void
