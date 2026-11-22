@@ -165,6 +165,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AuditKit 2.0 is accepted: `nowo-tech/audit-kit-bundle` (dev dependency) is now `^1.16 || ^2.0`. AuditKit 2.0 changed the `flush_mode` default from `host` to `isolated`; the owner image audit bridge needs `isolated`, so hosts on 2.0 get the right mode without configuring it, and the test of the `host` build error now sets `flush_mode: host` explicitly.
 - Demo: runs in UiKit's demo platform shell (`@NowoUiKit/demo_platform/layout.html.twig`, UiKit ^2.60): the demo declares itself in `templates/base.html.twig` (sections, sign-in and user menu from the shell), the pages use the page header and section cards, the demo's own masthead is gone, a demo-platform e2e spec checks the layout rules, the drawer and axe, and the README screenshots no longer show the Symfony toolbar.
 
+### Fixed
+
+- A new `TranslationCatalogueTest` fails on missing keys and on non-en values identical to English of any length unless allow-listed per locale (true cognates), and on stale allow-list entries.
+
 ## [1.22.1] - 2026-11-21
 
 ### Fixed
