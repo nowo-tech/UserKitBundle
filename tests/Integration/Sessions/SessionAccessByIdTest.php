@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
+use Doctrine\DBAL\Exception as DBALException;
+use Doctrine\DBAL\Exception\TableNotFoundException;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Nowo\UserKitBundle\Sessions\Access\SessionAccess;
 use Nowo\UserKitBundle\Sessions\Access\SessionAccessInterface;
@@ -22,6 +24,7 @@ use RuntimeException;
 use stdClass;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
+use function sort;
 use function sprintf;
 use function str_pad;
 use function strtoupper;
@@ -248,6 +251,48 @@ final class SessionAccessByIdTest extends TransactionalSessionsTestCase
         $automatic = $this->log()->revoked[0] ?? self::fail('No revocation event.');
         self::assertNull($automatic->actorRef, 'Automatic revocation: no actor.');
         self::assertFalse($automatic->byOther());
+    }
+
+    /**
+     * Audit YR-U-L1 (1.23.1): inside the application's transaction the actor's reference is resolved before the
+     * commit. A database failure of a resolver that queries is rethrown, not swallowed: it may have rolled the
+     * revocation back (a deadlock on MySQL) or aborted the transaction (PostgreSQL), and no event may say "revoked".
+     */
+    public function testADatabaseFailureOfTheActorResolverInsideTheHostTransactionIsRethrown(): void
+    {
+        $this->setUpDatabase(sessions: ['owner' => ['resolver' => 'test.database_failing_owners']]);
+        $alice = $this->member('alice@example.com');
+        $owner = $this->manager()->owner($alice);
+        self::assertInstanceOf(SessionUser::class, $owner);
+        self::assertSame((string) $alice->getId(), $owner->id);
+        $this->register($owner, 'h-yr-1');
+        $this->register($owner, 'h-yr-2');
+        $this->log()->clear();
+
+        $this->connection()->beginTransaction();
+        try {
+            $this->manager()->revokeOthers($alice, null, new stdClass());
+            self::fail('The database failure was swallowed.');
+        } catch (DBALException $exception) {
+            self::assertInstanceOf(TableNotFoundException::class, $exception);
+        }
+        $this->connection()->rollBack();
+
+        self::assertSame([], $this->log()->revoked, 'No event says "revoked".');
+        self::assertSame(['h-yr-1', 'h-yr-2'], $this->sorted($this->store()->liveAmong(['h-yr-1', 'h-yr-2'])), 'The host rolled back: the sessions are still live.');
+        self::assertSame(2, $this->manager()->revokeOthers($alice, null), 'Outside the failure the same revocation goes through.');
+    }
+
+    /**
+     * @param list<string> $values
+     *
+     * @return list<string>
+     */
+    private function sorted(array $values): array
+    {
+        sort($values);
+
+        return $values;
     }
 
     public function testTheServiceIsPublicAndStateless(): void

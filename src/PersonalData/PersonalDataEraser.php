@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\PersonalData;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
@@ -201,11 +202,18 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
     /**
      * Audit YQ-L2 (1.23.1): the actor's reference is informative; an actor the resolver cannot read (a throwing metadata
      * lookup) leaves it null instead of refusing the erasure. Only the exception class is logged.
+     *
+     * Audit YR-U-L1: a database failure is rethrown, never swallowed (inside the caller's transaction it may have rolled
+     * back or aborted that transaction).
+     *
+     * @throws DBALException
      */
     private function actorReference(object $actor): ?SessionUser
     {
         try {
             return (new SessionUserResolver($this->doctrine))->resolve($actor);
+        } catch (DBALException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             $this->logger?->warning('NowoUserKitBundle: the reference of the actor of a personal data erasure could not be resolved; AccountErasedEvent carries no actor reference.', ['exception' => $exception::class]);
 

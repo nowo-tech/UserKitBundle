@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures;
 
+use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Persistence\ObjectManager;
 use Doctrine\Persistence\ObjectRepository;
@@ -11,20 +12,26 @@ use RuntimeException;
 
 /**
  * Doctrine registry that throws when asked for the manager of one class (audit YQ-L2: an actor whose reference cannot
- * be read), and delegates everything else.
+ * be read), and delegates everything else. With `$database`, the failure is a real DBAL error of the default connection
+ * (audit YR-U-L1: a database failure is never swallowed).
  */
 final readonly class ThrowingForClassRegistry implements ManagerRegistry
 {
     /**
      * @param class-string $failing
      */
-    public function __construct(private ManagerRegistry $inner, private string $failing)
+    public function __construct(private ManagerRegistry $inner, private string $failing, private bool $database = false)
     {
     }
 
     public function getManagerForClass(string $class): ?ObjectManager
     {
         if ($class === $this->failing) {
+            $connection = $this->inner->getConnection();
+            if ($this->database && $connection instanceof Connection) {
+                $connection->executeQuery('SELECT yr_missing FROM yr_missing_table');
+            }
+
             throw new RuntimeException('No manager for the actor of alice@example.com');
         }
 

@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\Tests\Integration\Sessions;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\RetryableException;
+use Doctrine\DBAL\Exception\TableNotFoundException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\TransactionContract\TransientStorageFailure;
@@ -126,6 +127,29 @@ final class AccountErasedEventTest extends TransactionalSessionsTestCase
         self::assertSame('warning', $logger->records[0]['level']);
         self::assertSame(['exception' => RuntimeException::class], $logger->records[0]['context'], 'Only the exception class is logged.');
         self::assertStringNotContainsString('alice@example.com', $logger->records[0]['message']);
+    }
+
+    /**
+     * Audit YR-U-L1 (1.23.1): a database failure while reading the actor's reference is rethrown, never swallowed;
+     * nothing is erased and no event fires.
+     */
+    public function testADatabaseFailureOfTheActorReferenceIsRethrown(): void
+    {
+        $alice    = $this->bootErasure();
+        $doctrine = $this->container()->get('doctrine');
+        self::assertInstanceOf(ManagerRegistry::class, $doctrine);
+        $logger = new RecordingLogger();
+        $eraser = new PersonalDataEraser([], [], new ThrowingForClassRegistry($doctrine, stdClass::class, true), $this->queue(), null, $this->dispatcher(), $logger, $this->clock());
+
+        try {
+            $eraser->erase($this->fresh($alice), new stdClass());
+            self::fail('The database failure was swallowed.');
+        } catch (TableNotFoundException) {
+        }
+
+        self::assertSame([], $this->erased(), 'No event.');
+        self::assertSame([], $logger->records, 'Not logged as a mere missing reference.');
+        self::assertSame($alice->getId(), $this->fresh($alice)->getId(), 'Nothing erased.');
     }
 
     public function testInsideAnApplicationTransactionItWaitsForTheOutermostCommit(): void

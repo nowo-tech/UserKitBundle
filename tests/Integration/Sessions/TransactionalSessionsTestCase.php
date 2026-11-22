@@ -14,6 +14,7 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataEraser;
 use Nowo\UserKitBundle\Sessions\Entity\UserSession;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionsRevokedEvent;
 use Nowo\UserKitBundle\Sessions\Event\UserSessionStartedEvent;
+use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\DatabaseFailingActorOwnerResolver;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\FailedSignInFlow;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\PasswordInTransactionFlow;
@@ -61,6 +62,7 @@ abstract class TransactionalSessionsTestCase extends SessionsKernelTestCase
             false,
             static function (ContainerConfigurator $c) use ($userKit): void {
                 $c->services()->set('test.revocations', SharedMemoryPool::class)->public();
+                $c->services()->set('test.database_failing_owners', DatabaseFailingActorOwnerResolver::class)->autowire();
                 if (isset($userKit['personal_data'])) {
                     $c->services()->alias('test.eraser', PersonalDataEraser::class)->public();
                 }
