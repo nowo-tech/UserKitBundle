@@ -12,12 +12,15 @@ use Nowo\UserKitBundle\DependencyInjection\NowoUserKitExtension;
 use Nowo\UserKitBundle\DependencyInjection\SessionsLoader;
 use Nowo\UserKitBundle\Session\DefaultSessionInvalidator;
 use Nowo\UserKitBundle\Session\SessionInvalidatorInterface;
+use Nowo\UserKitBundle\Sessions\Access\SessionAccess;
+use Nowo\UserKitBundle\Sessions\Access\SessionAccessInterface;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
 use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
 use Nowo\UserKitBundle\Sessions\Security\AllowAllSessionsAccessChecker;
+use Nowo\UserKitBundle\Sessions\Security\RoleSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
 use Nowo\UserKitBundle\Sessions\Transaction\CommitQueue;
 use Nowo\UserKitBundle\Sessions\Transaction\TransactionBoundaryMiddleware;
@@ -34,6 +37,7 @@ use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Filesystem\Filesystem;
@@ -88,6 +92,24 @@ final class SessionsWiringTest extends TestCase
 
         $demo = $this->load(['enabled' => true, 'web_ui' => ['enabled' => true], 'security' => ['allow_unauthenticated' => true]]);
         self::assertSame(AllowAllSessionsAccessChecker::class, (string) $demo->getAlias(SessionsAccessCheckerInterface::class));
+    }
+
+    /**
+     * 1.23.0 (DDD-host checklist B8): the checker and the id access are wired whenever the registry is on, with or without
+     * the pages; without the pages the dev switch never installs the allow-all checker.
+     */
+    public function testTheIdAccessIsWiredWithoutThePages(): void
+    {
+        $headless = $this->load(['enabled' => true]);
+        self::assertSame(RoleSessionsAccessChecker::class, (string) $headless->getAlias(SessionsAccessCheckerInterface::class));
+        self::assertSame(SessionAccess::class, (string) $headless->getAlias(SessionAccessInterface::class));
+        self::assertTrue($headless->getAlias(SessionAccessInterface::class)->isPublic());
+        self::assertEquals(new Reference('security.role_hierarchy', ContainerInterface::NULL_ON_INVALID_REFERENCE), $headless->getDefinition(RoleSessionsAccessChecker::class)->getArgument(3));
+        self::assertFalse($headless->hasDefinition(SessionsController::class));
+
+        $devWithoutPages = $this->load(['enabled' => true, 'security' => ['allow_unauthenticated' => true]]);
+        self::assertSame(RoleSessionsAccessChecker::class, (string) $devWithoutPages->getAlias(SessionsAccessCheckerInterface::class), 'The dev switch only applies to the pages.');
+        self::assertFalse($this->load([])->hasDefinition(SessionAccess::class), 'Off with the feature.');
     }
 
     public function testSwitchesMustBeLiteralBooleans(): void

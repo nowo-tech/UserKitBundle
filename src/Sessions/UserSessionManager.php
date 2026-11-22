@@ -396,7 +396,7 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
             // 1.21.0: the revocation or the epoch bump is committed, the deletion is not: CONFLICT_002.
             throw $revoked !== [] || $this->epoch instanceof RememberMeEpoch ? $this->afterCommit($e) : $e;
         }
-        $this->dispatcher?->dispatch(new UserSessionsDeletedEvent($owner, $user, $deleted));
+        $this->dispatcher?->dispatch(new UserSessionsDeletedEvent($owner, $user, $deleted, $this->now()));
 
         return $deleted;
     }
@@ -579,7 +579,7 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
         } elseif ($state !== null) {
             $this->store->touch($hash, $owner, $now, $client->deviceId);
         } elseif ($inserted) {
-            $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, false));
+            $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, false, $now));
         }
         $markers           = $this->markers($session);
         $markers[$context] = ['h' => $hash, 'u' => $owner->key(), 's' => $now->getTimestamp()];
@@ -759,7 +759,7 @@ final readonly class UserSessionManager implements UserSessionsInterface, Sessio
     private function tellRevoked(SessionUser $owner, ?object $user, ?object $actor, RevocationReason $reason, array $ids, bool $audit, ?string $customReason, array $context, bool $invalidated): void
     {
         if ($ids !== [] || $audit) {
-            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated));
+            $this->dispatcher?->dispatch(new UserSessionsRevokedEvent($owner, $user, $actor, $reason, $ids, $customReason, $context, $invalidated, $actor !== null ? $this->owner($actor) : null, $this->now()));
         }
     }
 }

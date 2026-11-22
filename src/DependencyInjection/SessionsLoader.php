@@ -8,6 +8,8 @@ use Nowo\FormKitBundle\Form\CsrfOnlyFormFactory;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\SessionsPass;
 use Nowo\UserKitBundle\NowoUserKitBundle;
 use Nowo\UserKitBundle\Profile\ProfileRegistry;
+use Nowo\UserKitBundle\Sessions\Access\SessionAccess;
+use Nowo\UserKitBundle\Sessions\Access\SessionAccessInterface;
 use Nowo\UserKitBundle\Sessions\Client\SessionClientFactory;
 use Nowo\UserKitBundle\Sessions\Command\PurgeSessionsCommand;
 use Nowo\UserKitBundle\Sessions\Controller\SessionsController;
@@ -298,9 +300,45 @@ final class SessionsLoader
                 ->addTag(NowoUserKitExtension::TAG_ERASER, ['priority' => -130]));
         }
 
+        self::registerAccess($container, $sessions['security'], $webUi['enabled']);
         if ($webUi['enabled']) {
             self::registerWebUi($container, $webUi, $sessions['security']);
         }
+    }
+
+    /**
+     * The access checker of the session pages and, since 1.23.0, of {@see SessionAccessInterface} (registered whenever the
+     * registry is on, so a host without the bundle's pages checks access by id too). The dev switch
+     * `allow_unauthenticated` only applies with the pages (the debug-only gate of {@see SessionsPass} guards it there):
+     * without them the role checker answers.
+     *
+     * @param array{access_roles: list<string>, manage_roles: list<string>, access_checker: string|null, allow_unauthenticated: bool} $security
+     */
+    private static function registerAccess(ContainerBuilder $container, array $security, bool $webUi): void
+    {
+        $customId = $security['access_checker'];
+        if (is_string($customId) && $customId !== '') {
+            $container->setAlias(SessionsAccessCheckerInterface::class, $customId);
+        } elseif ($security['allow_unauthenticated'] && $webUi) {
+            $container->setDefinition(AllowAllSessionsAccessChecker::class, new Definition(AllowAllSessionsAccessChecker::class));
+            $container->setAlias(SessionsAccessCheckerInterface::class, AllowAllSessionsAccessChecker::class);
+        } else {
+            $container->setDefinition(RoleSessionsAccessChecker::class, new Definition(RoleSessionsAccessChecker::class, [
+                new Reference('security.authorization_checker'),
+                SessionsConfiguration::roles($security['access_roles']),
+                SessionsConfiguration::roles($security['manage_roles']),
+                new Reference('security.role_hierarchy', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            ]));
+            $container->setAlias(SessionsAccessCheckerInterface::class, RoleSessionsAccessChecker::class);
+        }
+        $container->setDefinition(SessionAccess::class, new Definition(SessionAccess::class, [
+            new Reference(UserSessionStore::class),
+            new Reference(UserSessionManager::class),
+            new Reference(SessionsAccessCheckerInterface::class),
+            new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+        ]));
+        $container->setAlias(SessionAccessInterface::class, SessionAccess::class)->setPublic(true);
     }
 
     /**
@@ -310,20 +348,6 @@ final class SessionsLoader
     private static function registerWebUi(ContainerBuilder $container, array $webUi, array $security): void
     {
         $container->setParameter(self::ALLOW_UNAUTHENTICATED_PARAMETER, $security['allow_unauthenticated']);
-        $customId = $security['access_checker'];
-        if (is_string($customId) && $customId !== '') {
-            $container->setAlias(SessionsAccessCheckerInterface::class, $customId);
-        } elseif ($security['allow_unauthenticated']) {
-            $container->setDefinition(AllowAllSessionsAccessChecker::class, new Definition(AllowAllSessionsAccessChecker::class));
-            $container->setAlias(SessionsAccessCheckerInterface::class, AllowAllSessionsAccessChecker::class);
-        } else {
-            $container->setDefinition(RoleSessionsAccessChecker::class, new Definition(RoleSessionsAccessChecker::class, [
-                new Reference('security.authorization_checker'),
-                SessionsConfiguration::roles($security['access_roles']),
-                SessionsConfiguration::roles($security['manage_roles']),
-            ]));
-            $container->setAlias(SessionsAccessCheckerInterface::class, RoleSessionsAccessChecker::class);
-        }
         $container->setDefinition(AccessGuard::class, new Definition(AccessGuard::class, [
             new Reference(SessionsAccessCheckerInterface::class),
             new Reference('security.token_storage', ContainerInterface::NULL_ON_INVALID_REFERENCE),

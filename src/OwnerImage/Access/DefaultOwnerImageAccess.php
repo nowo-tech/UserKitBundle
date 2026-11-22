@@ -13,8 +13,11 @@ use Nowo\UserKitBundle\OwnerImage\OwnerImageTarget;
  * byte), into the application bucket, counted against their own id; an `other` kind by nobody (configure your own
  * {@see OwnerImageAccessInterface}). Reading follows the kind's `read`: `public` = everyone, `authenticated` = any
  * signed-in viewer, `host` = nobody (your own access service decides). Stateless.
+ *
+ * Since 1.23.0 the same rules by subject id ({@see OwnerImageIdAccessInterface}): a `user` kind is changed by the user
+ * whose id equals the subject (`===`); a non-null viewer id is a signed-in viewer.
  */
-final readonly class DefaultOwnerImageAccess implements OwnerImageAccessInterface
+final readonly class DefaultOwnerImageAccess implements OwnerImageAccessInterface, OwnerImageIdAccessInterface
 {
     public function __construct(
         private OwnerImageSubjects $subjects,
@@ -37,6 +40,26 @@ final readonly class DefaultOwnerImageAccess implements OwnerImageAccessInterfac
         return match ($kind->read) {
             OwnerImageKind::READ_PUBLIC        => $subjectIds,
             OwnerImageKind::READ_AUTHENTICATED => $viewer === null ? [] : $subjectIds,
+            default                            => [],
+        };
+    }
+
+    /**
+     * Since 1.23.0: the user's own image only, for `user` kinds.
+     */
+    public function writableTargetById(string $actorId, OwnerImageKind $kind, string $subjectId): ?OwnerImageTarget
+    {
+        return $kind->isUserKind() && $actorId === $subjectId ? new OwnerImageTarget(null, $subjectId) : null;
+    }
+
+    /**
+     * Since 1.23.0: by the kind's `read` setting.
+     */
+    public function readableById(?string $viewerId, OwnerImageKind $kind, array $subjectIds): array
+    {
+        return match ($kind->read) {
+            OwnerImageKind::READ_PUBLIC        => $subjectIds,
+            OwnerImageKind::READ_AUTHENTICATED => $viewerId === null ? [] : $subjectIds,
             default                            => [],
         };
     }

@@ -114,6 +114,8 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
         }
         // The owner reference is read before any eraser runs: a removed entity loses its generated id at the flush.
         $owner = $this->dispatcher instanceof EventDispatcherInterface ? (new SessionUserResolver($this->doctrine))->resolve($user) : null;
+        // 1.23.0 (DDD-host checklist B4): the actor's reference too, for hosts that keep no user object.
+        $actorRef = $this->dispatcher instanceof EventDispatcherInterface && $actor !== null ? (new SessionUserResolver($this->doctrine))->resolve($actor) : null;
         try {
             // @igor-ignore - Closure runs synchronously inside the runner; it is not stored on the service.
             $ran = $this->runner->runFor($entityManager, fn (): array => $this->runErasers($request));
@@ -138,6 +140,8 @@ final readonly class PersonalDataEraser implements PersonalDataErasureInterface
             $this->clock?->now() ?? new DateTimeImmutable(),
             $request->isSelfService(),
             $request->context,
+            $actorRef?->type,
+            $actorRef?->id,
         ) : null;
         if ($event instanceof AccountErasedEvent && $connection->isTransactionActive()) {
             // 1.22.0: inside the application's transaction (watched, checked above) the event waits for its outermost

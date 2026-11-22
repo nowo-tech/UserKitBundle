@@ -32,6 +32,7 @@ use function bin2hex;
 use function constant;
 use function count;
 use function enum_exists;
+use function is_string;
 use function random_bytes;
 
 /**
@@ -488,6 +489,37 @@ final readonly class UserSessionStore
 
             return $rows;
         });
+    }
+
+    /**
+     * Since 1.23.0 (DDD-host checklist B8): the owner and state of the row of one public id. House rule LQ: the id is
+     * matched exactly in SQL (a byte comparison next to the indexed equality on MySQL / MariaDB, whose host collations
+     * fold case and pad spaces) and again with `===` on the row read back; a row whose owner is not usable (a padded id
+     * written before 1.16.1) is not returned.
+     *
+     * @return array{owner: SessionUser, revoked: bool, last_seen_at: DateTimeImmutable}|null null when no row has exactly that id
+     */
+    public function sessionByPublicId(string $publicId): ?array
+    {
+        $platform = $this->connection()->getDatabasePlatform();
+        $sql      = 'SELECT public_id, user_type, user_id, revoked_at, last_seen_at FROM ' . $this->table() . ' WHERE public_id = :pid'
+            . ($platform instanceof AbstractMySQLPlatform ? ' AND CAST(public_id AS BINARY) = CAST(:pid AS BINARY)' : '');
+        $rows = array_values(array_filter(
+            $this->connection()->fetchAllAssociative($sql, ['pid' => $publicId]),
+            static fn (array $row): bool => ($row['public_id'] ?? null) === $publicId,
+        ));
+        if (count($rows) !== 1) {
+            return null;
+        }
+        $type = $rows[0]['user_type'] ?? null;
+        $id   = $rows[0]['user_id'] ?? null;
+        if (!is_string($type) || !is_string($id) || !SessionUser::isUsable($type) || !SessionUser::isUsable($id)) {
+            return null;
+        }
+        /** @var DateTimeImmutable $lastSeen not-null column */
+        $lastSeen = Type::getType(Types::DATETIME_IMMUTABLE)->convertToPHPValue($rows[0]['last_seen_at'], $platform);
+
+        return ['owner' => new SessionUser($type, $id), 'revoked' => $rows[0]['revoked_at'] !== null, 'last_seen_at' => $lastSeen];
     }
 
     /**

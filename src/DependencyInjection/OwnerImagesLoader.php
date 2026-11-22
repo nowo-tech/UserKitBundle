@@ -16,6 +16,8 @@ use Nowo\StorageKitBundle\Upload\SquareImageProcessor;
 use Nowo\StorageKitBundle\Upload\SquareImageUploaderInterface;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\OwnerImageAuditPass;
 use Nowo\UserKitBundle\OwnerImage\Access\DefaultOwnerImageAccess;
+use Nowo\UserKitBundle\OwnerImage\Access\OwnerImageAccessChecker;
+use Nowo\UserKitBundle\OwnerImage\Access\OwnerImageAccessCheckerInterface;
 use Nowo\UserKitBundle\OwnerImage\Access\OwnerImageAccessInterface;
 use Nowo\UserKitBundle\OwnerImage\Audit\OwnerImageAuditListener;
 use Nowo\UserKitBundle\OwnerImage\EventListener\OwnerImageMemoListener;
@@ -159,6 +161,14 @@ final class OwnerImagesLoader
             new Reference(CommitQueue::class, ContainerInterface::NULL_ON_INVALID_REFERENCE),
         ]))->setPublic(true));
         $container->setAlias(OwnerImagesInterface::class, OwnerImages::class)->setPublic(true);
+        // 1.23.0 (DDD-host checklist B8): access checks by subject id.
+        $container->setDefinition(OwnerImageAccessChecker::class, new Definition(OwnerImageAccessChecker::class, [
+            new Reference(OwnerImageKinds::class),
+            new Reference(OwnerImageAccessInterface::class),
+            new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+            new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+        ]));
+        $container->setAlias(OwnerImageAccessCheckerInterface::class, OwnerImageAccessChecker::class)->setPublic(true);
 
         // 1.20: the AuditKit bridge is registered by OwnerImageAuditPass once AuditKit's services are known.
         $audit = $config['audit'] ?? ['enabled' => false, 'user_id_field' => null, 'actions' => OwnerImagesConfiguration::DEFAULT_AUDIT_ACTIONS, 'kinds' => []];
