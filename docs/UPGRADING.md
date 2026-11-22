@@ -77,8 +77,10 @@ From **1.22.1**: no change is required (minor, no BC break).
     from ids and roles) before you call `SessionAccessInterface`; until then every id check answers no.
   - With your own `owner_images.access`, implement `OwnerImageIdAccessInterface` likewise.
 - **Checker wiring.** The session access checker is now registered with `sessions.enabled` alone (it was only
-  registered with `sessions.web_ui.enabled`). A host that set `sessions.security.access_checker` to a service id that
-  does not exist, with the pages off, now gets a container error: fix or remove the setting.
+  registered with `sessions.web_ui.enabled`). Nothing breaks: with the pages off, a `sessions.security.access_checker`
+  id that does not exist still compiles as in 1.22; `SessionAccessInterface` then answers no to everything and the
+  container build logs it once (`bin/console debug:container --deprecations` / the compiler log). Fix the setting
+  before you use the id path. With the pages on, a missing service is an error, as before.
 
 ## To 1.22.1
 

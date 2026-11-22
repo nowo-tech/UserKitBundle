@@ -16,6 +16,8 @@ use Nowo\UserKitBundle\Sessions\Epoch\RememberMeEpoch;
 use Nowo\UserKitBundle\Sessions\EventListener\SessionRegistryListener;
 use Nowo\UserKitBundle\Sessions\Owner\SessionOwnerResolverInterface;
 use Nowo\UserKitBundle\Sessions\RegistrySessionInvalidator;
+use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
+use Nowo\UserKitBundle\Sessions\Security\UnavailableSessionsAccessChecker;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Symfony\Component\Cache\Adapter\ApcuAdapter;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -109,6 +111,8 @@ final class SessionsPass implements CompilerPassInterface
         }
 
         if (!$container->hasDefinition(SessionsController::class)) {
+            $this->failClosedOnMissingChecker($container);
+
             return;
         }
         $formCsrfDisabled = $container->hasParameter('form.type_extension.csrf.enabled')
@@ -124,6 +128,25 @@ final class SessionsPass implements CompilerPassInterface
             && (!$container->hasParameter('kernel.debug') || $container->getParameter('kernel.debug') !== true)) {
             throw new InvalidConfigurationException('nowo_user_kit.sessions.security.allow_unauthenticated: true is only allowed when kernel.debug is true (dev / demo): anybody could sign other users out. Set it to false and use security.manage_roles.');
         }
+    }
+
+    /**
+     * 1.23.0: without the pages, a `sessions.security.access_checker` id that does not exist must not break a container
+     * that compiled with 1.22 (which registered the checker with the pages only). The id path then answers no to
+     * everything ({@see UnavailableSessionsAccessChecker}) and the build logs it once.
+     */
+    private function failClosedOnMissingChecker(ContainerBuilder $container): void
+    {
+        if (!$container->hasAlias(SessionsAccessCheckerInterface::class)) {
+            return;
+        }
+        $target = (string) $container->getAlias(SessionsAccessCheckerInterface::class);
+        if ($container->has($target)) {
+            return;
+        }
+        $container->setDefinition(UnavailableSessionsAccessChecker::class, new Definition(UnavailableSessionsAccessChecker::class, [$target]));
+        $container->setAlias(SessionsAccessCheckerInterface::class, UnavailableSessionsAccessChecker::class);
+        $container->log($this, sprintf('NowoUserKitBundle: nowo_user_kit.sessions.security.access_checker "%s" does not exist; session access by id (SessionAccessInterface) answers no to everything.', $target));
     }
 
     /**

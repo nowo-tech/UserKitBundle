@@ -14,10 +14,12 @@ use Nowo\UserKitBundle\Sessions\Model\SessionClient;
 use Nowo\UserKitBundle\Sessions\Model\SessionUser;
 use Nowo\UserKitBundle\Sessions\Security\SessionsAccessCheckerInterface;
 use Nowo\UserKitBundle\Sessions\Security\SessionsIdAccessCheckerInterface;
+use Nowo\UserKitBundle\Sessions\Security\UnavailableSessionsAccessChecker;
 use Nowo\UserKitBundle\Tests\Integration\Sessions\Fixtures\Member;
 use Nowo\UserKitBundle\Tests\Support\RecordingLogger;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use stdClass;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 use function sprintf;
@@ -190,6 +192,27 @@ final class SessionAccessByIdTest extends TransactionalSessionsTestCase
         self::assertFalse($access->canViewSession(SessionActor::of($alice), $id), 'A failing checker is a refusal.');
         self::assertTrue($access->canViewSession(SessionActor::of(new SessionUser(Member::class, 'other')), $id), 'Another actor goes through canManageById.');
         self::assertFalse((new SessionAccess($this->store(), $this->manager(), $failing))->canViewSession($alice, $id), 'No logger needed.');
+    }
+
+    /**
+     * A 1.22 container with the pages off and an `access_checker` id that does not exist compiled (the checker was only
+     * registered with the pages): it still compiles, and the id path answers no.
+     */
+    public function testAMissingCheckerWithoutThePagesFailsClosedAndKeepsTheContainerCompiling(): void
+    {
+        $this->setUpDatabase('database', ['web_ui' => ['enabled' => false], 'security' => ['access_checker' => 'app.missing_checker']]);
+        $alice = new SessionUser(Member::class, '1');
+        $id    = $this->register($alice, 'h-alice');
+
+        foreach ([SessionActor::of($alice, ['ROLE_USER', 'ROLE_ADMIN']), SessionActor::of(new SessionUser(Member::class, '2'), ['ROLE_ADMIN'])] as $actor) {
+            self::assertFalse($this->access()->canViewSession($actor, $id));
+            self::assertFalse($this->access()->canRevokeSession($actor, $id));
+        }
+        $checker = $this->container()->get(SessionsAccessCheckerInterface::class);
+        self::assertInstanceOf(UnavailableSessionsAccessChecker::class, $checker);
+        self::assertSame('app.missing_checker', $checker->serviceId);
+        self::assertFalse($checker->canAccessOwn(new stdClass()));
+        self::assertFalse($checker->canManage(new stdClass(), new stdClass()));
     }
 
     public function testAStoredRowWithAnUnusableOwnerIsNeverReturned(): void
