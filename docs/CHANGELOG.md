@@ -159,8 +159,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- DDD-host checklist B8, access by ids: `Sessions\Access\SessionAccessInterface` (`canViewSession()` / `canRevokeSession()` by session public id) and `OwnerImage\Access\OwnerImageAccessCheckerInterface` (`canSee()` / `visibleOwners()` / `canChange()` by subject id), both public services. The actor is an id: a `SessionUser` reference, or a `Sessions\Access\SessionActor` that also carries the role names to check (matched exactly after the role hierarchy), for sessions; the user's subject id for owner images. Ids are matched exactly (house rule LQ): the session public id is compared in SQL (byte for byte on MySQL / MariaDB) and again with `===`; owner-image ids and kinds byte for byte. Every refusal gives the same answer (no oracle), a failure is logged (class only) and answered as a refusal, and nothing is kept between calls (FrankenPHP worker mode, kernel reset false). See USAGE, "Access checks by id".
+- Id twins for the access SPIs: `Sessions\Security\SessionsIdAccessCheckerInterface` (implemented by the built-in role and dev checkers) and `OwnerImage\Access\OwnerImageIdAccessInterface` (implemented by `DefaultOwnerImageAccess`). A configured checker or access service without its twin makes the id checks answer no (fail closed, logged).
+- Narrow-only events: `Sessions\Event\SessionIdAccessCheckEvent` and `OwnerImage\Event\OwnerImageIdAccessCheckEvent` (ids only). Listeners may refuse, never grant; they are dispatched only for a grant.
+- `UserSessionStore::sessionByPublicId()`: the owner and state of one row, matched exactly.
+- DDD-host checklist B4, events with ids and `occurredAt`: `UserSessionsRevokedEvent::$actorRef` (the actor's owner reference) and `byOther()`; `AccountErasedEvent::$actorType` / `$actorId` (captured before the erasers ran); `occurredAt` on `UserSessionsRevokedEvent`, `UserSessionStartedEvent`, `UserSessionsDeletedEvent`, `UserSessionsPurgedEvent`, `SessionLimitReachedEvent` (the bundle's clock), `AccountErasedEvent` (equals `erasedAt`) and `OwnerImageChangedEvent`. The new constructor parameters are trailing and optional.
+
+### Deprecated
+
+- The user objects on the events: `$user` (and `$actor` on `UserSessionsRevokedEvent`) on the session events and `$user` on `AccountErasedEvent`. Read `owner` / `actorRef` / `userType` + `userId` / `actorType` + `actorId` instead. They stay filled until a 2.0 (none planned); no runtime notice (public properties).
+
 ### Changed
 
+- The session access checker (`sessions.security.*`) is registered whenever `sessions.enabled` is true, not only with the pages, so `SessionAccessInterface` works in a host without the bundle's session UI. Without the pages `allow_unauthenticated` never installs the allow-all checker (the role checker answers); with the pages nothing changes.
 - StorageKit 2.0 is accepted: `nowo-tech/storage-kit-bundle` (dev dependency, the default owner image storage) is now `^1.6.1 || ^2.0`. The owner image adapter uses only ports and services that 2.0 keeps (no code change); the owner image tests run on both majors, and a new CI job runs them on StorageKit 1.6.1. StorageKit 2.0 writes its entities through a private entity manager, so owner image changes no longer flush the host's pending changes; a host on 2.0 that uses the Instance Settings bucket requires `nowo-tech/instance-settings-bundle` itself.
 - AuditKit 2.0 is accepted: `nowo-tech/audit-kit-bundle` (dev dependency) is now `^1.16 || ^2.0`. AuditKit 2.0 changed the `flush_mode` default from `host` to `isolated`; the owner image audit bridge needs `isolated`, so hosts on 2.0 get the right mode without configuring it, and the test of the `host` build error now sets `flush_mode: host` explicitly.
 - Demo: runs in UiKit's demo platform shell (`@NowoUiKit/demo_platform/layout.html.twig`, UiKit ^2.60): the demo declares itself in `templates/base.html.twig` (sections, sign-in and user menu from the shell), the pages use the page header and section cards, the demo's own masthead is gone, a demo-platform e2e spec checks the layout rules, the drawer and axe, and the README screenshots no longer show the Symfony toolbar.

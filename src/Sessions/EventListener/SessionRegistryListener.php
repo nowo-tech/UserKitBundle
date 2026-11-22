@@ -269,7 +269,7 @@ final readonly class SessionRegistryListener
         if ($active < $limit->maxSessions) {
             return null;
         }
-        $reached = new SessionLimitReachedEvent($user, $owner, $limit, $active);
+        $reached = new SessionLimitReachedEvent($user, $owner, $limit, $active, occurredAt: $this->sessions->now());
         $this->dispatcher?->dispatch($reached);
 
         return $reached->getMessage() ?? $this->trans('sessions.limit.rejected', ['%count%' => $active]);
@@ -348,7 +348,7 @@ final readonly class SessionRegistryListener
                 if ($over > 0) {
                     $evicted = $this->sessions->revokeSessions($owner, $user, $this->store->oldestActive($owner, $since, $current, $over), RevocationReason::Evicted);
                     try {
-                        $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted));
+                        $this->dispatcher?->dispatch(new SessionLimitReachedEvent($user, $owner, $limit, $active, $evicted, $this->sessions->now()));
                         $this->register($request, $session, $context, $user, $owner, $atLogin);
                     } catch (UserKitStorageFailure $failure) {
                         // 1.21.0 (REQ-RUNTIME-003 rule 6): the eviction is committed (autocommit) and the rest of the
@@ -473,7 +473,7 @@ final readonly class SessionRegistryListener
         $inserted = $this->store->insert($owner, $hash, $client, $now);
         $this->setMarker($session, $context, ['h' => $hash, 'u' => $owner->key(), 's' => $now->getTimestamp()]);
         if ($inserted) {
-            $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, $atLogin));
+            $this->dispatcher?->dispatch(new UserSessionStartedEvent($user, $owner, $client, $atLogin, $now));
         }
     }
 

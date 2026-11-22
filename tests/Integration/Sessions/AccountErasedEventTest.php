@@ -43,12 +43,34 @@ final class AccountErasedEventTest extends TransactionalSessionsTestCase
         self::assertTrue($event->selfService);
         self::assertSame(['tenant' => 'acme', 'reason' => 'user_request'], $event->context);
         self::assertInstanceOf(Member::class, $event->user);
+        self::assertNull($event->actorType, 'Self-service: no actor.');
+        self::assertNull($event->actorId);
+        self::assertSame($event->erasedAt, $event->occurredAt, '1.23.0: occurredAt is the erasure instant.');
         self::assertSame(0, $this->allRows(), 'The erasure is committed when the listener runs.');
 
         $this->queue()->release();
         $this->queue()->finish();
         $this->queue()->reset();
         self::assertCount(1, $this->erased(), 'Exactly once.');
+    }
+
+    /**
+     * 1.23.0 (DDD-host checklist B4): the actor travels as ids, captured before the erasers ran.
+     */
+    public function testTheActorTravelsAsIds(): void
+    {
+        $alice = $this->bootErasure();
+        $admin = $this->member('admin@example.com', ['ROLE_ADMIN']);
+
+        $this->eraser()->erase($this->fresh($alice), $admin);
+
+        self::assertCount(1, $this->erased());
+        $event = $this->erased()[0]['event'];
+        self::assertFalse($event->selfService);
+        self::assertSame(Member::class, $event->actorType);
+        self::assertSame((string) $admin->getId(), $event->actorId);
+        self::assertSame((string) $alice->getId(), $event->userId);
+        self::assertEquals($this->clock()->now(), $event->occurredAt);
     }
 
     public function testInsideAnApplicationTransactionItWaitsForTheOutermostCommit(): void

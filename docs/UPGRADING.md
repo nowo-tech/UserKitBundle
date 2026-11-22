@@ -64,6 +64,22 @@
 
 ## Unreleased
 
+From **1.22.1**: no change is required (minor, no BC break).
+
+- **Events with ids (B4).** The session events, `AccountErasedEvent` and `OwnerImageChangedEvent` gain `occurredAt`;
+  `UserSessionsRevokedEvent` gains `actorRef` (and `byOther()`), `AccountErasedEvent` gains `actorType` / `actorId`.
+  The user objects (`$event->user`, `$event->actor`) are deprecated: move your listeners to `owner`, `actorRef`,
+  `userType` / `userId`, `actorType` / `actorId`. They keep working until a 2.0 (none planned). If you construct these
+  events yourself (tests), the new parameters are trailing and optional.
+- **Access by ids (B8).** New public services `SessionAccessInterface` and `OwnerImageAccessCheckerInterface`.
+  - With the built-in session checkers and the default owner-image access nothing is to do.
+  - With your own `sessions.security.access_checker`, implement `SessionsIdAccessCheckerInterface` on it (same rules,
+    from ids and roles) before you call `SessionAccessInterface`; until then every id check answers no.
+  - With your own `owner_images.access`, implement `OwnerImageIdAccessInterface` likewise.
+- **Checker wiring.** The session access checker is now registered with `sessions.enabled` alone (it was only
+  registered with `sessions.web_ui.enabled`). A host that set `sessions.security.access_checker` to a service id that
+  does not exist, with the pages off, now gets a container error: fix or remove the setting.
+
 ## To 1.22.1
 
 From **1.22.0**:

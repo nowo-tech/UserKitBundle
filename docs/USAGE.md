@@ -51,6 +51,7 @@
 - [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
   - [DDD host: XML mapping of the embeddables and trait fields](#ddd-host-xml-mapping-of-the-embeddables-and-trait-fields)
   - [DDD host: framework-free session ports](#ddd-host-framework-free-session-ports)
+  - [Access checks by id (1.23.0)](#access-checks-by-id-1230)
 - [AuthKit coexistence](#authkit-coexistence)
 - [Forms in Twig (REQ-TWIG-005)](#forms-in-twig-req-twig-005)
 
@@ -408,12 +409,14 @@ Payload (personal data kept to what correlation needs):
 
 | Property | Content |
 | --- | --- |
-| `user` | The erased entity as the erasers left it (anonymised, possibly removed). Read your own correlation id from it (a UUID), never personal fields. |
+| `user` | Deprecated since 1.23.0 (read `userType` / `userId`). The erased entity as the erasers left it (anonymised, possibly removed). Read your own correlation id from it (a UUID), never personal fields. |
 | `userType`, `userId` | Doctrine root class and identifier, read **before** the erasers ran (the session registry's owner reference; the security identifier for a user that is not a mapped entity; null when neither is usable). The id is personal data too when it is the e-mail or another personal value (e.g. the e-mail as primary key): treat it like `originalIdentifier` then. |
 | `originalIdentifier` | `getUserIdentifier()` before any eraser ran, often an e-mail: personal data, for data keyed by it only. Do not log or store it. |
 | `erasers` | Keys of the erasers that ran, in order (what `erase()` returned). |
 | `erasedAt` | When the erasers' unit of work succeeded (the bundle clock). |
 | `selfService` | True without an actor or when the actor is the user. |
+| `actorType`, `actorId` | Since 1.23.0: the actor's Doctrine root class and identifier, read before the erasers ran; null without an actor or when it cannot be mapped. |
+| `occurredAt` | Since 1.23.0: the same instant as `erasedAt` (the name every UserKit event uses). |
 | `context` | The free array passed to `erase()`: put the tenant or a reason code there (e.g. `['tenant' => 'acme', 'reason' => 'user_request']`). Never stored nor logged by the bundle; keep secrets out of it. |
 
 Example: a host listener that anonymises another bundle's references to the person once the erasure is committed. The
@@ -598,13 +601,17 @@ Every mutation dispatches an event **after** the rows are written (the session i
 | Event | When |
 | --- | --- |
 | `Sessions\Event\UserSessionStartedEvent` | A session was registered (`atLogin` true at sign-in). |
-| `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `user`, `actor` (null for automatic ones), `reason`, `publicIds`. Explicit user actions dispatch it even when nothing matched. For `password_changed` inside a transaction: after the outermost commit, see [Revocations inside a transaction](#revocations-inside-a-transaction). |
+| `Sessions\Event\UserSessionsRevokedEvent` | Sessions were revoked: `owner`, `actorRef` (the actor's owner reference; null for automatic ones), `reason`, `publicIds`, `occurredAt` (`user` / `actor` objects: deprecated since 1.23.0). Explicit user actions dispatch it even when nothing matched. For `password_changed` inside a transaction: after the outermost commit, see [Revocations inside a transaction](#revocations-inside-a-transaction). |
 | `Sessions\Event\SessionLimitReachedEvent` | A sign-in hit the limit (`isRejected()`, `evicted` public ids). |
 | `Sessions\Event\UserSessionsPurgedEvent` | The retention purge ran (`before`, `deleted`, `revokedBefore`). |
 | `Sessions\Event\UserSessionsDeletedEvent` | Every row of a user was deleted (`forgetUser()` / user removal): `owner`, `user` (null after a Doctrine removal), `deleted`. |
 
 `UserSessionsRevokedEvent` also carries `customReason`, `context` (host data of the call; never stored or logged by
 the bundle) and `rememberMeInvalidated`; `reasonCode()` is the value stored on the rows.
+
+Since 1.23.0 (DDD-host checklist B4) every event carries ids and `occurredAt` (the instant from the bundle's clock): the
+owner is `owner` (a `SessionUser`: user class and id), the actor of a revocation `actorRef` (`byOther()` tells an
+administrator's action from the user's own). The `user` / `actor` objects are deprecated; they stay filled until a 2.0.
 
 ```php
 #[AsEventListener]
@@ -614,7 +621,7 @@ final class AuditSessionRevocations
 
     public function __invoke(UserSessionsRevokedEvent $event): void
     {
-        $this->audit->record('sessions.revoked', $event->actor, $event->user, ['reason' => $event->reason->value, 'count' => $event->count()]);
+        $this->audit->record('sessions.revoked', $event->actorRef?->id, $event->owner->id, ['reason' => $event->reason->value, 'count' => $event->count(), 'at' => $event->occurredAt]);
     }
 }
 ```
@@ -1008,7 +1015,7 @@ On upload, the checks run in an order that leaves nothing behind when the upload
 3. The storage checks and stores the image.
 4. The pointer is written. If that write fails, the new file is removed.
 5. The storage reference is updated, and the previous file is deleted at once.
-6. `OwnerImageChangedEvent` is dispatched, carrying ids only (kind, subject, new and previous file id, actor id).
+6. `OwnerImageChangedEvent` is dispatched, carrying ids only (kind, subject, new and previous file id, actor id; since 1.23.0 `occurredAt`).
 
 With StorageKit, each kind is a square-only StorageKit file context of the same name:
 
@@ -1421,6 +1428,53 @@ $count = ($this->signOutOtherDevices)($this->getUser(), $this->sessionManager->s
 `tests/Integration/DddHost/DddHostKernelTest.php` boots such a host: an XML-mapped aggregate with no attribute, base
 class or trait embedding the kit embeddables through the shipped XML, a non-entity security user mapped to the
 aggregate id, the framework-free device id port, and an application service using the ports only.
+
+### Access checks by id (1.23.0)
+
+DDD-host checklist B8: a host that has no security user object at hand (a private entity manager, an API client, a
+message handler) asks access by ids.
+
+**Sessions.** `Sessions\Access\SessionAccessInterface` (public service, registered with `sessions.enabled`):
+
+```php
+use Nowo\UserKitBundle\Sessions\Access\SessionAccessInterface;
+use Nowo\UserKitBundle\Sessions\Access\SessionActor;
+use Nowo\UserKitBundle\Sessions\Model\SessionUser;
+
+$actor = SessionActor::of(new SessionUser(User::class, $userId), $rolesReadNow); // e.g. ['ROLE_ADMIN']
+$access->canViewSession($actor, $publicId);   // live, and own or managed
+$access->canRevokeSession($actor, $publicId); // not revoked, and own or managed
+```
+
+- The rules are the configured checker's, through its id twin `SessionsIdAccessCheckerInterface`: an own session needs
+  "My sessions" access (or manage access), another user's needs manage access to its owner. The built-in role checker
+  matches `security.access_roles` / `manage_roles` against the actor's roles after the role hierarchy, exactly, and
+  never looks at the signed-in token. A bare `SessionUser` carries no role, and attributes that are not role names
+  (`IS_AUTHENTICATED_FULLY`, an expression) never match by id: use your own checker for those. Your own
+  `access_checker` must implement the id twin, or every id check answers no.
+- Read the roles from your own data at check time. Never reuse roles kept in a cache or a queued message.
+- The public id is matched exactly: 32 lowercase hex characters, compared in SQL (byte for byte on MySQL / MariaDB)
+  and again with `===`. An unknown, malformed or look-alike id, a revoked or expired session and a refusal all answer
+  `false`; a failure is logged (class only) and answered `false`.
+- Listeners of `Sessions\Event\SessionIdAccessCheckEvent` (ids only: `actor`, `owner`, `publicId`, `action`) may
+  `deny()`; nothing grants what the checker refused (the event is not dispatched for a refusal).
+- The answer holds as of the check: `revoke()` matches the row's owner again when it writes (REQ-RUNTIME-003).
+
+**Owner images.** `OwnerImage\Access\OwnerImageAccessCheckerInterface` (public service, with `owner_images.enabled`):
+
+```php
+$checker->canSee($viewerSubjectId, 'avatar', $ownerId);         // null viewer = anonymous
+$checker->visibleOwners($viewerSubjectId, 'avatar', $ownerIds); // in the order asked, no duplicates
+$checker->canChange($actorSubjectId, 'org_logo', $orgId);
+```
+
+- Ids are subject ids (`OwnerImageSubjects::idOf()` of the user), matched byte for byte; kinds are exact names.
+- The rules are the access service's id twin `OwnerImageIdAccessInterface` (the default access implements it). Your own
+  `owner_images.access` must implement it, or every id check answers no.
+- Listeners of `OwnerImage\Event\OwnerImageIdAccessCheckEvent` may `deny($ownerId)` or `denyAll()`, never add.
+
+Both services are stateless: every call reads the registry and asks the checker again (FrankenPHP worker mode, kernel
+reset false).
 
 ## AuthKit coexistence
 

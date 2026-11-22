@@ -34,9 +34,16 @@ use Nowo\UserKitBundle\PersonalData\PersonalDataErasureInterface;
  * left it (already anonymised, possibly removed): read your own correlation id from it (e.g. a UUID), never personal
  * fields. `context` is the free array passed to `erase()` (e.g. a tenant, a reason code): never stored nor logged by the
  * bundle, keep secrets out of it.
+ *
+ * Since 1.23.0 (DDD-host checklist B4) the event carries ids for a host that keeps no user object: `userType` / `userId`
+ * (above), `actorType` / `actorId` (the actor's owner reference, captured before the erasers ran; null without an actor
+ * or when it cannot be mapped) and `occurredAt` (the same instant as `erasedAt`). The `user` object is deprecated.
  */
 final readonly class AccountErasedEvent
 {
+    /** Since 1.23.0: when the erasure happened (equals `erasedAt`). */
+    public DateTimeImmutable $occurredAt;
+
     /**
      * @param object $user the erased user entity, as the erasers left it
      * @param string|null $userType Doctrine root class of the user (captured before the erasers ran); null when unknown
@@ -46,8 +53,12 @@ final readonly class AccountErasedEvent
      * @param DateTimeImmutable $erasedAt when the erasers' unit of work succeeded
      * @param bool $selfService true without an actor or when the actor is the user
      * @param array<string, mixed> $context the free host context passed to `erase()`
+     * @param string|null $actorType Since 1.23.0: Doctrine root class of the actor (captured before the erasers ran); null without an actor or when unknown
+     * @param string|null $actorId Since 1.23.0: Doctrine identifier of the actor (captured before the erasers ran); null without an actor or when unknown
+     * @param DateTimeImmutable|null $occurredAt Since 1.23.0: when the erasure happened (null = `erasedAt`)
      */
     public function __construct(
+        /** @deprecated since 1.23.0, read {@see self::$userType} / {@see self::$userId}; removed in 2.0 */
         public object $user,
         public ?string $userType,
         public ?string $userId,
@@ -56,6 +67,10 @@ final readonly class AccountErasedEvent
         public DateTimeImmutable $erasedAt,
         public bool $selfService,
         public array $context = [],
+        public ?string $actorType = null,
+        public ?string $actorId = null,
+        ?DateTimeImmutable $occurredAt = null,
     ) {
+        $this->occurredAt = $occurredAt ?? $erasedAt;
     }
 }

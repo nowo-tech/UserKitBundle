@@ -326,7 +326,7 @@ jobs:
           USER_KIT_TEST_DB_PLATFORM: postgresql
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php tests/Integration/Sessions/AccountErasedEventTest.php
-          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php tests/Integration/Sessions/SessionAccessByIdTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
       - name: MySQL
@@ -335,7 +335,7 @@ jobs:
           USER_KIT_TEST_DB_PLATFORM: mysql
         run: |
           vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionAdoptTest.php tests/Integration/Sessions/SessionCommitBoundaryTest.php tests/Integration/Sessions/SessionCommitBoundaryRunnersTest.php tests/Integration/Sessions/SessionTouchFoundRowsTest.php tests/Integration/Sessions/SessionTouchSnapshotTest.php tests/Integration/Sessions/AccountErasedEventTest.php
-          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php tests/Integration/Sessions/SessionAccessByIdTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
       - name: MariaDB
@@ -344,7 +344,7 @@ jobs:
           USER_KIT_TEST_DB_PLATFORM: mysql
         # Look-alike owners only (house rule LQ): MariaDB's PAD SPACE default collation and utf8mb4_nopad_bin.
         run: |
-          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php
+          vendor/bin/phpunit --no-coverage tests/Integration/Sessions/SessionLookalikeOwnerTest.php tests/Integration/Sessions/SessionExactOwnerCollationTest.php tests/Integration/Sessions/SchemaForeignKeysDatabaseTest.php tests/Integration/Sessions/SessionAccessByIdTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/PointerLookalikeTest.php
           vendor/bin/phpunit --no-coverage tests/Integration/OwnerImage/ColumnPointerStoreTest.php tests/Integration/OwnerImage/OwnerImageAuditBridgeTest.php
 

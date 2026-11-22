@@ -65,7 +65,7 @@ final class PurgeSessionsCommand extends Command
         $now           = $this->sessions->now();
         $revokedBefore = $this->revokedRetention !== null ? $now->sub(new DateInterval('PT' . $this->revokedRetention . 'S')) : null;
         $deleted       = $this->store->purge($before, $batch, $revokedBefore);
-        $this->dispatcher?->dispatch(new UserSessionsPurgedEvent($before, $deleted, $revokedBefore));
+        $this->dispatcher?->dispatch(new UserSessionsPurgedEvent($before, $deleted, $revokedBefore, $now));
         $io->success($revokedBefore instanceof DateTimeImmutable
             ? sprintf('Deleted %d session row(s) not seen since %s or revoked before %s.', $deleted, $before->format(DATE_ATOM), $revokedBefore->format(DATE_ATOM))
             : sprintf('Deleted %d session row(s) not seen since %s.', $deleted, $before->format(DATE_ATOM)));
