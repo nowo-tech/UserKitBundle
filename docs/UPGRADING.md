@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.23.1](#to-1231)
 - [To 1.23.0](#to-1230)
 - [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
@@ -64,6 +65,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.23.1
+
+From **1.23.0**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 ## To 1.23.0
 

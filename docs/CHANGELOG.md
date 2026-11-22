@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.23.1] - 2026-11-22](#1231---2026-11-22)
   - [Fixed](#fixed)
 - [[1.23.0] - 2026-11-22](#1230---2026-11-22)
   - [Added](#added)
@@ -165,11 +166,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-11-22
+
 ### Fixed
 
 - Audit YQ-L2: the actor's reference on `UserSessionsRevokedEvent` (`actorRef`, new in 1.23.0) is resolved through your `SessionOwnerResolverInterface` when the event is dispatched: after UserKit's own commit, or, for a revocation made inside your open transaction, inside that transaction before you commit. A resolver that throws for an actor it does not map no longer fails the revocation: the event is dispatched with `actorRef` null and a warning logs the exception class only (not its message). The same for `PersonalDataEraser`: an actor whose reference cannot be read no longer refuses the erasure; `AccountErasedEvent` carries null `actorType` / `actorId`. A database failure (`Doctrine\DBAL\Exception`) is never swallowed (audit YR-U-L1): it is rethrown, because inside your transaction it may have rolled back or aborted it (the revocation and your earlier writes with it); roll back and retry. Nothing is kept between calls (FrankenPHP worker mode, kernel reset false).
 - Audit YQ-I3: `OwnerImageAccessCheckerInterface::visibleOwners()` leaves out an element of `$ownerIds` that is not a string, like a malformed id, instead of throwing a `TypeError` under strict types.
 - Documentation (audit YQ-I2): USAGE says that `SessionIdAccessCheckEvent` and `OwnerImageIdAccessCheckEvent` fire only on the id ports; the sessions pages, `AccessGuard` and owner-image uploads have no equivalent event.
+
+[1.23.1]: https://github.com/nowo-tech/UserKitBundle/releases/tag/v1.23.1
 
 ## [1.23.0] - 2026-11-22
 
