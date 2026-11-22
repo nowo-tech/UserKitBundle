@@ -21,6 +21,12 @@
         <testsuite name="Integration">
             <directory>tests/Integration</directory>
         </testsuite>
+        <!-- REQ-SEC-006 gate over the bundle's own declaration (USER_KIT_LOAD_DATABASE_URL; skipped without it,
+             and on PostgreSQL / SQLite, which compare exactly). Kept out of the load suite, which fails on a skipped
+             test, on servers where this question does not arise. -->
+        <testsuite name="collation">
+            <directory>tests/Collation</directory>
+        </testsuite>
         <!-- 1.19.0: real-database load tests (USER_KIT_LOAD_DATABASE_URL; skipped without it). -->
         <testsuite name="load">
             <directory>tests/Load</directory>

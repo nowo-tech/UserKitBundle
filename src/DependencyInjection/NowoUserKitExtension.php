@@ -6,6 +6,7 @@ namespace Nowo\UserKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
 use Nowo\UserKitBundle\DependencyInjection\Compiler\ConflictResponsePass;
+use Nowo\UserKitBundle\Doctrine\UserKitExactKeyColumns;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\EventSubscriber\LastActivitySubscriber;
 use Nowo\UserKitBundle\PersonalData\Eraser\LastActivityEraser;
@@ -25,6 +26,7 @@ use Nowo\UserKitBundle\Twig\UiPreferencesExtension;
 use Nowo\UserKitBundle\Twig\UserPresenceExtension;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
@@ -131,6 +133,17 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
             // session registry and the owner images.
             SessionsLoader::registerCommitQueue($container, new Reference('doctrine'));
         }
+
+        // REQ-SEC-006: the bundle's own declaration of its identity / access-key columns. Autoconfigured, so
+        // MigrationsKit tags it (nowo:migrations:check-key-collations) with no registration by the host; the features
+        // that are off declare their columns inactive rather than omitting them.
+        $ownerImages = $config['owner_images'];
+        $container->setDefinition(UserKitExactKeyColumns::class, (new Definition(UserKitExactKeyColumns::class, [
+            (string) $config['sessions']['doctrine']['table_prefix'],
+            $config['sessions']['enabled'] === true,
+            $config['sessions']['remember_me_epoch']['enabled'] === true,
+            $ownerImages['enabled'] === true && !is_string($ownerImages['pointer_store'] ?? null),
+        ]))->setAutoconfigured(true));
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
             $container->removeDefinition(UserPresenceExtension::class);
