@@ -168,6 +168,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Igor 0.11: the `committed` queue of `CommitQueue` is marked `#[WorkerSafe]` with the reason (a documented false positive: `reset()` runs and empties it through `run()`). No behaviour change.
+
 ## [1.24.0] - 2026-11-23
 
 ### Added

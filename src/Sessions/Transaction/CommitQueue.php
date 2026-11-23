@@ -7,6 +7,7 @@ namespace Nowo\UserKitBundle\Sessions\Transaction;
 use Closure;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
+use IgorPhp\IgorBundle\Attribute\WorkerSafe;
 use Nowo\UserKitBundle\PersonalData\Event\AccountErasedEvent;
 use Nowo\UserKitBundle\Sessions\UserSessionManager;
 use Psr\Log\LoggerInterface;
@@ -60,6 +61,8 @@ final class CommitQueue implements ResetInterface
     private array $savepoints = [];
 
     /** @var list<Closure(): void> effects whose transaction committed */
+    // @igor-ignore - reset() runs and empties this list through run() (committed effects are executed, never dropped), which Igor cannot see.
+    #[WorkerSafe]
     private array $committed = [];
 
     public function __construct(
