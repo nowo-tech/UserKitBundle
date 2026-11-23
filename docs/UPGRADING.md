@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.24.0](#to-1240)
   - [The bundle declares its own identity / access-key columns (REQ-SEC-006)](#the-bundle-declares-its-own-identity--access-key-columns-req-sec-006)
 - [To 1.23.1](#to-1231)
 - [To 1.23.0](#to-1230)
@@ -66,6 +67,14 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+## To 1.24.0
+
+From **1.23.1**:
+
+```bash
+composer update nowo-tech/user-kit-bundle
+```
 
 ### The bundle declares its own identity / access-key columns (REQ-SEC-006)
 
