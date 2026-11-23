@@ -424,6 +424,12 @@ jobs:
           USER_KIT_LOAD_DATABASE_URL: ${{ matrix.url }}
         run: vendor/bin/phpunit --no-coverage --fail-on-skipped --testsuite load
 
+      - name: Identity / access-key column collations (REQ-SEC-006)
+        if: env.HEAVY == 'true'
+        env:
+          USER_KIT_LOAD_DATABASE_URL: ${{ matrix.url }}
+        run: vendor/bin/phpunit --no-coverage --testsuite collation
+
   dbal-floor:
     name: Sessions on the DBAL 3 floor (SQLite)
     runs-on: ubuntu-latest

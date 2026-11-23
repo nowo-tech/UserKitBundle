@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [The bundle declares its own identity / access-key columns (REQ-SEC-006)](#the-bundle-declares-its-own-identity--access-key-columns-req-sec-006)
 - [To 1.23.1](#to-1231)
 - [To 1.23.0](#to-1230)
 - [To 1.22.1](#to-1221)
@@ -65,6 +66,40 @@
   - [1.0.0](#100)
 
 ## Unreleased
+
+### The bundle declares its own identity / access-key columns (REQ-SEC-006)
+
+Nothing to do: the declaration is discovered by autoconfiguration, and a host that does not install
+`nowo-tech/migrations-kit-bundle` is unaffected.
+
+What you can **remove**: if you excused this bundle's owner columns by hand so the uniform collation gate would pass,
+those entries are now redundant — a declared exact-key column is exempt from the uniform gate by construction, and
+`nowo:migrations:check-key-collations` checks it under its real owner (`nowo-tech/user-kit-bundle`) instead of yours.
+Delete them:
+
+```diff
+ nowo_migrations_kit:
+     collation_check:
+         ignore_columns:
+-            'user_kit_session.user_type': 'UserKit session owner'
+-            'user_kit_session.user_id': 'UserKit session owner'
+-            'user_kit_session_epoch.user_type': 'UserKit epoch owner'
+-            'user_kit_session_epoch.user_id': 'UserKit epoch owner'
+-            'user_kit_owner_image.kind': 'UserKit owner image subject'
+-            'user_kit_owner_image.subject_id': 'UserKit owner image subject'
+```
+
+Prefixed session tables included (`app_user_kit_session.user_id`, …): the declaration resolves
+`nowo_user_kit.sessions.doctrine.table_prefix` itself. Keeping an entry is not an error, but it outlives the
+declaration and goes on excusing a column nothing checks any more, so drop it.
+
+If the gate now *fails* on one of these columns, it is telling the truth: that table predates the collation listener,
+or it was restored from a dump, and it still carries the host's folding default — which is exactly the premise
+`nowo_user_kit.sessions.doctrine.exact_owner_collation: true` relies on. Run the `ALTER` the check prints (it is the
+one in [To 1.16.1](#to-1161)).
+
+With the session registry, the remember-me epoch or the owner images off, the columns of that feature are reported as
+**skipped** with their setting, never as a failure: there is no table to check.
 
 ## To 1.23.1
 

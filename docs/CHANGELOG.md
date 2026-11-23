@@ -166,6 +166,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- REQ-SEC-006: the bundle now declares its own identity / access-key columns, so the knowledge of which columns are
+  exact keys lives in the bundle that owns the tables instead of in every host.
+  `Nowo\UserKitBundle\Doctrine\UserKitExactKeyColumns` implements
+  `Nowo\MigrationsKitContracts\Collation\ExactKeyColumnsInterface` (new runtime dependency
+  `nowo-tech/migrations-kit-contracts` ^1.0: interfaces and value objects only, no dependency beyond PHP) and declares
+  both halves of each owner identity: `user_kit_session.{user_type,user_id}`,
+  `user_kit_session_epoch.{user_type,user_id}` and `user_kit_owner_image.{kind,subject_id}`. The bundle already gives
+  those columns the server's binary NO PAD collation when it builds the schema (`OwnerCollationListener`,
+  `PointerCollationListener`); the declaration is what makes `nowo:migrations:check-key-collations` *assert* it, so a
+  table created before those listeners, restored from a dump or imported by hand is reported instead of trusted — and
+  `sessions.doctrine.exact_owner_collation: true`, which drops the candidate scan precisely because the column is
+  exact, finally has something that checks its premise. MigrationsKit discovers the declaration by autoconfiguration,
+  so a host registers **nothing** and can delete the `nowo_migrations_kit.collation_check.ignore_columns` entries it
+  kept for these columns (see UPGRADING). The session tables' names are resolved from
+  `sessions.doctrine.table_prefix`, never literals; the pointer table, which no host can rename, keeps its own name.
+  The columns of a feature that is off (the session registry, the remember-me epoch, the owner images, or image
+  pointers kept in a column of the owner's row) are declared **inactive**, so they are reported as skipped with the
+  setting that gates them instead of as missing tables. Nothing is memoised (REQ-RUNTIME-002).
+  `browser`, `os`, `ip`, `device_id` (what the client looked like), `revoked_reason` (a state word) and the integer
+  `id` columns are deliberately **not** declared: a declaration is a claim about identity, and an untrue one is worse
+  than none.
+- Tests: the bundle's own REQ-SEC-006 gate (`tests/Collation`, testsuite `collation`, extending MigrationsKit's
+  `ExactKeyColumnsTestCase`), run on MySQL 8.4 and MariaDB 11.4 in the load matrix. The three tables are created by
+  the schema tool with the bundle's own prefix and collation listeners under a non-empty table prefix, and the
+  declared columns are read back from `information_schema`.
+
 ## [1.23.1] - 2026-11-22
 
 ### Fixed
