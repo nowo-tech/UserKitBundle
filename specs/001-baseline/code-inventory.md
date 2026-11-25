@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/user-kit-bundle`  
-**Last audited**: 2026-11-22  
+**Last audited**: 2026-11-27  
 **Status**: Implemented (FrankenPHP worker / no-kernel-reset audit ✅)
 
 ## Symfony config (`src/Resources/config/`)
@@ -214,6 +214,7 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | `Sessions/Transaction/TransactionBoundaryDriver.php` | DBAL driver wrapper | FR-SES-011 | Mapped |
 | `Sessions/Transaction/TransactionBoundaryConnection.php` | Outermost transaction hooks | FR-SES-011 | Mapped |
 | `Sessions/Doctrine/OwnerCollationListener.php` | Exact collation on owner columns | FR-KEY-001 | Mapped |
+| `Doctrine/UserKitExactKeyColumns.php` | Declares the owner columns of the session, remember-me epoch and owner-image pointer tables as exact-key columns for MigrationsKit's `nowo:migrations:check-key-collations` (prefix-aware, inactive when the feature is off; `public_id` / `session_hash` deliberately not declared) | FR-KEY-002 | Mapped |
 | `Transaction/UserKitTransactionRunner.php` | Unit-of-work runner | FR-TX-001 | Mapped |
 | `Transaction/FlushObserver.php` | Flush detection per unit | FR-TX-001 | Mapped |
 | `Transaction/ClosedManagerRecovery.php` | Closed managers of the request | FR-TX-001, FR-RUNTIME-001 | Mapped |
@@ -266,12 +267,12 @@ FR-SES-003 … FR-SES-010 are defined in [`spec.md`](spec.md#session-registry-sp
 | PHP — personal data / GDPR (003) | 15 | 15 |
 | Sessions — session registry and limits (004, 005) | 53 | 53 |
 | Owner images (1.18, 1.20) | 32 | 32 |
-| Ports, transactions and load readiness | 28 | 28 |
+| Ports, transactions and load readiness | 29 | 29 |
 | Id-based access ports and conflict wiring (1.21–1.23) | 12 | 12 |
 | Translations | 7 | 7 |
-| **Total production sources** | **188** | **188** |
+| **Total production sources** | **189** | **189** |
 
-Audit command (production count): `git ls-files src | wc -l` → **188** (2026-11-22). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
+Audit command (production count): `git ls-files src | wc -l` → **189** (2026-11-27). Feature specs `002-ui-preferences` and `003-personal-data` are inventoried here (FR ids prefixed with the spec number); `004-sessions` through the baseline FR-SES-003 … FR-SES-010 ids.
 
 ## Inventory refresh (2026-11-22)
 
