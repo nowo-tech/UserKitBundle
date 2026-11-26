@@ -168,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nowo:migrations:check-key-collations` no longer fails with two MISSING findings for hosts that set `sessions.remember_me_epoch.store` (their own store): the epoch columns are declared active only when the bundle's epoch table is mapped (store null or empty), as `SessionsLoader` does (ZCJ-UK-L1).
+- `owner_images.pointer_store: ''` maps the bundle's default table, so `kind` / `subject_id` are now declared active instead of being reported SKIPPED; the declaration uses the loader's own rule (ZCJ-UK-I1).
+
 ### Changed
 
 - Igor 0.11: the `committed` queue of `CommitQueue` is marked `#[WorkerSafe]` with the reason (a documented false positive: `reset()` runs and empties it through `run()`). No behaviour change.

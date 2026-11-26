@@ -138,11 +138,15 @@ final class NowoUserKitExtension extends Extension implements PrependExtensionIn
         // MigrationsKit tags it (nowo:migrations:check-key-collations) with no registration by the host; the features
         // that are off declare their columns inactive rather than omitting them.
         $ownerImages = $config['owner_images'];
+        // Same rules as SessionsLoader / OwnerImagesLoader: the table exists only when the host names no store of its own
+        // (null or '' map the bundle's default entity). ZCJ-UK-L1, ZCJ-UK-I1.
+        $epochStore   = $config['sessions']['remember_me_epoch']['store'] ?? null;
+        $pointerStore = $ownerImages['pointer_store'] ?? null;
         $container->setDefinition(UserKitExactKeyColumns::class, (new Definition(UserKitExactKeyColumns::class, [
             (string) $config['sessions']['doctrine']['table_prefix'],
             $config['sessions']['enabled'] === true,
-            $config['sessions']['remember_me_epoch']['enabled'] === true,
-            $ownerImages['enabled'] === true && !is_string($ownerImages['pointer_store'] ?? null),
+            $config['sessions']['remember_me_epoch']['enabled'] === true && !(is_string($epochStore) && $epochStore !== ''),
+            $ownerImages['enabled'] === true && !(is_string($pointerStore) && $pointerStore !== ''),
         ]))->setAutoconfigured(true));
 
         if (!$config['twig'] || !class_exists(AbstractExtension::class)) {
