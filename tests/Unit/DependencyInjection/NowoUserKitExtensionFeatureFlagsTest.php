@@ -9,6 +9,7 @@ use Nowo\UserKitBundle\Doctrine\UserKitExactKeyColumns;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 final class NowoUserKitExtensionFeatureFlagsTest extends TestCase
@@ -71,7 +72,7 @@ final class NowoUserKitExtensionFeatureFlagsTest extends TestCase
     private function declaredActive(array $config): array
     {
         $container = new ContainerBuilder();
-        (new NowoUserKitExtension())->load([['user_class' => \stdClass::class] + $config], $container);
+        (new NowoUserKitExtension())->load([['user_class' => stdClass::class] + $config], $container);
         $arguments = $container->getDefinition(UserKitExactKeyColumns::class)->getArguments();
 
         return [$arguments[2], $arguments[3]];
