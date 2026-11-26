@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Nowo\UserKitBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\UserKitBundle\DependencyInjection\NowoUserKitExtension;
+use Nowo\UserKitBundle\Doctrine\UserKitExactKeyColumns;
 use Nowo\UserKitBundle\EventListener\AccountDisabledListener;
 use Nowo\UserKitBundle\Security\AccountStatusUserChecker;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 final class NowoUserKitExtensionFeatureFlagsTest extends TestCase
@@ -60,5 +62,37 @@ final class NowoUserKitExtensionFeatureFlagsTest extends TestCase
         (new NowoUserKitExtension())->load([['user_class' => 'App\\Entity\\User']], $container);
 
         $this->assertSame([], $container->getDefinition(AccountStatusUserChecker::class)->getTags());
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     *
+     * @return list<bool> [epoch columns active, owner image columns active] as declared to MigrationsKit
+     */
+    private function declaredActive(array $config): array
+    {
+        $container = new ContainerBuilder();
+        (new NowoUserKitExtension())->load([['user_class' => stdClass::class] + $config], $container);
+        $arguments = $container->getDefinition(UserKitExactKeyColumns::class)->getArguments();
+
+        return [$arguments[2], $arguments[3]];
+    }
+
+    public function testEpochColumnsDeclaredOnlyWhenBundleEpochTableIsMapped(): void
+    {
+        $sessions = static fn (?string $store): array => ['sessions' => ['enabled' => true, 'remember_me_epoch' => ['enabled' => true, 'store' => $store]]];
+
+        $this->assertTrue($this->declaredActive($sessions(null))[0]);
+        $this->assertTrue($this->declaredActive($sessions(''))[0]);
+        $this->assertFalse($this->declaredActive($sessions('app.my_epoch_store'))[0]);
+    }
+
+    public function testOwnerImageColumnsFollowThePointerStoreRule(): void
+    {
+        $images = static fn (?string $store): array => ['owner_images' => ['enabled' => true, 'pointer_store' => $store]];
+
+        $this->assertTrue($this->declaredActive($images(null))[1]);
+        $this->assertTrue($this->declaredActive($images(''))[1]);
+        $this->assertFalse($this->declaredActive($images('app.my_pointer_store'))[1]);
     }
 }
