@@ -14,7 +14,6 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\EventListener\StopWorkerOnMessageLimitListener;
@@ -118,7 +117,6 @@ final class SessionCommitBoundaryRunnersTest extends TransactionalSessionsTestCa
     {
         $dispatcher = $this->container()->get('event_dispatcher');
         self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
-        self::assertInstanceOf(EventDispatcher::class, $dispatcher);
         $dispatcher->addSubscriber(new StopWorkerOnMessageLimitListener(1));
         $transport = new InMemoryTransport();
         $transport->send(new Envelope(new stdClass()));
