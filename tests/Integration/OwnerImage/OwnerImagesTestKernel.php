@@ -105,7 +105,7 @@ final class OwnerImagesTestKernel extends Kernel
 
     protected function configureContainer(ContainerConfigurator $container): void
     {
-        $container->extension('framework', [
+        $framework = [
             'secret'               => 'test',
             'test'                 => true,
             'http_method_override' => false,
@@ -117,9 +117,14 @@ final class OwnerImagesTestKernel extends Kernel
             'http_client'          => true,
             'lock'                 => 'in-memory',
             'validation'           => true,
-            'mailer'               => ['enabled' => false],
-            'messenger'            => ['enabled' => false],
-        ]);
+        ];
+        // Symfony 8.2 refuses the configuration of a component that is not installed: switch off only what is there.
+        foreach (['mailer' => 'Symfony\\Component\\Mailer\\Mailer', 'messenger' => 'Symfony\\Component\\Messenger\\MessageBusInterface'] as $component => $class) {
+            if (class_exists($class) || interface_exists($class)) {
+                $framework[$component] = ['enabled' => false];
+            }
+        }
+        $container->extension('framework', $framework);
         $container->extension('twig', ['strict_variables' => true]);
         $container->extension('security', [
             'password_hashers' => [User::class => 'plaintext'],
